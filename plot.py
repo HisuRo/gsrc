@@ -26,12 +26,29 @@ def capsave(fig, fig_title, fnm, path):
     return fig
 
 
-def errorbar_single(li_x, li_y, li_yerr, li_hue, li_lw, li_lab_hue, xlabel, ylabel, xlim, ylim):
+def errorbar_single(x, y, yerr, xlabel, ylabel, xlim, ylim,
+                    color='black', lw=1):
+
+    fig, ax = plt.subplots()
+    ax.errorbar(x, y, yerr,
+                color=color, ecolor='grey',
+                lw=lw, elinewidth=lw)
+    ax.axhline(0, color='grey', ls='--')
+    ax.axvline(0, color='grey', ls='--')
+    ax.set_xlim(xlim)
+    ax.set_ylim(ylim)
+    ax.set_ylabel(ylabel)
+    ax.set_xlabel(xlabel)
+
+    return fig, ax
+
+
+def errorbar_hue(li_x, li_y, li_yerr, li_huecolor, li_lw, li_lab_hue, xlabel, ylabel, xlim, ylim):
 
     fig, axs = plt.subplots()
     for j in range(len(li_lab_hue)):
         axs.errorbar(li_x[j], li_y[j], li_yerr[j],
-                         color=li_hue[j], ecolor='grey',
+                         color=li_huecolor[j], ecolor='grey',
                          lw=li_lw[j], elinewidth=li_lw[j])
     axs.legend(li_lab_hue)
     axs.axhline(0, color='grey', ls='--')
@@ -44,20 +61,40 @@ def errorbar_single(li_x, li_y, li_yerr, li_hue, li_lw, li_lab_hue, xlabel, ylab
     return fig, axs
 
 
-def errorbar_vert(li_x, li_y, li_yerr, li_hue, li_lw, li_lab_y, li_lab_hue, xlabel, xlim):
+def errorbar_vert(li_x, li_y, li_yerr, xlabel, li_lab_y, xlim, ylims, color='black', lw=1):
+
+    fig, axs = plt.subplots(len(li_lab_y))
+    for i in range(len(li_lab_y)):
+        axs[i].errorbar(li_x[i], li_y[i], li_yerr[i],
+                         color=color, ecolor='grey',
+                         lw=lw, elinewidth=lw)
+        axs[i].axhline(0, color='grey', ls='--')
+        axs[i].axvline(0, color='grey', ls='--')
+        axs[i].set_xlim(xlim)
+        axs[i].set_ylim(ylims)
+        axs[i].set_ylabel(li_lab_y[i])
+        if i == len(li_lab_y) - 1:
+            axs[i].set_xlabel(xlabel)
+        else:
+            axs[i].set_xticklabels([])
+
+    return fig, axs
+
+
+def errorbar_vert_hue(li_x, li_y, li_yerr, li_huecolor, li_lw, li_lab_y, li_lab_hue, xlabel, xlim, ylims):
 
     fig, axs = plt.subplots(len(li_lab_y))
     for i in range(len(li_lab_y)):
         for j in range(len(li_lab_hue)):
             axs[i].errorbar(li_x[i][j], li_y[i][j], li_yerr[i][j],
-                             color=li_hue[j], ecolor='grey',
+                             color=li_huecolor[j], ecolor='grey',
                              lw=li_lw[j], elinewidth=li_lw[j])
         if i == 0:
             fig.legend(li_lab_hue)
         axs[i].axhline(0, color='grey', ls='--')
         axs[i].axvline(0, color='grey', ls='--')
         axs[i].set_xlim(xlim)
-        axs[i].set_ylim(0, np.nanmax(li_y[i]) * 1.05)
+        axs[i].set_ylim(ylims)
         axs[i].set_ylabel(li_lab_y[i])
         if i == len(li_lab_y) - 1:
             axs[i].set_xlabel(xlabel)
