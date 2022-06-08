@@ -3,19 +3,43 @@ from scipy import signal, fft
 import gc
 
 
-def power_spectre_1s(xx, dt, Nfft, window, Ndiv):
+def CV_overlap(Nfft, Nens, NOV):
 
-    idxs = np.arange(0, Nfft * Ndiv)
-    idxs = idxs.reshape((Ndiv, Nfft))
+    randND = np.random.normal(size = Nens * Nfft - (Nens - 1) * NOV)
+    idxs = (np.reshape(np.arange(Nens*Nfft), (Nens, Nfft)).T - np.arange(0, Nens*NOV, NOV)).T
+    randND = randND[idxs]
 
+    rfft_randND = fft.rfft(randND)
+    p_randND = np.real(rfft_randND * rfft_randND.conj())
+    p_randND[:, 1:-1] *= 2
+    p_randND_ave = np.mean(p_randND, axis=0)
+    p_randND_ave_ave = np.mean(p_randND_ave)
+    p_randND_ave_std = np.std(p_randND_ave, ddof=1)
+    CV = p_randND_ave_std / p_randND_ave_ave
+    print(f'C.V.={CV*100:.0f}%')
+
+    return CV
+
+
+def power_spectre_1s(xx, dt, Nfft, window, Nens, NOV):
+
+    print(f'Overlap ratio: {NOV/Nfft*100:.0f}%\n')
+
+    Nsamp = Nens * Nfft - (Nens - 1) * NOV
+    if len(xx) != Nsamp:
+        print('The number of samples is improper. \n')
+        exit()
+    else:
+        print(f'The number of samples: {Nsamp:d}')
+
+    idxs = (np.reshape(np.arange(Nens*Nfft), (Nens, Nfft)).T - np.arange(0, Nens*NOV, NOV)).T
     xens = xx[idxs]
 
     win = signal.get_window(window, Nfft)
     enbw = Nfft * np.sum(win ** 2) / (np.sum(win) ** 2)
     CG = np.abs(np.sum(win)) / Nfft
 
-    div_CV = np.sqrt(1. / Ndiv)  # 分割平均平滑化による相対誤差の変化率
-    sp_CV = div_CV
+    CV = CV_overlap(Nfft, Nens, NOV)
 
     rfreq = fft.rfftfreq(Nfft, dt)
 
@@ -24,33 +48,39 @@ def power_spectre_1s(xx, dt, Nfft, window, Ndiv):
     p_xx = np.real(rfft_x * rfft_x.conj())
     p_xx[:, 1:-1] *= 2
     p_xx_ave = np.mean(p_xx, axis=0)
-    p_xx_err = np.std(p_xx, axis=0, ddof=1)
-    p_xx_rerr = p_xx_err / np.abs(p_xx_ave) * sp_CV
+    p_xx_std = np.std(p_xx, axis=0, ddof=1)
+    p_xx_rerr = p_xx_std / np.abs(p_xx_ave) * CV
 
     Fs = 1. / dt
     psd = p_xx_ave / (Fs * Nfft * enbw * (CG ** 2))
-    psd_err = np.abs(psd) * p_xx_rerr
+    psd_err = psd * p_xx_rerr
 
     dfreq = 1. / (Nfft * dt)
-    print(f'Power x^2_bar            ={np.sum(xx[idxs] ** 2) / (Nfft * Ndiv)}')
-    print(f'Power integral of P(f)*df={np.sum(psd * dfreq)}')
+    print(f'Power x^2_bar            ={np.sum(xx**2) / len(xx)}')
+    print(f'Power integral of P(f)*df={np.sum(psd * dfreq)}\n')
 
     return rfreq, psd, psd_err
 
 
-def power_spectre_2s(xx, dt, Nfft, window, Ndiv):
+def power_spectre_2s(xx, dt, Nfft, window, Nens, NOV):
 
-    idxs = np.arange(0, Nfft * Ndiv)
-    idxs = idxs.reshape((Ndiv, Nfft))
+    print(f'Overlap ratio: {NOV/Nfft*100:.0f}%\n')
 
+    Nsamp = Nens * Nfft - (Nens - 1) * NOV
+    if len(xx) != Nsamp:
+        print('The number of samples is improper. \n')
+        exit()
+    else:
+        print(f'The number of samples: {Nsamp:d}')
+
+    idxs = (np.reshape(np.arange(Nens*Nfft), (Nens, Nfft)).T - np.arange(0, Nens*NOV, NOV)).T
     xens = xx[idxs]
 
     win = signal.get_window(window, Nfft)
     enbw = Nfft * np.sum(win ** 2) / (np.sum(win) ** 2)
     CG = np.abs(np.sum(win)) / Nfft
 
-    div_CV = np.sqrt(1. / Ndiv)  # 分割平均平滑化による相対誤差の変化率
-    sp_CV = div_CV
+    CV = CV_overlap(Nfft, Nens, NOV)
 
     freq = fft.fftshift(fft.fftfreq(Nfft, dt))
 
@@ -59,14 +89,14 @@ def power_spectre_2s(xx, dt, Nfft, window, Ndiv):
     p_xx = np.real(fft_x * fft_x.conj())
     p_xx_ave = np.mean(p_xx, axis=0)
     p_xx_err = np.std(p_xx, axis=0, ddof=1)
-    p_xx_rerr = p_xx_err / np.abs(p_xx_ave) * sp_CV
+    p_xx_rerr = p_xx_err / np.abs(p_xx_ave) * CV
 
     Fs = 1. / dt
     psd = p_xx_ave / (Fs * Nfft * enbw * (CG ** 2))
     psd_err = np.abs(psd) * p_xx_rerr
 
     dfreq = 1. / (Nfft * dt)
-    print(f'Power x^2_bar            ={np.sum(np.real(xx[idxs]*np.conj(xx[idxs]))) / (Nfft * Ndiv)}')
+    print(f'Power x^2_bar            ={np.sum(np.real(xx*np.conj(xx))) / Nsamp}')
     print(f'Power integral of P(f)*df={np.sum(psd * dfreq)}')
 
     return freq, psd, psd_err

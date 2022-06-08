@@ -202,3 +202,49 @@ def errorbar2_t_mul(time, huelabels, any1, any1_err, any2, any2_err, range1, ran
     fig.legend()
 
     return fig, axs
+
+
+def any2_t(time, any1, any2, range1, range2, label1, label2):
+
+    fig, axs = plt.subplots(2)
+    axs[0].plot(time, any1,
+                color='black')
+    axs[0].set_xlim(time.min(), time.max())
+    axs[0].set_ylim(range1)
+    # axs[0].set_xlabel('Time [s]')
+    axs[0].set_xticklabels([])
+    axs[0].set_ylabel(label1)
+
+    axs[1].plot(time, any2,
+                color='black')
+    axs[1].set_xlim(time.min(), time.max())
+    axs[1].set_ylim(range2)
+    axs[1].set_xlabel('Time [s]')
+    axs[1].set_ylabel(label2)
+
+    return fig, axs
+
+
+def any2_t_mul(time, huelabels, any1, any2, range1, range2, label1, label2, colors):
+
+    fig, axs = plt.subplots(2)
+    for i, huelabel in enumerate(huelabels):
+        axs[0].errorbar(time, any1[i], label=huelabel,
+                        color=colors[i])
+    axs[0].set_xlim(time.min(), time.max())
+    axs[0].set_ylim(range1)
+    # axs[0].set_xlabel('Time [s]')
+    axs[0].set_xticklabels([])
+    axs[0].set_ylabel(label1)
+
+    for i, huelabel in enumerate(huelabels):
+        axs[1].errorbar(time, any2[i],
+                        color=colors[i])
+    axs[1].set_xlim(time.min(), time.max())
+    axs[1].set_ylim(range2)
+    axs[1].set_xlabel('Time [s]')
+    axs[1].set_ylabel(label2)
+
+    fig.legend()
+
+    return fig, axs

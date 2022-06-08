@@ -128,6 +128,48 @@ def cxsmap7(EG):
            dat_Tipol, err_Tipol, dat_Titor, err_Titor
 
 
+def cxsmap9(EG):
+
+    time = EG.dims(0)
+    R = EG.dims(1)
+    shape_tR = (time.size, R.size)
+
+    a99 = EG.trace_of_2d('a99', [0, 1])
+    reff = EG.trace_of_2d('reff', [0, 1])
+    a99[a99 == 0.] = np.nan
+    reff[np.abs(reff) > 1.5] = np.nan
+    a99 = a99.reshape(shape_tR)
+    reff = reff.reshape(shape_tR)
+
+    a99b = ~np.isnan(a99).all(axis=1)
+    time = time[a99b]
+    a99 = a99[a99b]
+    reff = reff[a99b]
+
+    dat_Ti = EG.trace_of_2d('Ti', [0, 1])
+    err_Ti = EG.trace_of_2d('Tier', [0, 1])
+    dat_Ti[dat_Ti == 0.] = np.nan
+    err_Ti[err_Ti == 0.] = np.nan
+    dat_Ti = dat_Ti.reshape(shape_tR)
+    err_Ti = err_Ti.reshape(shape_tR)
+
+    dat_Ti = dat_Ti[a99b]
+    err_Ti = err_Ti[a99b]
+
+    rho = reff / a99
+
+    idxs_sort = np.argsort(R)
+    R = R[idxs_sort]
+    reff = reff[:, idxs_sort]
+    rho = rho[:, idxs_sort]
+    dat_Ti = dat_Ti[:, idxs_sort]
+    err_Ti = err_Ti[:, idxs_sort]
+
+    return time, R, \
+           reff, rho, \
+           dat_Ti, err_Ti
+
+
 def choose_ch():
 
     # information
@@ -282,10 +324,33 @@ def LHD_IQ_et(sn, subsn, diagname, chs, et):
     return tdat, Idat, Qdat, dT, Fs, tsize
 
 
+def LHD_time(sn, subsn, diagname, ch):
+
+    tdat, tprms = LHDR.RetrieveTime(diagname, sn, subsn, ch)
+    tsize = len(tdat)
+    dT = parse('{:f}{:S}', tprms['ClockCycle'][0])[0]
+
+    return tdat, dT, tsize
+
 def LHD_et(sn, subsn, diagname, ch, et):
     dat, prms = LHDR.RetrieveData_et(diagname, sn, subsn, ch, et)
     tdat, tprms = LHDR.RetrieveTime(diagname, sn, subsn, ch)
     tdat = tdat[(tdat >= et[0]) & (tdat <= et[1])]
+
+    tsize = len(tdat)
+    dT = parse('{:f}{:S}', tprms['ClockCycle'][0])[0]
+    Fs = int(prms['SamplingClock'][0])
+
+    print('\n')
+
+    return tdat, dat, dT, Fs, tsize
+
+
+def LHD_ss(sn, subsn, diagname, ch, ss):
+
+    dat, prms = LHDR.RetrieveData_ss(diagname, sn, subsn, ch, ss)
+    tdat, tprms = LHDR.RetrieveTime(diagname, sn, subsn, ch)
+    tdat = tdat[np.arange(ss[0], ss[1] + 1)]
 
     tsize = len(tdat)
     dT = parse('{:f}{:S}', tprms['ClockCycle'][0])[0]
