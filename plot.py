@@ -22,6 +22,7 @@ def capsave(fig, fig_title, fnm, path):
     fig.text(1, 0.01, fnm, ha='right', color='grey', size='xx-small')
     fig.tight_layout()
     plt.subplots_adjust(hspace=0.1)
+    plt.subplots_adjust(wspace=0.1)
     fig.savefig(path)
     return fig
 
@@ -43,13 +44,12 @@ def errorbar_single(x, y, yerr, xlabel, ylabel, xlim, ylim,
     return fig, ax
 
 
-def errorbar_hue(li_x, li_y, li_yerr, li_huecolor, li_lw, li_lab_hue, xlabel, ylabel, xlim, ylim):
+def errorbar_hue(li_x, li_y, li_xerr, li_yerr, li_huecolor, li_lab_hue, xlabel, ylabel, xlim=None, ylim=None, fmt='.'):
 
     fig, axs = plt.subplots()
     for j in range(len(li_lab_hue)):
-        axs.errorbar(li_x[j], li_y[j], li_yerr[j],
-                         color=li_huecolor[j], ecolor='grey',
-                         lw=li_lw[j], elinewidth=li_lw[j])
+        axs.errorbar(li_x[j], li_y[j], li_yerr[j], li_xerr[j],
+                     color=li_huecolor[j], ecolor='grey', fmt=fmt)
     axs.legend(li_lab_hue)
     axs.axhline(0, color='grey', ls='--')
     axs.axvline(0, color='grey', ls='--')
@@ -81,7 +81,7 @@ def errorbar_vert(li_x, li_y, li_yerr, xlabel, li_lab_y, xlim, ylims, color='bla
     return fig, axs
 
 
-def errorbar_vert_hue(li_x, li_y, li_yerr, li_huecolor, li_lw, li_lab_y, li_lab_hue, xlabel, xlim, ylims):
+def errorbar_vert_hue(li_x, li_y, li_yerr, li_huecolor, li_lw, li_lab_y, li_lab_hue, xlabel, xlim=None, ylims=None):
 
     fig, axs = plt.subplots(len(li_lab_y))
     for i in range(len(li_lab_y)):
@@ -92,9 +92,11 @@ def errorbar_vert_hue(li_x, li_y, li_yerr, li_huecolor, li_lw, li_lab_y, li_lab_
         if i == 0:
             fig.legend(li_lab_hue)
         axs[i].axhline(0, color='grey', ls='--')
-        axs[i].axvline(0, color='grey', ls='--')
-        axs[i].set_xlim(xlim)
-        axs[i].set_ylim(ylims)
+        # axs[i].axvline(0, color='grey', ls='--')
+        if xlim != None:
+            axs[i].set_xlim(xlim)
+        if ylims != None:
+            axs[i].set_ylim(ylims)
         axs[i].set_ylabel(li_lab_y[i])
         if i == len(li_lab_y) - 1:
             axs[i].set_xlabel(xlabel)
@@ -114,8 +116,8 @@ def spectrogram_1s_fk(time, freq_k, flim_k, any, bottom, top, label, cmap):
                          any, cmap=cmap, vmin=bottom, vmax=top)
     fig.colorbar(pcf, ax=ax, label=label)
     ax.set_ylim(0, flim_k)
-    ax.set_xlabel('Time [s]')
-    ax.set_ylabel('Frequency [kHz]')
+    ax.set_xlabel('Time (s)')
+    ax.set_ylabel('Frequency (kHz)')
     ax.set_xlim(time.min() - 0.5*dt, time.max() + 0.5*dt)
 
     return fig, ax
@@ -131,8 +133,8 @@ def spectrogram_2s_fk(time, freq_k, flim_k, any, bottom, top, label, cmap):
                          any, cmap=cmap, vmin=bottom, vmax=top)
     fig.colorbar(pcf, ax=ax, label=label)
     ax.set_ylim(-flim_k, flim_k)
-    ax.set_xlabel('Time [s]')
-    ax.set_ylabel('Frequency [kHz]')
+    ax.set_xlabel('Time (s)')
+    ax.set_ylabel('Frequency (kHz)')
     ax.set_xlim(time.min() - 0.5 * dt, time.max() + 0.5 * dt)
 
     return fig, ax
@@ -145,20 +147,20 @@ def any_t_fk_2s(time, dt, freq_k, dfk, flim_k, any, bottom, top, label, cmap):
                          any, cmap=cmap, vmin=bottom, vmax=top)
     fig.colorbar(pcf, ax=ax, label=label)
     ax.set_ylim(-flim_k, flim_k)
-    ax.set_xlabel('Time [s]')
-    ax.set_ylabel('Frequency [kHz]')
+    ax.set_xlabel('Time (s)')
+    ax.set_ylabel('Frequency (kHz)')
     ax.set_xlim(time.min(), time.max() + dt)
 
     return fig, ax
 
 
-def errorbar_fk_2s(freq_k, flim_k, any, any_err, bottom, top, label, fmt):
+def errorbar_fk_2s(freq_k, flim_k, any, any_err, bottom, top, label, fmt='-'):
 
     fig, ax = plt.subplots()
     ax.errorbar(freq_k, any, any_err, color='red', ecolor='blue', fmt=fmt)
     ax.set_xlim(-flim_k, flim_k)
     ax.set_ylim(bottom, top)
-    ax.set_xlabel('Frequency [kHz]')
+    ax.set_xlabel('Frequency (kHz)')
     ax.set_ylabel(label)
 
     return fig, ax
@@ -172,7 +174,7 @@ def errorbar_t_mul(time, huelabels, any, any_err, bottom, top, label, fmt, palet
                     color=sns.color_palette(palette)[i], ecolor='grey', fmt=fmt)
     ax.set_xlim(time.min(), time.max())
     ax.set_ylim(bottom, top)
-    ax.set_xlabel('Time [s]')
+    ax.set_xlabel('Time (s)')
     ax.set_ylabel(label)
     ax.legend()
 
@@ -196,7 +198,7 @@ def errorbar2_t_mul(time, huelabels, any1, any1_err, any2, any2_err, range1, ran
                         color=sns.color_palette(palette)[i], ecolor='grey', fmt=fmt2)
     axs[1].set_xlim(time.min(), time.max())
     axs[1].set_ylim(range2)
-    axs[1].set_xlabel('Time [s]')
+    axs[1].set_xlabel('Time (s)')
     axs[1].set_ylabel(label2)
 
     fig.legend()
@@ -219,7 +221,7 @@ def any2_t(time, any1, any2, range1, range2, label1, label2):
                 color='black')
     axs[1].set_xlim(time.min(), time.max())
     axs[1].set_ylim(range2)
-    axs[1].set_xlabel('Time [s]')
+    axs[1].set_xlabel('Time (s)')
     axs[1].set_ylabel(label2)
 
     return fig, axs
@@ -242,7 +244,7 @@ def any2_t_mul(time, huelabels, any1, any2, range1, range2, label1, label2, colo
                         color=colors[i])
     axs[1].set_xlim(time.min(), time.max())
     axs[1].set_ylim(range2)
-    axs[1].set_xlabel('Time [s]')
+    axs[1].set_xlabel('Time (s)')
     axs[1].set_ylabel(label2)
 
     fig.legend()

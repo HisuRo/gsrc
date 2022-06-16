@@ -183,12 +183,24 @@ def power_spectrogram_1s(ti, xx, dt, Nfft, window, Ndiv, Ntisp):
     return tisp, rfreq, psd, psd_err
 
 
-def power_spectrogram_2s(ti, xx, dt, Nfft, window, Ndiv, Ntisp):
+def power_spectrogram_2s(ti, xx, dt, Nfft, window, Nens, NOV):
 
-    idxs = np.arange(0, Nfft * Ndiv * Ntisp)
-    idxs = idxs.reshape((Ntisp, Ndiv, Nfft))
+    print(f'Overlap ratio: {NOV/Nfft*100:.0f}%\n')
 
-    dtisp = Ndiv * Nfft * dt
+    Nsamp = Nens * Nfft - (Nens - 1) * NOV
+    Nsp = int(len(ti) / Nsamp + 0.5)
+
+    if len(xx) % Nsamp != 0 or len(ti) % Nsamp != 0 or len(xx) != len(ti):
+        print('The number of data points is improper. \n')
+        exit()
+    else:
+        print(f'The number of samples a spectrum: {Nsamp:d}')
+        print(f'The number of spectra: {Nsp:d}\n')
+
+    tmp = np.transpose(np.reshape(np.arange(Nens * Nfft), (Nens, Nfft)).T - np.arange(0, Nens * NOV, NOV))
+    idxs = np.transpose(np.tile(tmp, (Nsp, 1, 1)).T + np.arange(0, Nsp*Nsamp, Nsamp))
+
+    dtisp = Nsamp * dt
     tisp = ti[idxs.T[0][0]] + 0.5 * dtisp
     xens = xx[idxs]
 
@@ -196,8 +208,7 @@ def power_spectrogram_2s(ti, xx, dt, Nfft, window, Ndiv, Ntisp):
     enbw = Nfft * np.sum(win ** 2) / (np.sum(win) ** 2)
     CG = np.abs(np.sum(win)) / Nfft
 
-    div_CV = np.sqrt(1. / Ndiv)  # 分割平均平滑化による相対誤差の変化率
-    sp_CV = div_CV
+    CV = CV_overlap(Nfft, Nens, NOV)
 
     freq = fft.fftshift(fft.fftfreq(Nfft, dt))
 
@@ -206,17 +217,17 @@ def power_spectrogram_2s(ti, xx, dt, Nfft, window, Ndiv, Ntisp):
     p_xx = np.real(fft_x * fft_x.conj())
     p_xx_ave = np.mean(p_xx, axis=1)
     p_xx_err = np.std(p_xx, axis=1, ddof=1)
-    p_xx_rerr = p_xx_err / np.abs(p_xx_ave) * sp_CV
+    p_xx_rerr = p_xx_err / np.abs(p_xx_ave) * CV
 
     Fs = 1. / dt
     psd = p_xx_ave / (Fs * Nfft * enbw * (CG ** 2))
     psd_err = np.abs(psd) * p_xx_rerr
 
     dfreq = 1. / (Nfft * dt)
-    print(f'Power x^2_bar             = {np.sum(np.abs(xx[idxs][0])**2) / (Nfft * Ndiv):.3f}V^2 '
-          f'@{tisp[0]:.3f}+-{0.5 * dtisp:.3f}s')
-    print(f'Power integral of P(f)*df = {np.sum(psd[0] * dfreq):.3f}V^2'
-          f' @{tisp[0]:.3f}+-{0.5 * dtisp:.3f}s')
+    print(f'Power: Time average of x(t)^2 = {np.sum(np.abs(xx[0:Nsamp])**2) / Nsamp:.6f} V^2 '
+          f'@{tisp[0]:.3f}+-{0.5 * dtisp:.3f} s')
+    print(f'Power: Integral of P(f)       = {np.sum(psd[0] * dfreq):.6f} V^2 '
+          f'@{tisp[0]:.3f}+-{0.5 * dtisp:.3f} s')
 
     return tisp, freq, psd, psd_err
 
@@ -495,6 +506,44 @@ def gradient(R, reff, rho, dat, err, Nfit):
     return R_f, reff_f, rho_f, dat_grad, err_grad
 
 
+def gradient_reg(R, reff, rho, dat, err, Nfit):
+
+    Nt, NR = reff.shape
+    NRf = NR - Nfit + 1
+
+    idxs_calc = np.full((NRf, Nfit), np.arange(Nfit)).T  # (Nfit, NRf)
+    idxs_calc = idxs_calc + np.arange(NRf)  # (Nfit, NRf)
+    idxs_calc = idxs_calc.T  # (NRf, Nfit)
+    # Rcal = R[idxs_calc]
+    reffcal = reff[:, idxs_calc]
+    # rhocal = rho[:, idxs_calc]
+    datcal = dat[:, idxs_calc]
+    errcal = err[:, idxs_calc]
+
+    popt, perr = LSM1_2d(reffcal, datcal, errcal)
+
+    dat_grad = popt[0]
+    err_grad = perr[0]
+
+    reff_f = np.average(reffcal, axis=-1)  # (Nt, NRf)
+    dat_reg = popt[0] * reff_f + popt[1]
+    dat_reg_cal = np.repeat(dat_reg.reshape((Nt, NRf, 1)), Nfit, axis=-1)
+    err_reg = np.sqrt(np.sum((datcal - dat_reg_cal)**2, axis=-1)/(Nfit - 2))
+
+    reff_f_NR = np.reshape(reff_f, (Nt, NRf, 1))  # (Nt, NRf, 1)
+    reff_f_NR = np.repeat(reff_f_NR, NR, axis=-1)  # (Nt, NRf, NR)
+    reff_ref = np.reshape(reff, (Nt, 1, NR))  # (Nt, 1, NR)
+    reff_ref = np.repeat(reff_ref, NRf, axis=1)  # (Nt, NRf, NR)
+
+    idxs_at = np.nanargmin(np.abs(reff_f_NR - reff_ref), axis=-1)  # (Nt, NRf)
+    idxs_t = np.repeat(np.reshape(np.arange(Nt), (Nt, 1)), NRf, axis=-1)  # (Nt, NRf)
+    R = np.tile(R, (Nt, 1))  # (Nt, NR)
+    R_f = R[(idxs_t, idxs_at)]
+    rho_f = rho[(idxs_t, idxs_at)]
+
+    return R_f, reff_f, rho_f, dat_grad, err_grad, dat_reg, err_reg
+
+
 # 2022/3/28 define R as Rax (changed from measured position)
 def Lscale(dat, err, dat_grad, err_grad, Rax):
 
@@ -524,13 +573,14 @@ def eta(dat_LT, err_LT, dat_Ln, err_Ln):
 
 
 # 2022/3/28 define Tratio as Ti / Te ( from tau = Te / Ti )
+# 2022/6/14 redefine Tratio as Te / Ti
 def Tratio(Te, Ti, Te_err, Ti_err):
 
-    Tratio = Ti / Te
+    Tratio = Te / Ti
 
-    Ti_rerr = Ti_err / Ti
     Te_rerr = Te_err / Te
-    Tratio_rerr = np.sqrt(Ti_rerr ** 2 + Te_rerr ** 2)
+    Ti_rerr = Ti_err / Ti
+    Tratio_rerr = np.sqrt(Te_rerr ** 2 + Ti_rerr ** 2)
     Tratio_err = Tratio * Tratio_rerr
 
     return Tratio, Tratio_err
