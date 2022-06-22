@@ -17,12 +17,15 @@ def check(duration):
     return
 
 
-def capsave(fig, fig_title, fnm, path):
+def caption(fig, fig_title, hspace, wspace):
     fig.suptitle(fig_title)
-    fig.text(1, 0.01, fnm, ha='right', color='grey', size='xx-small')
     fig.tight_layout()
-    plt.subplots_adjust(hspace=0.1)
-    plt.subplots_adjust(wspace=0.1)
+    plt.subplots_adjust(hspace=hspace)
+    plt.subplots_adjust(wspace=wspace)
+    return fig
+
+def capsave(fig, fig_title, fnm, path):
+    fig.text(1, 0.01, fnm, ha='right', color='grey', size='xx-small')
     fig.savefig(path)
     return fig
 
@@ -51,10 +54,12 @@ def errorbar_hue(li_x, li_y, li_xerr, li_yerr, li_huecolor, li_lab_hue, xlabel, 
         axs.errorbar(li_x[j], li_y[j], li_yerr[j], li_xerr[j],
                      color=li_huecolor[j], ecolor='grey', fmt=fmt)
     axs.legend(li_lab_hue)
-    axs.axhline(0, color='grey', ls='--')
-    axs.axvline(0, color='grey', ls='--')
-    axs.set_xlim(xlim)
-    axs.set_ylim(ylim)
+    axs.axhline(0, color='grey', ls='--', label=None)
+    axs.axvline(0, color='grey', ls='--', label=None)
+    if xlim != None:
+        axs.set_xlim(xlim)
+    if ylim != None:
+        axs.set_ylim(ylim)
     axs.set_ylabel(ylabel)
     axs.set_xlabel(xlabel)
 
@@ -81,17 +86,16 @@ def errorbar_vert(li_x, li_y, li_yerr, xlabel, li_lab_y, xlim, ylims, color='bla
     return fig, axs
 
 
-def errorbar_vert_hue(li_x, li_y, li_yerr, li_huecolor, li_lw, li_lab_y, li_lab_hue, xlabel, xlim=None, ylims=None):
+def errorbar_vert_hue(li_x, li_y, li_yerr, li_huecolor, li_lw, li_lab_y, li_lab_hue, xlabel, xlim=None, ylims=None, fmt='.'):
 
     fig, axs = plt.subplots(len(li_lab_y))
     for i in range(len(li_lab_y)):
-        for j in range(len(li_lab_hue)):
+        for j in range(len(li_lab_hue[i])):
             axs[i].errorbar(li_x[i][j], li_y[i][j], li_yerr[i][j],
                              color=li_huecolor[j], ecolor='grey',
-                             lw=li_lw[j], elinewidth=li_lw[j])
-        if i == 0:
-            fig.legend(li_lab_hue)
-        axs[i].axhline(0, color='grey', ls='--')
+                             lw=li_lw[j], elinewidth=li_lw[j], label=li_lab_hue[i][j], fmt=fmt)
+            axs[i].legend()
+        axs[i].axhline(0, color='grey', ls='--', label=None)
         # axs[i].axvline(0, color='grey', ls='--')
         if xlim != None:
             axs[i].set_xlim(xlim)
@@ -102,6 +106,29 @@ def errorbar_vert_hue(li_x, li_y, li_yerr, li_huecolor, li_lw, li_lab_y, li_lab_
             axs[i].set_xlabel(xlabel)
         else:
             axs[i].set_xticklabels([])
+
+    return fig, axs
+
+
+def errorbar_horz_hue(li_x, li_y, li_yerr, li_huecolor, li_lw, li_lab_y, li_lab_hue, xlabel, xlim=None, ylims=None, fmt='.'):
+
+    fig, axs = plt.subplots(1, len(li_lab_y))
+    for i in range(len(li_lab_y)):
+        for j in range(len(li_lab_hue[i])):
+            axs[i].errorbar(li_x[i][j], li_y[i][j], li_yerr[i][j],
+                             color=li_huecolor[j], ecolor='grey',
+                             lw=li_lw[j], elinewidth=li_lw[j], label=li_lab_hue[i][j], fmt=fmt)
+            axs[i].legend()
+        axs[i].axhline(0, color='grey', ls='--', label=None)
+        # axs[i].axvline(0, color='grey', ls='--')
+        if xlim != None:
+            axs[i].set_xlim(xlim)
+        if ylims != None:
+            axs[i].set_ylim(ylims)
+        axs[i].set_xlabel(xlabel)
+        if i != 0:
+            axs[i].set_yticklabels([])
+        axs[i].set_title(li_lab_y[i])
 
     return fig, axs
 
@@ -124,6 +151,7 @@ def spectrogram_1s_fk(time, freq_k, flim_k, any, bottom, top, label, cmap):
 
 
 def spectrogram_2s_fk(time, freq_k, flim_k, any, bottom, top, label, cmap):
+
     dt = time[1] - time[0]
     dfk = freq_k[1] - freq_k[0]
 
@@ -138,6 +166,39 @@ def spectrogram_2s_fk(time, freq_k, flim_k, any, bottom, top, label, cmap):
     ax.set_xlim(time.min() - 0.5 * dt, time.max() + 0.5 * dt)
 
     return fig, ax
+
+
+def ax0_spectrogram_2s_fk(time0, dat0, err0, label0, time, freq_k, flim_k, spec, bottom, top, label, cmap):
+
+    dt = time[1] - time[0]
+    dfk = freq_k[1] - freq_k[0]
+
+    # fig, ax = plt.subplots()
+    fig = plt.figure()
+    widths = [8, 1]
+    heights = [2, 5]
+    gs = fig.add_gridspec(ncols=2, nrows=2, hspace=0,
+                          width_ratios=widths, height_ratios=heights)
+
+    ax0 = fig.add_subplot(gs[0, 0])
+    ax0.errorbar(time0, dat0, err0, color='black', ecolor='grey')
+    ax0.set_xlim(time.min() - 0.5 * dt, time.max() + 0.5 * dt)
+    ax0.set_ylim(np.min([0, dat0.min()]), np.max([0, dat0.max()]))
+    ax0.set_xticklabels([])
+    ax0.set_ylabel(label0)
+
+    ax1 = fig.add_subplot(gs[1, 0])
+    cax1 = fig.add_subplot(gs[1, 1])
+    pcf = ax1.pcolorfast((time.min() - 0.5 * dt, time.max() + 0.5 * dt),
+                        (freq_k.min() - 0.5 * dfk, freq_k.max() + 0.5 * dfk),
+                        spec, cmap=cmap, vmin=bottom, vmax=top)
+    fig.colorbar(pcf, cax=cax1, label=label)
+    ax1.set_xlim(time.min() - 0.5 * dt, time.max() + 0.5 * dt)
+    ax1.set_ylim(-flim_k, flim_k)
+    ax1.set_xlabel('Time (s)')
+    ax1.set_ylabel('Frequency (kHz)')
+
+    return fig, ax0, ax1, cax1
 
 
 def any_t_fk_2s(time, dt, freq_k, dfk, flim_k, any, bottom, top, label, cmap):

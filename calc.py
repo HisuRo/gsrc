@@ -1,5 +1,5 @@
 import numpy as np
-from scipy import signal, fft
+from scipy import signal, fft, interpolate, optimize
 import gc
 
 
@@ -246,6 +246,28 @@ def cross_cor(sig, ref, dt):
     return lags, CCF, CCC
 
 
+def corrcoef_series(time, sig1, sig2, Nsamp):
+
+    Ncorr = len(time) - Nsamp + 1
+
+    idxs_corr = np.full((Ncorr, Nsamp), np.arange(Nsamp)).T
+    idxs_corr = idxs_corr + np.arange(Ncorr)
+    idxs_corr = idxs_corr.T
+    time_cor = np.average(time[idxs_corr], axis=-1)
+    sig1_cor = sig1[idxs_corr]
+    sig2_cor = sig2[idxs_corr]
+
+    sig1_AVG = np.repeat(np.reshape(np.nanmean(sig1_cor, axis=-1), (Ncorr, 1)), Nsamp, axis=-1)
+    sig2_AVG = np.repeat(np.reshape(np.nanmean(sig2_cor, axis=-1), (Ncorr, 1)), Nsamp, axis=-1)
+    sig12_xy = (sig1_cor - sig1_AVG) * (sig2_cor - sig2_AVG)
+    sig12_cov = np.nansum(sig12_xy, axis=-1) / (np.count_nonzero(~np.isnan(sig12_xy), axis=-1) - 1)
+    sig1_var = np.nanvar(sig1_cor, axis=-1, ddof=1)
+    sig2_var = np.nanvar(sig2_cor, axis=-1, ddof=1)
+    corrcoef = sig12_cov / np.sqrt(sig1_var * sig2_var)
+
+    return time_cor, corrcoef
+
+
 def cross_spectre_2s(x, y, Fs, tana, dtsp, Nsp, dten, Nens, Nfft, window, Ndiv):
 
     dT = 1. / Fs
@@ -350,9 +372,15 @@ def LSM1(x, y, y_err):
     return prms, errs
 
 
-def LSM1_2d(x, y, y_err):
+def poly1_LSM(x, y, y_err):
 
-    Nt, Nx, Nf = y.shape
+    if x.shape != y.shape:
+        print('Improper data shape')
+        exit()
+
+    Nfit = x.shape[-1]
+    otherNs_array = np.array(x.shape[:-1])
+    others_ndim = otherNs_array.size()
 
     weight = 1./(y_err**2)
 
@@ -360,32 +388,38 @@ def LSM1_2d(x, y, y_err):
     wx02 = np.array([np.ones(weight.shape), x, x2]) * weight
     Swx02 = np.sum(wx02, axis=-1)
     matrix = np.array([[Swx02[1], Swx02[0]],
-                       [Swx02[2], Swx02[1]]])  # (2, 2, Nt, Nx)
-    matrix = np.transpose(matrix, axes=(2, 3, 0, 1))  # (Nt, Nx, 2, 2)
+                       [Swx02[2], Swx02[1]]])
+    matrix = np.transpose(matrix, axes=tuple(np.append((np.arange(others_ndim) + 2), [0, 1])))
     matinv = np.linalg.inv(matrix)
 
-    wx01 = np.array([np.ones(weight.shape), x]) * weight  # (2, Nt, Nx, Nf)
+    wx01 = np.array([np.ones(weight.shape), x]) * weight
 
-    wx01 = np.transpose(wx01, axes=(1, 2, 0, 3))  # (Nt, Nx, 2, Nf)
-    Minvwx02 = np.matmul(matinv, wx01)  # (Nt, Nx, 2, Nf)
-    y = np.reshape(y, (Nt, Nx, Nf, 1))
-    y_err = np.reshape(y_err, (Nt, Nx, Nf, 1))
+    wx01 = np.transpose(wx01, axes=tuple(np.append((np.arange(others_ndim) + 1), [0, others_ndim + 1])))
+    Minvwx02 = np.matmul(matinv, wx01)
+    y = np.reshape(y, tuple(np.concatenate([otherNs_array, Nfit, 1], axis=None)))
+    y_err = np.reshape(y_err, tuple(np.concatenate([otherNs_array, Nfit, 1], axis=None)))
 
-    prms = np.matmul(Minvwx02, y)  # (Nt, Nx, 2, 1)
+    prms = np.matmul(Minvwx02, y)
     errs = np.sqrt(np.matmul(Minvwx02**2, y_err**2))
 
-    prms = np.reshape(prms, (Nt, Nx, 2))
-    errs = np.reshape(errs, (Nt, Nx, 2))
+    prms = np.reshape(prms, tuple(np.concatenate([otherNs_array, 2], axis=None)))
+    errs = np.reshape(errs, tuple(np.concatenate([otherNs_array, 2], axis=None)))
 
-    prms = np.transpose(prms, axes=(2, 0, 1))  # (2, Nt, Nx)
-    errs = np.transpose(errs, axes=(2, 0, 1))
+    prms = np.transpose(prms, axes=tuple(np.concatenate([others_ndim, np.arange(others_ndim)], axis=None)))
+    errs = np.transpose(errs, axes=tuple(np.concatenate([others_ndim, np.arange(others_ndim)], axis=None)))
 
     return prms, errs
 
 
-def LSM2(x, y, y_err):
+def poly2_LSM(x, y, y_err):
 
-    Nt, Nx = y.shape
+    if x.shape != y.shape:
+        print('Improper data shape')
+        exit()
+
+    Nfit = x.shape[-1]
+    otherNs_array = np.array(x.shape[:-1])
+    others_ndim = otherNs_array.size()
 
     weight = 1./(y_err**2)
 
@@ -397,22 +431,25 @@ def LSM2(x, y, y_err):
     matrix = np.array([[Swx04[2], Swx04[1], Swx04[0]],
                        [Swx04[3], Swx04[2], Swx04[1]],
                        [Swx04[4], Swx04[3], Swx04[2]]])
-    matrix = np.transpose(matrix, axes=(2, 0, 1))
+    matrix = np.transpose(matrix, axes=tuple(np.append((np.arange(others_ndim) + 2), [0, 1])))
     matinv = np.linalg.inv(matrix)
 
     wx02 = np.array([np.ones(weight.shape), x, x2]) * weight
 
-    wx02 = np.reshape(wx02, (3, Nt, Nx))
-    wx02 = np.transpose(wx02, axes=(1, 0, 2))
+    # wx02 = np.reshape(wx02, tuple(np.concatenate([3, otherNs_array, Nfit], axis=None)))
+    wx02 = np.transpose(wx02, axes=tuple(np.append((np.arange(others_ndim) + 1), [0, others_ndim + 1])))
     Minvwx02 = np.matmul(matinv, wx02)
-    y = np.reshape(y, (Nt, Nx, 1))
-    y_err = np.reshape(y_err, (Nt, Nx, 1))
+    y = np.reshape(y, tuple(np.concatenate([otherNs_array, Nfit, 1], axis=None)))
+    y_err = np.reshape(y_err, tuple(np.concatenate([otherNs_array, Nfit, 1], axis=None)))
 
     prms = np.matmul(Minvwx02, y)
     errs = np.sqrt(np.matmul(Minvwx02**2, y_err**2))
 
-    prms = np.reshape(prms, (Nt, 3)).T
-    errs = np.reshape(errs, (Nt, 3)).T
+    prms = np.reshape(prms, tuple(np.concatenate([otherNs_array, 3], axis=None)))
+    errs = np.reshape(errs, tuple(np.concatenate([otherNs_array, 3], axis=None)))
+
+    prms = np.transpose(prms, axes=tuple(np.concatenate([others_ndim, np.arange(others_ndim)], axis=None)))
+    errs = np.transpose(errs, axes=tuple(np.concatenate([others_ndim, np.arange(others_ndim)], axis=None)))
 
     return prms, errs
 
@@ -506,14 +543,18 @@ def gradient(R, reff, rho, dat, err, Nfit):
     return R_f, reff_f, rho_f, dat_grad, err_grad
 
 
-def gradient_reg(R, reff, rho, dat, err, Nfit):
+def make_idxs_for_MovingLSM(data_len, window_len):
+    output_len = data_len - window_len + 1
+    output_idxs = np.full((output_len, window_len), np.arange(window_len)).T
+    output_idxs = output_idxs + np.arange(output_len)
+    output_idxs = output_idxs.T
+    return output_idxs
+
+
+def gradient_reg_reff(reff, dat, err, Nfit):
 
     Nt, NR = reff.shape
-    NRf = NR - Nfit + 1
-
-    idxs_calc = np.full((NRf, Nfit), np.arange(Nfit)).T  # (Nfit, NRf)
-    idxs_calc = idxs_calc + np.arange(NRf)  # (Nfit, NRf)
-    idxs_calc = idxs_calc.T  # (NRf, Nfit)
+    idxs_calc = make_idxs_for_moving_LSM(NR, Nfit)
     # Rcal = R[idxs_calc]
     reffcal = reff[:, idxs_calc]
     # rhocal = rho[:, idxs_calc]
@@ -522,24 +563,86 @@ def gradient_reg(R, reff, rho, dat, err, Nfit):
 
     popt, perr = LSM1_2d(reffcal, datcal, errcal)
 
+    reff_f = np.average(reffcal, axis=-1)  # (Nt, NRf)
+    dat_reg = popt[0] * reff_f + popt[1]
+    popt_cal = np.repeat(popt.reshape((2, Nt, NRf, 1)), Nfit, axis=-1)
+    dat_reg_cal = popt_cal[0] * reffcal + popt_cal[1]
+    err_reg = np.sqrt(np.sum((datcal - dat_reg_cal) ** 2, axis=-1) / (Nfit - 2))
+    # err_reg = np.sqrt((perr[0] * reff_f)**2 + perr[1]**2)
+    S = np.sqrt(np.sum((reffcal - np.repeat(np.reshape(reff_f, (Nt, NRf, 1)), Nfit, axis=-1)) ** 2, axis=-1) / Nfit)
+    perr[0] = err_reg / S / np.sqrt(Nfit)
+    perr[1] = err_reg / Nfit / S * np.sqrt(np.sum(reffcal ** 2, axis=-1))
+
     dat_grad = popt[0]
     err_grad = perr[0]
 
-    reff_f = np.average(reffcal, axis=-1)  # (Nt, NRf)
-    dat_reg = popt[0] * reff_f + popt[1]
-    dat_reg_cal = np.repeat(dat_reg.reshape((Nt, NRf, 1)), Nfit, axis=-1)
-    err_reg = np.sqrt(np.sum((datcal - dat_reg_cal)**2, axis=-1)/(Nfit - 2))
+    return reff_f, dat_grad, err_grad, dat_reg, err_reg
 
-    reff_f_NR = np.reshape(reff_f, (Nt, NRf, 1))  # (Nt, NRf, 1)
-    reff_f_NR = np.repeat(reff_f_NR, NR, axis=-1)  # (Nt, NRf, NR)
-    reff_ref = np.reshape(reff, (Nt, 1, NR))  # (Nt, 1, NR)
-    reff_ref = np.repeat(reff_ref, NRf, axis=1)  # (Nt, NRf, NR)
 
-    idxs_at = np.nanargmin(np.abs(reff_f_NR - reff_ref), axis=-1)  # (Nt, NRf)
-    idxs_t = np.repeat(np.reshape(np.arange(Nt), (Nt, 1)), NRf, axis=-1)  # (Nt, NRf)
-    R = np.tile(R, (Nt, 1))  # (Nt, NR)
-    R_f = R[(idxs_t, idxs_at)]
-    rho_f = rho[(idxs_t, idxs_at)]
+def repeat_and_add_lastdim(Array, Nrepeat):
+    tmp = tuple(np.concatenate([np.array(Array.shape), 1], axis=None))
+    return np.repeat(np.reshape(Array, tmp), Nrepeat, axis=-1)
+
+
+def make_fitted_profiles_with_MovingPolyLSM(reff, raw_profiles, profiles_errs, window_len, poly=2):
+
+    if reff.shape != raw_profiles.shape:
+        print('Improper data shape')
+        exit()
+    profiles_count, profile_len = reff.shape()
+    idxs_for_Moving = make_idxs_for_MovingLSM(profile_len, window_len)
+    output_profiles_count = idxs_for_fitting.shape[0]
+
+    reff_for_Moving = reff[:, idxs_for_Moving]
+    reff_avgs = np.average(reff_for_Moving, axis=-1)
+    reff_for_fitting = reff_for_Moving - repeat_and_add_lastdim(reff_avgs, window_len)
+    profiles_for_fitting = raw_profiles[:, idxs_for_Moving]
+    profiles_errs_for_fitting = profiles_errs[:, idxs_for_Moving]
+
+    if poly == 1:
+        print('polynomial 1\n')
+        popt, perr = poly1_LSM(reff_for_fitting, profiles_for_fitting, profiles_errs_for_fitting)
+        fitted_profs_gradients = popt[0]
+        fitted_profs_grads_errs = perr[0]
+        fitted_profiles = popt[1]
+        fitted_profiles_errs = perr[1]
+    elif poly == 2:
+        print('polynomial 2\n')
+        popt, perr = poly2_LSM(reff_for_fitting, profiles_for_fitting, profiles_errs_for_fitting)
+        fitted_profs_gradients = popt[1]
+        fitted_profs_grads_errs = perr[1]
+        fitted_profiles = popt[2]
+        fitted_profiles_errs = perr[2]
+    else:
+        print('It has not developed yet...\n')
+        exit()
+
+    return reff_avgs, fitted_profiles, fitted_profiles_errs, fitted_profs_gradients, fitted_profs_grads_errs
+
+
+def gradient_reg(R, reff, a99, dat, err, Nfit):  # Nfit : odd number
+
+    reff_f, dat_grad, err_grad, dat_reg, err_reg = gradient_reg_reff(reff, dat, err, Nfit)
+
+    Nt, NR = reff.shape
+    NRf = NR - Nfit + 1
+    reff_ext = np.repeat(np.reshape(reff, (Nt, 1, NR)), NRf, axis=1)  # (Nt, NRf, NR)
+    reff_f_ext = np.repeat(np.reshape(reff_f, (Nt, NRf, 1)), NR, axis=2)  # (Nt, NRf, NR)
+
+    dreff = reff_f_ext - reff_ext
+    idxs1 = np.nanargmin(np.where(dreff <= 0, np.nan, dreff), axis=-1)
+    idxs2 = np.nanargmax(np.where(dreff >= 0, np.nan, dreff), axis=-1)
+
+    R1 = R[idxs1]
+    R2 = R[idxs2]
+    idxs_t = np.tile(np.reshape(np.arange(Nt), (Nt, 1)), (1, NRf))
+    reff1 = reff[idxs_t, idxs1]
+    reff2 = reff[idxs_t, idxs2]
+
+    R_f = (R2 - R1) / (reff2 - reff1) * (reff_f - reff1) + R1
+
+    a99 = np.repeat(np.reshape(a99, (Nt, 1)), NRf, axis=-1)
+    rho_f = reff_f / a99
 
     return R_f, reff_f, rho_f, dat_grad, err_grad, dat_reg, err_reg
 

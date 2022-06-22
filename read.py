@@ -106,6 +106,8 @@ def cxsmap7(EG):
     reff_tor = reff[:, idxs_tor]
     rho_pol = rho[:, idxs_pol]
     rho_tor = rho[:, idxs_tor]
+    a99_pol = a99[:, idxs_pol]
+    a99_tor = a99[:, idxs_tor]
     dat_Tipol = dat_Ti[:, idxs_pol]
     dat_Titor = dat_Ti[:, idxs_tor]
     err_Tipol = err_Ti[:, idxs_pol]
@@ -116,16 +118,18 @@ def cxsmap7(EG):
     R_pol = R_pol[idxs_sort_pol]
     reff_pol = reff_pol[:, idxs_sort_pol]
     rho_pol = rho_pol[:, idxs_sort_pol]
+    a99_pol = a99_pol[:, idxs_sort_pol]
     dat_Tipol = dat_Tipol[:, idxs_sort_pol]
     err_Tipol = err_Tipol[:, idxs_sort_pol]
     R_tor = R_tor[idxs_sort_tor]
     reff_tor = reff_tor[:, idxs_sort_tor]
     rho_tor = rho_tor[:, idxs_sort_tor]
+    a99_tor = a99_tor[:, idxs_sort_tor]
     dat_Titor = dat_Titor[:, idxs_sort_tor]
     err_Titor = err_Titor[:, idxs_sort_tor]
 
     return time, R_pol, R_tor, \
-           reff_pol, reff_tor, rho_pol, rho_tor, \
+           reff_pol, reff_tor, rho_pol, rho_tor, a99_pol, a99_tor, \
            dat_Tipol, err_Tipol, dat_Titor, err_Titor
 
 
@@ -256,8 +260,6 @@ def choose_sn(inputfile):
         print('Oups!')
         exit()
 
-    print('\n')
-
     return sn, subsn
 
 
@@ -268,16 +270,18 @@ def input_FFT(inputFFTfile):
     window = str(inputFFT_df.at['window', 1])
     Nens = int(inputFFT_df.at['Nens', 1])
     Nfft = 2 ** Nfft_pw
+    OVR = float(inputFFT_df.at['OVR', 1])
+    NOV = int(Nfft * OVR + 0.5)
 
-    print('\n')
-
-    return Nfft_pw, Nfft, window, Nens
+    return Nfft_pw, Nfft, window, Nens, OVR, NOV
 
 
 def input_fDSk(inputFFTfile):
 
     inputFFT_df = pd.read_csv(inputFFTfile, header=None, index_col=0)
-    fdelDopp_k = int(inputFFT_df.at['fdelk', 1])
+    fdelDopp_k_L = int(inputFFT_df.at['fdelk_L', 1])
+    fdelDopp_k_H = int(inputFFT_df.at['fdelk_H', 1])
+    frangefD_k = (fdelDopp_k_L, fdelDopp_k_H)
     frangeSk_dict = {0: '3-30kHz', 1: '30-150kHz', 2: '150-490kHz', 3: '20-490kHz',
                      4: '100-490kHz', 5: '20-200kHz', 6: '200-500kHz', 99: 'other'}
     critfrangeSk = 2
@@ -296,17 +300,18 @@ def input_fDSk(inputFFTfile):
         frangeSk_list = [[3, 30], [30, 150], [150, 490], [20, 490], [100, 490], [20, 200], [200, 500]]
         frangeSk_k = frangeSk_list[No_frangeSk]
 
-    return fdelDopp_k, frangeSk_k
+    return frangefD_k, frangeSk_k
 
 
 def input_specrange(inputfile):
 
     input_df = pd.read_csv(inputfile, header=None, index_col=0)
 
+    flim_k = int(input_df.at['flimk', 1])
     bottom = int(input_df.at['bottomdB', 1])
     top = int(input_df.at['topdB', 1])
 
-    return bottom, top
+    return flim_k, bottom, top
 
 
 def LHD_IQ_et(sn, subsn, diagname, chs, et):
@@ -446,13 +451,14 @@ def nb_local(sn, tstart_out, tend_out):
     return time_nb, dat_nb1, dat_nb2, dat_nb3, dat_nb4a, dat_nb5a
 
 
-def fDSk_local(sn, tstart, tend, diag, chIQ, dT, Nfft_pw, window, Nens, flim_k, fdelDopp_k, frangeSk_k,
+def fDSk_local(sn, tstart, tend, diag, chIQ, dT, Nfft_pw, window, Nens, OVR, frangefD_k, frangeSk_k,
                sw_BSmod, sw_nb5mod, tstart_out, tend_out):
+
     dir_fDSk = os.path.join(dirs()[1], '02-PowerSpecfDSk')
     fnm_fDSk = f'#{sn:d}_{tstart:g}-{tend:g}s_' \
                f'{diag:s}_{chIQ[0]:d}_{chIQ[1]:d}_' \
-               f'{dT:s}_2^{Nfft_pw:d}_{window:s}_{Nens:g}_' \
-               f'{flim_k:.0f}kHz_{fdelDopp_k:d}kHz_{frangeSk_k[0]:d}-{frangeSk_k[1]:d}kHz.csv'
+               f'{dT:s}_2^{Nfft_pw:d}_{window:s}_{Nens:g}_{OVR:g}_' \
+               f'fD={frangefD_k[0]:d}-{frangefD_k[1]:d}kHz_Sk={frangeSk_k[0]:d}-{frangeSk_k[1]:d}kHz.csv'
     path_fDSk = os.path.join(dir_fDSk, 'csvfDSk', fnm_fDSk)
 
     if os.path.isfile(path_fDSk):
@@ -462,24 +468,25 @@ def fDSk_local(sn, tstart, tend, diag, chIQ, dT, Nfft_pw, window, Nens, flim_k, 
         dat_Sk, err_Sk = fDSk[5:7]
         dat_Sk = np.sqrt(dat_Sk) * 1e4
         err_Sk = 0.5 / np.sqrt(dat_Sk) * err_Sk * 1e4
-        time_fDSk = time_fDSk[idxs_use_fDSk]
-        dat_Sk = dat_Sk[idxs_use_fDSk]
-        err_Sk = err_Sk[idxs_use_fDSk]
 
         if sw_BSmod == 1:
             dir_mod = os.path.join(dirs()[1], '03-BSmod')
-            fnm_mod = f'#{sn:d}_{tstart:g}-{tend:g}s_2^{Nfft_pw:d}_{Nens:d}.csv'
+            fnm_mod = f'#{sn:d}_{tstart:g}-{tend:g}s_2^{Nfft_pw:d}_{Nens:d}_{dT:s}.csv'
             path_mod = os.path.join(dir_mod, 'csv', fnm_mod)
             BSmod = np.loadtxt(path_mod, delimiter=',').T
             time_mod, dat_mod = BSmod
             idx_del = np.where(dat_mod < 0.75)[0]
             dat_Sk[idx_del] = np.nan
         elif sw_nb5mod == 1:
-            time_nb, dat_nb1, dat_nb2, dat_nb3, dat_nb4a, dat_nb5a = nb_local(sn, tstart_out, tend_out)
+            time_nb, dat_nb1, dat_nb2, dat_nb3, dat_nb4a, dat_nb5a = nb_local(sn, tstart, tend)
             dat_nb5a_fDSk = interp1d(time_nb, dat_nb5a)(time_fDSk)
             dat_diff_nb5a = np.diff(dat_nb5a_fDSk)
             idx_del = np.where(dat_diff_nb5a < -2)[0]
             dat_Sk[idx_del] = np.nan
+
+        time_fDSk = time_fDSk[idxs_use_fDSk]
+        dat_Sk = dat_Sk[idxs_use_fDSk]
+        err_Sk = err_Sk[idxs_use_fDSk]
     else:
         print(f'{path_fDSk} is not exist. \n')
         time_fDSk = np.nan
