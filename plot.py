@@ -111,13 +111,20 @@ def errorbar_vert_hue(li_x, li_y, li_yerr, li_huecolor, li_lw, li_lab_y, li_lab_
 
 
 def errorbar_horz_hue(li_x, li_y, li_yerr, li_huecolor, li_lw, li_lab_y, li_lab_hue, xlabel, xlim=None, ylims=None, fmt='.'):
+    # If fmt == 'fill', fill error regions with hue colors.
 
     fig, axs = plt.subplots(1, len(li_lab_y))
     for i in range(len(li_lab_y)):
         for j in range(len(li_lab_hue[i])):
-            axs[i].errorbar(li_x[i][j], li_y[i][j], li_yerr[i][j],
-                             color=li_huecolor[j], ecolor='grey',
-                             lw=li_lw[j], elinewidth=li_lw[j], label=li_lab_hue[i][j], fmt=fmt)
+            if fmt == 'fill':
+                axs[i].plot(li_x[i][j], li_y[i][j], color=li_huecolor[j], label=li_lab_hue[i][j])
+                axs[i].fill_between(li_x[i][j], li_y[i][j] - li_yerr[i][j],
+                                    li_y[i][j] + li_yerr[i][j],
+                                    color=li_huecolor[j], alpha=0.5, lw=0)
+            else:
+                axs[i].errorbar(li_x[i][j], li_y[i][j], li_yerr[i][j],
+                                 color=li_huecolor[j], ecolor='grey',
+                                 lw=li_lw[j], elinewidth=li_lw[j], label=li_lab_hue[i][j], fmt=fmt)
             axs[i].legend()
         axs[i].axhline(0, color='grey', ls='--', label=None)
         # axs[i].axvline(0, color='grey', ls='--')

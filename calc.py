@@ -380,7 +380,7 @@ def poly1_LSM(x, y, y_err):
 
     Nfit = x.shape[-1]
     otherNs_array = np.array(x.shape[:-1])
-    others_ndim = otherNs_array.size()
+    others_ndim = otherNs_array.size
 
     weight = 1./(y_err**2)
 
@@ -419,7 +419,7 @@ def poly2_LSM(x, y, y_err):
 
     Nfit = x.shape[-1]
     otherNs_array = np.array(x.shape[:-1])
-    others_ndim = otherNs_array.size()
+    others_ndim = otherNs_array.size
 
     weight = 1./(y_err**2)
 
@@ -589,9 +589,9 @@ def make_fitted_profiles_with_MovingPolyLSM(reff, raw_profiles, profiles_errs, w
     if reff.shape != raw_profiles.shape:
         print('Improper data shape')
         exit()
-    profiles_count, profile_len = reff.shape()
+    profiles_count, profile_len = reff.shape
     idxs_for_Moving = make_idxs_for_MovingLSM(profile_len, window_len)
-    output_profiles_count = idxs_for_fitting.shape[0]
+    output_profiles_count = idxs_for_Moving.shape[0]
 
     reff_for_Moving = reff[:, idxs_for_Moving]
     reff_avgs = np.average(reff_for_Moving, axis=-1)
@@ -603,16 +603,27 @@ def make_fitted_profiles_with_MovingPolyLSM(reff, raw_profiles, profiles_errs, w
         print('polynomial 1\n')
         popt, perr = poly1_LSM(reff_for_fitting, profiles_for_fitting, profiles_errs_for_fitting)
         fitted_profs_gradients = popt[0]
-        fitted_profs_grads_errs = perr[0]
         fitted_profiles = popt[1]
-        fitted_profiles_errs = perr[1]
+        aa = repeat_and_add_lastdim(popt[0], window_len)
+        bb = repeat_and_add_lastdim(popt[1], window_len)
+        fitted_profiles_wo_average = aa * reff_for_fitting + bb
+        fitted_profiles_errs = np.sqrt(np.sum(profiles_errs_for_fitting**2 + (profiles_for_fitting - fitted_profiles_wo_average)**2, axis=-1)/(window_len - 2))
+        S = np.sqrt(np.sum((reff_for_fitting - repeat_and_add_lastdim(reff_avgs, window_len)) ** 2, axis=-1) / window_len)
+        fitted_profs_grads_errs = perr[0]
+
     elif poly == 2:
         print('polynomial 2\n')
         popt, perr = poly2_LSM(reff_for_fitting, profiles_for_fitting, profiles_errs_for_fitting)
         fitted_profs_gradients = popt[1]
-        fitted_profs_grads_errs = perr[1]
         fitted_profiles = popt[2]
-        fitted_profiles_errs = perr[2]
+
+        aa = repeat_and_add_lastdim(popt[0], window_len)
+        bb = repeat_and_add_lastdim(popt[1], window_len)
+        cc = repeat_and_add_lastdim(popt[2], window_len)
+        fitted_profiles_wo_average = aa * reff_for_fitting**2 + bb * reff_for_fitting + cc
+        fitted_profiles_errs = np.sqrt(np.sum(profiles_errs_for_fitting**2 + (profiles_for_fitting - fitted_profiles_wo_average)**2, axis=-1)/(window_len - 2))
+        fitted_profs_grads_errs = perr[1]
+
     else:
         print('It has not developed yet...\n')
         exit()
@@ -620,9 +631,10 @@ def make_fitted_profiles_with_MovingPolyLSM(reff, raw_profiles, profiles_errs, w
     return reff_avgs, fitted_profiles, fitted_profiles_errs, fitted_profs_gradients, fitted_profs_grads_errs
 
 
-def gradient_reg(R, reff, a99, dat, err, Nfit):  # Nfit : odd number
+def gradient_reg(R, reff, a99, dat, err, Nfit, poly):
 
-    reff_f, dat_grad, err_grad, dat_reg, err_reg = gradient_reg_reff(reff, dat, err, Nfit)
+    # reff_f, dat_grad, err_grad, dat_reg, err_reg = gradient_reg_reff(reff, dat, err, Nfit)
+    reff_f, dat_reg, err_reg, dat_grad, err_grad = make_fitted_profiles_with_MovingPolyLSM(reff, dat, err, Nfit, poly=poly)
 
     Nt, NR = reff.shape
     NRf = NR - Nfit + 1

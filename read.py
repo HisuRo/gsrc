@@ -167,11 +167,12 @@ def cxsmap9(EG):
     R = R[idxs_sort]
     reff = reff[:, idxs_sort]
     rho = rho[:, idxs_sort]
+    a99 = a99[:, idxs_sort]
     dat_Ti = dat_Ti[:, idxs_sort]
     err_Ti = err_Ti[:, idxs_sort]
 
     return time, R, \
-           reff, rho, \
+           reff, rho, a99, \
            dat_Ti, err_Ti
 
 

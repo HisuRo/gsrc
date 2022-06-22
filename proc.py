@@ -20,7 +20,11 @@ def decimate_timeSeries(ti_raw, sr_raw, dt_dec):
 
 def takeat_rho(dat, err, time, rho, rho_at):
 
-    idxs_at = (range(time.size), np.nanargmin(np.abs(rho - rho_at), axis=1))
+    if dat.shape != rho.shape:
+        print('Improper data shape')
+        exit()
+
+    idxs_at = (range(time.size), np.nanargmin(np.abs(rho - rho_at), axis=-1))
     dat_at = dat[idxs_at]
     err_at = err[idxs_at]
 
