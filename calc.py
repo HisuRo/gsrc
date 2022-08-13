@@ -3,10 +3,27 @@ from scipy import signal, fft, interpolate, optimize
 import gc
 
 
-def CV_overlap(Nfft, Nens, NOV):
+def toTimeSliceEnsemble(xx, NFFT, NEns, NOV):
 
-    randND = np.random.normal(size = Nens * Nfft - (Nens - 1) * NOV)
-    idxs = (np.reshape(np.arange(Nens*Nfft), (Nens, Nfft)).T - np.arange(0, Nens*NOV, NOV)).T
+    print(f'Overlap ratio: {NOV / NFFT * 100:.0f}%\n')
+
+    Nsamp = NEns * NFFT - (NEns - 1) * NOV
+    if len(xx) != Nsamp:
+        print('The number of samples is improper. \n')
+        exit()
+    else:
+        print(f'The number of samples: {Nsamp:d}')
+
+    idxs = (np.reshape(np.arange(NEns * NFFT), (NEns, NFFT)).T - np.arange(0, NEns * NOV, NOV)).T
+    xens = xx[idxs]
+
+    return xens
+
+
+def CV_overlap(NFFT, NEns, NOV):
+
+    randND = np.random.normal(size = NEns * NFFT - (NEns - 1) * NOV)
+    idxs = (np.reshape(np.arange(NEns*NFFT), (NEns, NFFT)).T - np.arange(0, NEns*NOV, NOV)).T
     randND = randND[idxs]
 
     rfft_randND = fft.rfft(randND)
@@ -21,9 +38,61 @@ def CV_overlap(Nfft, Nens, NOV):
     return CV
 
 
-def fourier_components_1s(xx, dt, NFFT, window, NEns, NOV):
+def getWindowAndCoefs(NFFT, window, NEns, NOV):
 
-    print(f'Overlap ratio: {NOV / NFFT * 100:.0f}%\n')
+    win = signal.get_window(window, NFFT)
+    enbw = NFFT * np.sum(win ** 2) / (np.sum(win) ** 2)
+    CG = np.abs(np.sum(win)) / NFFT
+
+    CV = CV_overlap(NFFT, NEns, NOV)
+
+    return win, enbw, CG, CV
+
+
+def fourier_components_1s(xens, dt, NFFT, win):
+
+    rfreq = fft.rfftfreq(NFFT, dt)
+    rfft_x = fft.rfft(xens * win)
+
+    return rfreq, rfft_x
+
+
+def fourier_components_2s(xens, dt, NFFT, win):
+
+    freq = fft.fftfreq(NFFT, dt)
+    fft_x = fft.fft(xens * win)
+    freq = fft.fftshift(freq)
+    fft_x = fft.fftshift(fft_x)
+
+    return freq, fft_x
+
+
+def power_spectre_1s(xx, dt, NFFT, window, NEns, NOV):
+
+    xens = toTimeSliceEnsemble(xx, NFFT, NEns, NOV)
+    win, enbw, CG, CV = getWindowAndCoefs(NFFT, window, NEns, NOV)
+
+    rfreq, rfft_x = fourier_components_1s(xens, dt, NFFT, win)
+    p_xx = np.real(rfft_x * rfft_x.conj())
+    p_xx[:, 1:-1] *= 2
+    p_xx_ave = np.mean(p_xx, axis=0)
+    p_xx_std = np.std(p_xx, axis=0, ddof=1)
+    p_xx_rerr = p_xx_std / np.abs(p_xx_ave) * CV
+
+    Fs = 1. / dt
+    psd = p_xx_ave / (Fs * NFFT * enbw * (CG ** 2))
+    psd_err = psd * p_xx_rerr
+
+    dfreq = 1. / (NFFT * dt)
+    print(f'Power x^2_bar            ={np.sum(xx**2) / len(xx)}')
+    print(f'Power integral of P(f)*df={np.sum(psd * dfreq)}\n')
+
+    return rfreq, psd, psd_err
+
+
+def power_spectre_2s(xx, dt, NFFT, window, NEns, NOV):
+
+    print(f'Overlap ratio: {NOV/NFFT*100:.0f}%\n')
 
     Nsamp = NEns * NFFT - (NEns - 1) * NOV
     if len(xx) != Nsamp:
@@ -32,63 +101,16 @@ def fourier_components_1s(xx, dt, NFFT, window, NEns, NOV):
     else:
         print(f'The number of samples: {Nsamp:d}')
 
-    idxs = (np.reshape(np.arange(NEns * NFFT), (NEns, NFFT)).T - np.arange(0, NEns * NOV, NOV)).T
+    idxs = (np.reshape(np.arange(NEns*NFFT), (NEns, NFFT)).T - np.arange(0, NEns*NOV, NOV)).T
     xens = xx[idxs]
 
     win = signal.get_window(window, NFFT)
     enbw = NFFT * np.sum(win ** 2) / (np.sum(win) ** 2)
     CG = np.abs(np.sum(win)) / NFFT
 
-    CV = calc.CV_overlap(NFFT, NEns, NOV)
+    CV = CV_overlap(NFFT, NEns, NOV)
 
-    rfreq = fft.rfftfreq(NFFT, dt)
-    rfft_x = fft.rfft(xens * win)
-
-    return rfreq, rfft_x, enbw, CG, CV
-
-
-def power_spectre_1s(xx, dt, Nfft, window, Nens, NOV):
-
-    rfreq, rfft_x, enbw, CG, CV = fourier_components_1s(xx, dt, Nfft, window, Nens, NOV)
-
-    p_xx = np.real(rfft_x * rfft_x.conj())
-    p_xx[:, 1:-1] *= 2
-    p_xx_ave = np.mean(p_xx, axis=0)
-    p_xx_std = np.std(p_xx, axis=0, ddof=1)
-    p_xx_rerr = p_xx_std / np.abs(p_xx_ave) * CV
-
-    Fs = 1. / dt
-    psd = p_xx_ave / (Fs * Nfft * enbw * (CG ** 2))
-    psd_err = psd * p_xx_rerr
-
-    dfreq = 1. / (Nfft * dt)
-    print(f'Power x^2_bar            ={np.sum(xx**2) / len(xx)}')
-    print(f'Power integral of P(f)*df={np.sum(psd * dfreq)}\n')
-
-    return rfreq, psd, psd_err
-
-
-def power_spectre_2s(xx, dt, Nfft, window, Nens, NOV):
-
-    print(f'Overlap ratio: {NOV/Nfft*100:.0f}%\n')
-
-    Nsamp = Nens * Nfft - (Nens - 1) * NOV
-    if len(xx) != Nsamp:
-        print('The number of samples is improper. \n')
-        exit()
-    else:
-        print(f'The number of samples: {Nsamp:d}')
-
-    idxs = (np.reshape(np.arange(Nens*Nfft), (Nens, Nfft)).T - np.arange(0, Nens*NOV, NOV)).T
-    xens = xx[idxs]
-
-    win = signal.get_window(window, Nfft)
-    enbw = Nfft * np.sum(win ** 2) / (np.sum(win) ** 2)
-    CG = np.abs(np.sum(win)) / Nfft
-
-    CV = CV_overlap(Nfft, Nens, NOV)
-
-    freq = fft.fftshift(fft.fftfreq(Nfft, dt))
+    freq = fft.fftshift(fft.fftfreq(NFFT, dt))
 
     fft_x = fft.fftshift(fft.fft(xens * win), axes=1)
 
@@ -98,10 +120,10 @@ def power_spectre_2s(xx, dt, Nfft, window, Nens, NOV):
     p_xx_rerr = p_xx_err / np.abs(p_xx_ave) * CV
 
     Fs = 1. / dt
-    psd = p_xx_ave / (Fs * Nfft * enbw * (CG ** 2))
+    psd = p_xx_ave / (Fs * NFFT * enbw * (CG ** 2))
     psd_err = np.abs(psd) * p_xx_rerr
 
-    dfreq = 1. / (Nfft * dt)
+    dfreq = 1. / (NFFT * dt)
     print(f'Power x^2_bar            ={np.sum(np.real(xx*np.conj(xx))) / Nsamp}')
     print(f'Power integral of P(f)*df={np.sum(psd * dfreq)}')
 
@@ -150,23 +172,23 @@ def calibIQComp2(datI, datQ, VAR, VOS_I, VOS_Q, phDif):
     return datICalib, datQCalib
 
 
-def power_spectrogram_1s(ti, xx, dt, Nfft, window, Ndiv, Ntisp):
+def power_spectrogram_1s(ti, xx, dt, NFFT, window, Ndiv, Ntisp):
 
-    idxs = np.arange(0, Nfft * Ndiv * Ntisp)
-    idxs = idxs.reshape((Ntisp, Ndiv, Nfft))
+    idxs = np.arange(0, NFFT * Ndiv * Ntisp)
+    idxs = idxs.reshape((Ntisp, Ndiv, NFFT))
 
-    dtisp = Ndiv * Nfft * dt
+    dtisp = Ndiv * NFFT * dt
     tisp = ti[idxs.T[0][0]] + 0.5 * dtisp
     xens = xx[idxs]
 
-    win = signal.get_window(window, Nfft)
-    enbw = Nfft * np.sum(win ** 2) / (np.sum(win) ** 2)
-    CG = np.abs(np.sum(win)) / Nfft
+    win = signal.get_window(window, NFFT)
+    enbw = NFFT * np.sum(win ** 2) / (np.sum(win) ** 2)
+    CG = np.abs(np.sum(win)) / NFFT
 
     div_CV = np.sqrt(1. / Ndiv)  # 分割平均平滑化による相対誤差の変化率
     sp_CV = div_CV
 
-    rfreq = fft.rfftfreq(Nfft, dt)
+    rfreq = fft.rfftfreq(NFFT, dt)
 
     rfft_x = fft.rfft(xens * win)
 
@@ -177,11 +199,11 @@ def power_spectrogram_1s(ti, xx, dt, Nfft, window, Ndiv, Ntisp):
     p_xx_rerr = p_xx_err / np.abs(p_xx_ave) * sp_CV
 
     Fs = 1. / dt
-    psd = p_xx_ave / (Fs * Nfft * enbw * (CG ** 2))
+    psd = p_xx_ave / (Fs * NFFT * enbw * (CG ** 2))
     psd_err = np.abs(psd) * p_xx_rerr
 
-    dfreq = 1. / (Nfft * dt)
-    print(f'Power x^2_bar             = {np.sum(xx[idxs][0] ** 2) / (Nfft * Ndiv):.3f}V^2 '
+    dfreq = 1. / (NFFT * dt)
+    print(f'Power x^2_bar             = {np.sum(xx[idxs][0] ** 2) / (NFFT * Ndiv):.3f}V^2 '
           f'@{tisp[0]:.3f}+-{0.5 * dtisp:.3f}s')
     print(f'Power integral of P(f)*df = {np.sum(psd[0] * dfreq):.3f}V^2'
           f' @{tisp[0]:.3f}+-{0.5 * dtisp:.3f}s')
@@ -189,11 +211,11 @@ def power_spectrogram_1s(ti, xx, dt, Nfft, window, Ndiv, Ntisp):
     return tisp, rfreq, psd, psd_err
 
 
-def power_spectrogram_2s(ti, xx, dt, Nfft, window, Nens, NOV):
+def power_spectrogram_2s(ti, xx, dt, NFFT, window, NEns, NOV):
 
-    print(f'Overlap ratio: {NOV/Nfft*100:.0f}%\n')
+    print(f'Overlap ratio: {NOV/NFFT*100:.0f}%\n')
 
-    Nsamp = Nens * Nfft - (Nens - 1) * NOV
+    Nsamp = NEns * NFFT - (NEns - 1) * NOV
     Nsp = int(len(ti) / Nsamp + 0.5)
 
     if len(xx) % Nsamp != 0 or len(ti) % Nsamp != 0 or len(xx) != len(ti):
@@ -203,20 +225,20 @@ def power_spectrogram_2s(ti, xx, dt, Nfft, window, Nens, NOV):
         print(f'The number of samples a spectrum: {Nsamp:d}')
         print(f'The number of spectra: {Nsp:d}\n')
 
-    tmp = np.transpose(np.reshape(np.arange(Nens * Nfft), (Nens, Nfft)).T - np.arange(0, Nens * NOV, NOV))
+    tmp = np.transpose(np.reshape(np.arange(NEns * NFFT), (NEns, NFFT)).T - np.arange(0, NEns * NOV, NOV))
     idxs = np.transpose(np.tile(tmp, (Nsp, 1, 1)).T + np.arange(0, Nsp*Nsamp, Nsamp))
 
     dtisp = Nsamp * dt
     tisp = ti[idxs.T[0][0]] + 0.5 * dtisp
     xens = xx[idxs]
 
-    win = signal.get_window(window, Nfft)
-    enbw = Nfft * np.sum(win ** 2) / (np.sum(win) ** 2)
-    CG = np.abs(np.sum(win)) / Nfft
+    win = signal.get_window(window, NFFT)
+    enbw = NFFT * np.sum(win ** 2) / (np.sum(win) ** 2)
+    CG = np.abs(np.sum(win)) / NFFT
 
-    CV = CV_overlap(Nfft, Nens, NOV)
+    CV = CV_overlap(NFFT, NEns, NOV)
 
-    freq = fft.fftshift(fft.fftfreq(Nfft, dt))
+    freq = fft.fftshift(fft.fftfreq(NFFT, dt))
 
     fft_x = fft.fftshift(fft.fft(xens * win), axes=2)
 
@@ -226,10 +248,10 @@ def power_spectrogram_2s(ti, xx, dt, Nfft, window, Nens, NOV):
     p_xx_rerr = p_xx_err / np.abs(p_xx_ave) * CV
 
     Fs = 1. / dt
-    psd = p_xx_ave / (Fs * Nfft * enbw * (CG ** 2))
+    psd = p_xx_ave / (Fs * NFFT * enbw * (CG ** 2))
     psd_err = np.abs(psd) * p_xx_rerr
 
-    dfreq = 1. / (Nfft * dt)
+    dfreq = 1. / (NFFT * dt)
     print(f'Power: Time average of x(t)^2 = {np.sum(np.abs(xx[0:Nsamp])**2) / Nsamp:.6f} V^2 '
           f'@{tisp[0]:.3f}+-{0.5 * dtisp:.3f} s')
     print(f'Power: Integral of P(f)       = {np.sum(psd[0] * dfreq):.6f} V^2 '
@@ -274,29 +296,29 @@ def corrcoef_series(time, sig1, sig2, Nsamp):
     return time_cor, corrcoef
 
 
-def cross_spectre_2s(x, y, Fs, tana, dtsp, Nsp, dten, Nens, Nfft, window, Ndiv):
+def cross_spectre_2s(x, y, Fs, tana, dtsp, Nsp, dten, NEns, NFFT, window, Ndiv):
 
     dT = 1. / Fs
 
     tsp = np.linspace(0, tana - dtsp, Nsp)
-    tmp = np.linspace(tsp, tsp + dten * (Nens - 1), num=Nens)
+    tmp = np.linspace(tsp, tsp + dten * (NEns - 1), num=NEns)
     tmp = (tmp / dT + 0.5).astype(int)
-    idx_arr = np.linspace(tmp, tmp + Nfft - 1, num=Nfft, dtype=np.int32)
+    idx_arr = np.linspace(tmp, tmp + NFFT - 1, num=NFFT, dtype=np.int32)
     idx_arr = np.transpose(idx_arr, (2, 1, 0))
 
     x_arr = x[idx_arr]
     y_arr = y[idx_arr]
 
-    win = signal.get_window(window, Nfft)
-    enbw = Nfft * np.sum(win ** 2) / (np.sum(win) ** 2)
-    CG = np.abs(np.sum(win)) / Nfft
+    win = signal.get_window(window, NFFT)
+    enbw = NFFT * np.sum(win ** 2) / (np.sum(win) ** 2)
+    CG = np.abs(np.sum(win)) / NFFT
 
     # win_CV = np.sqrt(CG**2 * enbw)  # boxcar以外の窓関数の適用による相対誤差の変化率
     div_CV = np.sqrt(1. / Ndiv)  # 分割平均平滑化による相対誤差の変化率
     # sp_CV = win_CV * div_CV
     sp_CV = div_CV
 
-    freq = fft.fftshift(fft.fftfreq(Nfft, dT))
+    freq = fft.fftshift(fft.fftfreq(NFFT, dT))
 
     # https://watlab-blog.com/2020/07/24/coherence-function/
 
@@ -326,7 +348,7 @@ def cross_spectre_2s(x, y, Fs, tana, dtsp, Nsp, dten, Nens, Nfft, window, Ndiv):
     Kxy_rerr = Kxy_err / Kxy_ave * sp_CV
     Qxy_rerr = Qxy_err / Qxy_ave * sp_CV
 
-    CSDxy = np.abs(c_xy_ave) / (Fs * Nfft * enbw * CG**2)
+    CSDxy = np.abs(c_xy_ave) / (Fs * NFFT * enbw * CG**2)
     cs_err = np.sqrt((Kxy_ave * Kxy_err)**2 + (Qxy_ave * Qxy_err)**2) / \
              np.abs(c_xy_ave)
     cs_rerr = cs_err / np.abs(c_xy_ave) * sp_CV
