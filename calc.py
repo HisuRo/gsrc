@@ -21,29 +21,35 @@ def CV_overlap(Nfft, Nens, NOV):
     return CV
 
 
-def power_spectre_1s(xx, dt, Nfft, window, Nens, NOV):
+def fourier_components_1s(xx, dt, NFFT, window, NEns, NOV):
 
-    print(f'Overlap ratio: {NOV/Nfft*100:.0f}%\n')
+    print(f'Overlap ratio: {NOV / NFFT * 100:.0f}%\n')
 
-    Nsamp = Nens * Nfft - (Nens - 1) * NOV
+    Nsamp = NEns * NFFT - (NEns - 1) * NOV
     if len(xx) != Nsamp:
         print('The number of samples is improper. \n')
         exit()
     else:
         print(f'The number of samples: {Nsamp:d}')
 
-    idxs = (np.reshape(np.arange(Nens*Nfft), (Nens, Nfft)).T - np.arange(0, Nens*NOV, NOV)).T
+    idxs = (np.reshape(np.arange(NEns * NFFT), (NEns, NFFT)).T - np.arange(0, NEns * NOV, NOV)).T
     xens = xx[idxs]
 
-    win = signal.get_window(window, Nfft)
-    enbw = Nfft * np.sum(win ** 2) / (np.sum(win) ** 2)
-    CG = np.abs(np.sum(win)) / Nfft
+    win = signal.get_window(window, NFFT)
+    enbw = NFFT * np.sum(win ** 2) / (np.sum(win) ** 2)
+    CG = np.abs(np.sum(win)) / NFFT
 
-    CV = CV_overlap(Nfft, Nens, NOV)
+    CV = calc.CV_overlap(NFFT, NEns, NOV)
 
-    rfreq = fft.rfftfreq(Nfft, dt)
-
+    rfreq = fft.rfftfreq(NFFT, dt)
     rfft_x = fft.rfft(xens * win)
+
+    return rfreq, rfft_x, enbw, CG, CV
+
+
+def power_spectre_1s(xx, dt, Nfft, window, Nens, NOV):
+
+    rfreq, rfft_x, enbw, CG, CV = fourier_components_1s(xx, dt, Nfft, window, Nens, NOV)
 
     p_xx = np.real(rfft_x * rfft_x.conj())
     p_xx[:, 1:-1] *= 2
