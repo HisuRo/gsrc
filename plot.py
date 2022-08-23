@@ -17,7 +17,7 @@ def check(duration):
     return
 
 
-def caption(fig, fig_title, hspace, wspace):
+def caption(fig, fig_title, hspace=0.1, wspace=0.1):
     fig.suptitle(fig_title)
     fig.tight_layout()
     plt.subplots_adjust(hspace=hspace)
@@ -30,17 +30,23 @@ def capsave(fig, fig_title, fnm, path):
     return fig
 
 
-def errorbar_single(x, y, yerr, xlabel, ylabel, xlim, ylim,
-                    color='black', lw=1):
+def errorbar_single(x, y, yerr, xlabel, ylabel, xlim, ylim=False,
+                    color='black', lw=1, fmt='.', label=False):
 
     fig, ax = plt.subplots()
-    ax.errorbar(x, y, yerr,
-                color=color, ecolor='grey',
-                lw=lw, elinewidth=lw)
+    if label:
+        ax.errorbar(x, y, yerr,
+                    color=color, ecolor='grey',
+                    lw=lw, elinewidth=lw, fmt=fmt, label=label)
+    else:
+        ax.errorbar(x, y, yerr,
+                    color=color, ecolor='grey',
+                    lw=lw, elinewidth=lw, fmt=fmt)
     ax.axhline(0, color='grey', ls='--')
     ax.axvline(0, color='grey', ls='--')
     ax.set_xlim(xlim)
-    ax.set_ylim(ylim)
+    if ylim:
+        ax.set_ylim(ylim)
     ax.set_ylabel(ylabel)
     ax.set_xlabel(xlabel)
 
@@ -50,7 +56,7 @@ def errorbar_single(x, y, yerr, xlabel, ylabel, xlim, ylim,
 def errorbar_hue(li_x, li_y, li_xerr, li_yerr, li_huecolor, li_lab_hue, xlabel, ylabel, xlim=None, ylim=None, fmt='.'):
 
     fig, axs = plt.subplots()
-    for j in range(len(li_lab_hue)):
+    for j in range(len(li_x)):
         axs.errorbar(li_x[j], li_y[j], li_yerr[j], li_xerr[j],
                      color=li_huecolor[j], ecolor='grey', fmt=fmt)
     axs.legend(li_lab_hue)
@@ -190,7 +196,7 @@ def ax0_spectrogram_2s_fk(time0, dat0, err0, label0, time, freq_k, flim_k, spec,
     ax0 = fig.add_subplot(gs[0, 0])
     ax0.errorbar(time0, dat0, err0, color='black', ecolor='grey')
     ax0.set_xlim(time.min() - 0.5 * dt, time.max() + 0.5 * dt)
-    ax0.set_ylim(np.min([0, dat0.min()]), np.max([0, dat0.max()]))
+    ax0.set_ylim(np.nanmin([0, np.nanmin(dat0)]), np.nanmax([0, np.nanmax(dat0)]))
     ax0.set_xticklabels([])
     ax0.set_ylabel(label0)
 

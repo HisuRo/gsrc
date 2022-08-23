@@ -3,6 +3,15 @@ from scipy import signal, fft, interpolate, optimize
 import gc
 
 
+def toZeroMeanTimeSliceEnsemble(xx, NFFT, NEns, NOV):
+    xens = toTimeSliceEnsemble(xx, NFFT, NEns, NOV)
+    xensAvg = np.average(xens, axis=-1)
+    xensAvg = repeat_and_add_lastdim(xensAvg, NFFT)
+    xens -= xensAvg
+
+    return xens
+
+
 def toTimeSliceEnsemble(xx, NFFT, NEns, NOV):
 
     print(f'Overlap ratio: {NOV / NFFT * 100:.0f}%\n')
@@ -14,7 +23,10 @@ def toTimeSliceEnsemble(xx, NFFT, NEns, NOV):
     else:
         print(f'The number of samples: {Nsamp:d}')
 
-    idxs = (np.reshape(np.arange(NEns * NFFT), (NEns, NFFT)).T - np.arange(0, NEns * NOV, NOV)).T
+    if NOV != 0:
+        idxs = (np.reshape(np.arange(NEns * NFFT), (NEns, NFFT)).T - np.arange(0, NEns * NOV, NOV)).T
+    else:
+        idxs = np.reshape(np.arange(NEns * NFFT), (NEns, NFFT))
     xens = xx[idxs]
 
     return xens
@@ -23,7 +35,10 @@ def toTimeSliceEnsemble(xx, NFFT, NEns, NOV):
 def CV_overlap(NFFT, NEns, NOV):
 
     randND = np.random.normal(size = NEns * NFFT - (NEns - 1) * NOV)
-    idxs = (np.reshape(np.arange(NEns*NFFT), (NEns, NFFT)).T - np.arange(0, NEns*NOV, NOV)).T
+    if NOV != 0:
+        idxs = (np.reshape(np.arange(NEns * NFFT), (NEns, NFFT)).T - np.arange(0, NEns * NOV, NOV)).T
+    else:
+        idxs = np.reshape(np.arange(NEns * NFFT), (NEns, NFFT))
     randND = randND[idxs]
 
     rfft_randND = fft.rfft(randND)
@@ -47,6 +62,13 @@ def getWindowAndCoefs(NFFT, window, NEns, NOV):
     CV = CV_overlap(NFFT, NEns, NOV)
 
     return win, enbw, CG, CV
+
+
+def powerTodB(power, powerErr):
+    power_db = 10 * np.log10(power)
+    powerErr_db = 10 / np.log(10) / power * powerErr
+
+    return power_db, powerErr_db
 
 
 def fourier_components_1s(xens, dt, NFFT, win):
@@ -101,7 +123,10 @@ def power_spectre_2s(xx, dt, NFFT, window, NEns, NOV):
     else:
         print(f'The number of samples: {Nsamp:d}')
 
-    idxs = (np.reshape(np.arange(NEns*NFFT), (NEns, NFFT)).T - np.arange(0, NEns*NOV, NOV)).T
+    if NOV != 0:
+        idxs = (np.reshape(np.arange(NEns * NFFT), (NEns, NFFT)).T - np.arange(0, NEns * NOV, NOV)).T
+    else:
+        idxs = np.reshape(np.arange(NEns * NFFT), (NEns, NFFT))
     xens = xx[idxs]
 
     win = signal.get_window(window, NFFT)
@@ -225,7 +250,10 @@ def power_spectrogram_2s(ti, xx, dt, NFFT, window, NEns, NOV):
         print(f'The number of samples a spectrum: {Nsamp:d}')
         print(f'The number of spectra: {Nsp:d}\n')
 
-    tmp = np.transpose(np.reshape(np.arange(NEns * NFFT), (NEns, NFFT)).T - np.arange(0, NEns * NOV, NOV))
+    if NOV != 0:
+        tmp = (np.reshape(np.arange(NEns * NFFT), (NEns, NFFT)).T - np.arange(0, NEns * NOV, NOV)).T
+    else:
+        tmp = np.reshape(np.arange(NEns * NFFT), (NEns, NFFT))
     idxs = np.transpose(np.tile(tmp, (Nsp, 1, 1)).T + np.arange(0, Nsp*Nsamp, Nsamp))
 
     dtisp = Nsamp * dt
@@ -367,6 +395,106 @@ def cross_spectre_2s(x, y, Fs, tana, dtsp, Nsp, dten, NEns, NFFT, window, Ndiv):
     phsxy_err = 1. / (1. + tmp ** 2) * tmp_err
 
     return freq, CSDxy, CSDxy_err, cohxy, cohxy_err, phsxy, phsxy_err
+
+
+def biSpectrum(X1, X2, X3):
+
+    X1X2 = np.matmul(X1, X2)
+    X3Conj = np.conjugate(X3)
+    X1X2X3Conj = X1X2 * X3Conj
+    BSpec = np.average(X1X2X3Conj, axis=0)
+    BSpecStd = np.std(X1X2X3Conj, axis=0, ddof=1)
+    BSpecReStd = np.std(np.real(X1X2X3Conj), axis=0, ddof=1)
+    BSpecImStd = np.std(np.imag(X1X2X3Conj), axis=0, ddof=1)
+
+    return BSpec, BSpecStd, BSpecReStd, BSpecImStd
+
+
+def biCoherenceSq(BSpec, BSpecStd, X1, X2, X3, CV):
+
+    X1AbsSq = np.abs(X1)**2
+    X2AbsSq = np.abs(X2)**2
+    X1X2AbsSq = np.matmul(X1AbsSq, X2AbsSq)
+    # X1X2AbsSq = np.abs(X1X2)**2
+    X1X2AbsSqAvg = np.average(X1X2AbsSq, axis=0)
+    X1X2AbsSqStd = np.std(X1X2AbsSq, axis=0, ddof=1)
+    X1X2AbsSqRer = X1X2AbsSqStd / X1X2AbsSqAvg * CV
+
+    X3AbsSq = np.abs(X3)**2
+    X3AbsSqAvg = np.average(X3AbsSq, axis=0)
+    X3AbsSqStd = np.std(X3AbsSq, axis=0, ddof=1)
+    X3AbsSqRer = X3AbsSqStd / X3AbsSqAvg * CV
+
+    BSpecAbsSq = np.abs(BSpec)**2
+    BSpecAbsSqStd = 2 * np.abs(BSpec) * BSpecStd
+    BSpecAbsSqRer = BSpecAbsSqStd / BSpecAbsSq * CV
+
+    biCohSq = BSpecAbsSq / (X1X2AbsSqAvg * X3AbsSqAvg)
+    biCohSqRer = np.sqrt(BSpecAbsSqRer**2 + X1X2AbsSqRer**2 + X3AbsSqRer**2)
+    biCohSqErr = biCohSq * biCohSqRer
+
+    return biCohSq, biCohSqErr
+
+
+def biPhase(BSpec, BSpecReStd, BSpecImStd, CV):
+
+    BSpecIm = np.imag(BSpec)
+    BSpecRe = np.real(BSpec)
+
+    BSpecImRer = BSpecImStd / BSpecIm * CV
+    BSpecReRer = BSpecReStd / BSpecRe * CV
+
+    BSpecImRe = BSpecIm / BSpecRe
+    BSpecImReRer = np.sqrt(BSpecImRer ** 2 + BSpecReRer ** 2)
+    BSpecImReErr = np.abs(BSpecImRe * BSpecImReRer)
+    biPhs = np.arctan2(BSpecIm, BSpecRe)
+    biPhsErr = 1. / (1. + BSpecImRe ** 2) * BSpecImReErr
+    biPhs = np.degrees(biPhs)
+    biPhsErr = np.degrees(biPhsErr)
+
+    return biPhs, biPhsErr
+
+
+def makeIdxsForAutoBiSpectrum(NFFT):
+
+    idxf0 = int(NFFT / 2 + 0.5)
+    idxMx2 = np.tile(np.arange(NFFT), (NFFT, 1))
+    idxMx1 = np.transpose(idxMx2, (1, 0))
+    coefMx1 = idxMx1 - idxf0
+    coefMx2 = idxMx2 - idxf0
+    coefMx3 = coefMx1 + coefMx2
+    idxMx3 = coefMx3 + idxf0
+    idxNan = np.where(((idxMx3 < 0) | (idxMx3 >= NFFT)))
+    idxMx3[idxNan] = False
+
+    return idxMx3, idxNan
+
+
+def autoBiSpectralAnalysis(freq, XX, NFFT, NEns, CV):
+
+    idxMx3, idxNan = makeIdxsForAutoBiSpectrum(NFFT)
+
+    X1 = np.reshape(XX, (NEns, NFFT, 1))
+    X2 = np.reshape(XX, (NEns, 1, NFFT))
+    X3 = XX[:, idxMx3]
+    BSpec, BSpecStd, BSpecReStd, BSpecImStd = biSpectrum(X1, X2, X3)
+
+    biCohSq, biCohSqErr = biCoherenceSq(BSpec, BSpecStd, X1, X2, X3, CV)
+    biPhs, biPhsErr = biPhase(BSpec, BSpecReStd, BSpecImStd, CV)
+
+    # symmetry
+    freq1 = np.tile(freq, (NFFT, 1))
+    freq2 = freq1.T
+    idxNan2 = np.where((freq2 >= freq1) | (freq2 < - 0.5 * freq1))
+
+    biCohSq[idxNan] = np.nan
+    biPhs[idxNan] = np.nan
+    biPhsErr[idxNan] = np.nan
+    biCohSq[idxNan2] = np.nan
+    biPhs[idxNan2] = np.nan
+    biPhsErr[idxNan2] = np.nan
+
+    return biCohSq, biCohSqErr, biPhs, biPhsErr
 
 
 def LSM1(x, y, y_err):

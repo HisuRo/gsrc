@@ -37,10 +37,10 @@ def takeat_rho(dat, err, time, rho, rho_at):
 
 def takeat_rho_R(R, rho, rho_at):
 
-    idxs_at = np.nanargmin(np.abs(rho - rho_at), axis=1)
+    idxs_at = np.nanargmin(np.abs(rho - rho_at), axis=-1)
     R_at = R[idxs_at]
 
-    idxs_del = np.where((rho_at > np.nanmax(rho, axis=1)) | (rho_at < np.nanmin(rho, axis=1)))[0]
+    idxs_del = np.where((rho_at > np.nanmax(rho, axis=-1)) | (rho_at < np.nanmin(rho, axis=-1)))[0]
     R_at[idxs_del] = np.nan
 
     return R_at

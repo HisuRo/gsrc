@@ -47,8 +47,6 @@ def rho_highk(eghk, tstart, tend):
     rhohk_ave = rhohk.mean()
     rhohk_std = rhohk.std()
 
-    del idx_time, eghk
-
     return hktime, rhohk, rhohk_ave, rhohk_std
 
 
@@ -68,22 +66,43 @@ def Iamp_comb_R(diagcombR, freq, Iamp_range, sn, tstart, tend):  # Only mwrm_com
 
     return combRtime, IampcombR
 
+# Only mwrm_comb_R_Vp is available since 2022/1/18.
+# made cwrm_comb_R_RAYOUT available but mwrm_comb_R_Vp unavailable since 2022/6/23
+def rho_comb_R(egcombR, freq, tstart, tend):
 
-def rho_comb_R(egcombR, freq, tstart, tend):  # Only mwrm_comb_R_Vp is available from 2022/1/18.
-
-    valnm = 'reff/a99' + '  ' + freq
+    rhonm = 'reff/a99 ' + freq
 
     combRtime = egcombR.dims(0)
     idx_time = np.where((combRtime >= tstart) & (combRtime <= tend))
     combRtime = combRtime[idx_time]
 
-    rhocombR = egcombR.trace_of(valnm, dim=0, other_idxs=[0])
+    rhocombR = egcombR.trace_of(rhonm, dim=0, other_idxs=[0])
     rhocombR = rhocombR[idx_time]
 
     rhocombR_avg = rhocombR.mean()
     rhocombR_std = rhocombR.std()
 
     return combRtime, rhocombR, rhocombR_avg, rhocombR_std
+
+
+def wavenumber_combR(egcombR, freq, tstart, tend):
+
+    wavenm = 'k_perp each time  ' + freq
+    dwavenm = 'delta k_perp error estimation  ' + freq
+
+    combRtime = egcombR.dims(0)
+    idx_time = np.where((combRtime >= tstart) & (combRtime <= tend))
+    combRtime = combRtime[idx_time]
+
+    wavenum_combR = egcombR.trace_of(wavenm, dim=0, other_idxs=[0])
+    wavenum_combR = wavenum_combR[idx_time]
+    dwavenum_combR = egcombR.trace_of(dwavenm, dim=0, other_idxs=[0])
+    dwavenum_combR = dwavenum_combR[idx_time]
+
+    wavenum_combR_avg = np.average(wavenum_combR)
+    wavenum_combR_err = np.sqrt(np.sum((dwavenum_combR / 2)**2 + (wavenum_combR - wavenum_combR_avg)**2)/(len(wavenum_combR) - 1))
+
+    return combRtime, wavenum_combR, dwavenum_combR, wavenum_combR_avg, wavenum_combR_err
 
 
 def Vp_comb_R(egcombR, freq, tstart, tend):

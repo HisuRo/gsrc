@@ -5,6 +5,7 @@ import os
 from parse import parse
 from nasu.myEgdb import LoadEG
 import nasu.LHDRetrieve as LHDR
+from nasu import getShotInfo
 
 
 def dirs():
@@ -22,6 +23,59 @@ def calibPrms_df(path_calibPrms):
     calibPrms_df = pd.read_csv(path_calibPrms, header=0, index_col=idxs_calibPrms)
 
     return calibPrms_df
+
+
+def field_from_tsmap_calib(EG):
+
+    time = EG.dims(0)
+    R = EG.dims(1)
+    shape_tR = (time.size, R.size)
+
+    reff = EG.trace_of_2d('reff', [0, 1])
+    rho = EG.trace_of_2d('reff/a99', [0, 1])
+    Br = EG.trace_of_2d('Br', [0, 1])
+    Bz = EG.trace_of_2d('Bz', [0, 1])
+    Bphi = EG.trace_of_2d('Bphi', [0, 1])
+
+    rho[rho > 1.5] = np.nan
+    Br[Br == 0.] = np.nan
+    Bz[Bz == 0.] = np.nan
+    Bphi[Bphi == 0.] = np.nan
+
+    reff = np.reshape(reff, shape_tR)
+    rho = np.reshape(rho, shape_tR)
+    Br = np.reshape(Br, shape_tR)
+    Bz = np.reshape(Bz, shape_tR)
+    Bphi = np.reshape(Bphi, shape_tR)
+
+    B = np.sqrt(Br ** 2 + Bz ** 2 + Bphi ** 2)
+
+    return time, R, reff, rho, B, Br, Bz, Bphi
+
+
+def field_from_tsmap_reff(EG):
+
+    time = EG.dims(0)
+    R = EG.dims(1)
+    shape_tR = (time.size, R.size)
+
+    reff = EG.trace_of_2d('reff', [0, 1])
+    Br = EG.trace_of_2d('Br', [0, 1])
+    Bz = EG.trace_of_2d('Bz', [0, 1])
+    Bphi = EG.trace_of_2d('Bphi', [0, 1])
+
+    Br[Br == 0.] = np.nan
+    Bz[Bz == 0.] = np.nan
+    Bphi[Bphi == 0.] = np.nan
+
+    reff = np.reshape(reff, shape_tR)
+    Br = np.reshape(Br, shape_tR)
+    Bz = np.reshape(Bz, shape_tR)
+    Bphi = np.reshape(Bphi, shape_tR)
+
+    B = np.sqrt(Br ** 2 + Bz ** 2 + Bphi ** 2)
+
+    return time, R, reff, B, Br, Bz, Bphi
 
 
 def tsmap_calib(EG):
@@ -469,6 +523,7 @@ def fDSk_local(sn, tstart, tend, diag, chIQ, dT, Nfft_pw, window, Nens, OVR, fra
         dat_Sk, err_Sk = fDSk[5:7]
         dat_Sk = np.sqrt(dat_Sk) * 1e4
         err_Sk = 0.5 / np.sqrt(dat_Sk) * err_Sk * 1e4
+        dat_fD, err_fD = fDSk[3:5]
 
         if sw_BSmod == 1:
             dir_mod = os.path.join(dirs()[1], '03-BSmod')
@@ -482,19 +537,38 @@ def fDSk_local(sn, tstart, tend, diag, chIQ, dT, Nfft_pw, window, Nens, OVR, fra
             time_nb, dat_nb1, dat_nb2, dat_nb3, dat_nb4a, dat_nb5a = nb_local(sn, tstart, tend)
             dat_nb5a_fDSk = interp1d(time_nb, dat_nb5a)(time_fDSk)
             dat_diff_nb5a = np.diff(dat_nb5a_fDSk)
-            idx_del = np.where(dat_diff_nb5a < -2)[0]
+            idx_del = np.where(dat_diff_nb5a < -0.5)[0]
             dat_Sk[idx_del] = np.nan
 
         time_fDSk = time_fDSk[idxs_use_fDSk]
         dat_Sk = dat_Sk[idxs_use_fDSk]
         err_Sk = err_Sk[idxs_use_fDSk]
+        dat_fD = dat_fD[idxs_use_fDSk]
+        err_fD = err_fD[idxs_use_fDSk]
     else:
         print(f'{path_fDSk} is not exist. \n')
         time_fDSk = np.nan
         dat_Sk = np.nan
         err_Sk = np.nan
+        dat_fD = np.nan
+        err_fD = np.nan
 
-    return time_fDSk, dat_Sk, err_Sk
+    return time_fDSk, dat_Sk, err_Sk, dat_fD, err_fD
+
+
+def dat1_woerr_local(path, col, tstart_out, tend_out):
+    if os.path.isfile(path):
+        array = np.loadtxt(path, delimiter=',').T
+        time = array[0]
+        idxs_use = np.where((time >= tstart_out) & (time <= tend_out))
+        dat1 = array[col]
+        time = time[idxs_use]
+        dat1 = dat1[idxs_use]
+    else:
+        print(f'{path} is not exist. \n')
+        time = np.nan
+        dat1 = np.nan
+    return time, dat1
 
 
 def dat1_local(path, cols, tstart_out, tend_out):
