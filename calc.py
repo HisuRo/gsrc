@@ -32,25 +32,59 @@ def toTimeSliceEnsemble(xx, NFFT, NEns, NOV):
     return xens
 
 
+def CV(dat):
+    datAvg = np.mean(dat, axis=0)
+    datExp = np.mean(datAvg)
+    datExpErr = np.std(datAvg, ddof=1)
+    CV_dat = datExpErr / np.abs(datExp)
+    print(f'C.V.={CV_dat * 100:.0f}%')
+
+    return CV_dat
+
+
 def CV_overlap(NFFT, NEns, NOV):
 
-    randND = np.random.normal(size = NEns * NFFT - (NEns - 1) * NOV)
-    if NOV != 0:
-        idxs = (np.reshape(np.arange(NEns * NFFT), (NEns, NFFT)).T - np.arange(0, NEns * NOV, NOV)).T
-    else:
-        idxs = np.reshape(np.arange(NEns * NFFT), (NEns, NFFT))
-    randND = randND[idxs]
+    NSamp = NEns * NFFT - (NEns - 1) * NOV
+    randND = np.random.normal(size = NSamp)
+    randND = toTimeSliceEnsemble(randND, NFFT, NEns, NOV)
 
     rfft_randND = fft.rfft(randND)
     p_randND = np.real(rfft_randND * rfft_randND.conj())
     p_randND[:, 1:-1] *= 2
-    p_randND_ave = np.mean(p_randND, axis=0)
-    p_randND_ave_ave = np.mean(p_randND_ave)
-    p_randND_ave_std = np.std(p_randND_ave, ddof=1)
-    CV = p_randND_ave_std / p_randND_ave_ave
-    print(f'C.V.={CV*100:.0f}%')
+    CV_randND = CV(p_randND)
 
-    return CV
+    return CV_randND
+
+
+def CVForBiSpecAna(NFFTs, NEns, NOV):
+    NFFT1, NFFT2, NFFT3 = NFFTs
+
+    idxMx3, idxNan = makeIdxsForCrossBiSpectrum(NFFTs)
+
+    NSamp1 = NEns * NFFT1 - (NEns - 1) * NOV
+    NSamp2 = NEns * NFFT2 - (NEns - 1) * NOV
+    NSamp3 = NEns * NFFT3 - (NEns - 1) * NOV
+    randND1 = np.random.normal(size=NSamp1)
+    randND1 = toTimeSliceEnsemble(randND1, NFFT1, NEns, NOV)
+    randND2 = np.random.normal(size=NSamp2)
+    randND2 = toTimeSliceEnsemble(randND2, NFFT2, NEns, NOV)
+    randND3 = np.random.normal(size=NSamp3)
+    randND3 = toTimeSliceEnsemble(randND3, NFFT3, NEns, NOV)
+    ND1 = fft.fft(randND1)
+    ND2 = fft.fft(randND2)
+    ND3 = fft.fft(randND3)
+
+    ND1 = np.reshape(ND1, (NEns, NFFT1, 1))
+    ND2 = np.reshape(ND2, (NEns, 1, NFFT2))
+    ND3 = ND3[:, idxMx3]
+    ND1ND2 = np.matmul(ND1, ND2)
+    ND1ND2AbsSq = np.abs(ND1ND2) ** 2
+    ND3AbsSq = np.abs(ND3) ** 2
+
+    CV_ND1ND2 = CV(ND1ND2AbsSq)
+    CV_ND3 = CV(ND3AbsSq)
+
+    return CV_ND1ND2, CV_ND3
 
 
 def getWindowAndCoefs(NFFT, window, NEns, NOV):
@@ -399,50 +433,50 @@ def cross_spectre_2s(x, y, Fs, tana, dtsp, Nsp, dten, NEns, NFFT, window, Ndiv):
 
 def biSpectrum(X1, X2, X3):
 
-    X1X2 = np.matmul(X1, X2)
+    X2X1 = np.matmul(X2, X1)
     X3Conj = np.conjugate(X3)
-    X1X2X3Conj = X1X2 * X3Conj
-    BSpec = np.average(X1X2X3Conj, axis=0)
-    BSpecStd = np.std(X1X2X3Conj, axis=0, ddof=1)
-    BSpecReStd = np.std(np.real(X1X2X3Conj), axis=0, ddof=1)
-    BSpecImStd = np.std(np.imag(X1X2X3Conj), axis=0, ddof=1)
+    X2X1X3Conj = X2X1 * X3Conj
+    BSpec = np.average(X2X1X3Conj, axis=0)
+    BSpecStd = np.std(X2X1X3Conj, axis=0, ddof=1)
+    BSpecReStd = np.std(np.real(X2X1X3Conj), axis=0, ddof=1)
+    BSpecImStd = np.std(np.imag(X2X1X3Conj), axis=0, ddof=1)
 
     return BSpec, BSpecStd, BSpecReStd, BSpecImStd
 
 
-def biCoherenceSq(BSpec, BSpecStd, X1, X2, X3, CV):
+def biCoherenceSq(BSpec, BSpecStd, X1, X2, X3, NFFTs, NEns, NOV):
 
-    X1AbsSq = np.abs(X1)**2
-    X2AbsSq = np.abs(X2)**2
-    X1X2AbsSq = np.matmul(X1AbsSq, X2AbsSq)
-    # X1X2AbsSq = np.abs(X1X2)**2
-    X1X2AbsSqAvg = np.average(X1X2AbsSq, axis=0)
-    X1X2AbsSqStd = np.std(X1X2AbsSq, axis=0, ddof=1)
-    X1X2AbsSqRer = X1X2AbsSqStd / X1X2AbsSqAvg * CV
+    CV_X2X1, CV_X3 = CVForBiSpecAna(NFFTs, NEns, NOV)
 
-    X3AbsSq = np.abs(X3)**2
+    X2X1 = np.matmul(X2, X1)
+    X2X1AbsSq = np.abs(X2X1) ** 2
+    X2X1AbsSqAvg = np.average(X2X1AbsSq, axis=0)
+    X2X1AbsSqStd = np.std(X2X1AbsSq, axis=0, ddof=1)
+    X2X1AbsSqRer = X2X1AbsSqStd / X2X1AbsSqAvg * CV_X2X1
+
+    X3AbsSq = np.abs(X3) ** 2
     X3AbsSqAvg = np.average(X3AbsSq, axis=0)
     X3AbsSqStd = np.std(X3AbsSq, axis=0, ddof=1)
-    X3AbsSqRer = X3AbsSqStd / X3AbsSqAvg * CV
+    X3AbsSqRer = X3AbsSqStd / X3AbsSqAvg * CV_X3
 
-    BSpecAbsSq = np.abs(BSpec)**2
+    BSpecAbsSq = np.abs(BSpec) ** 2
     BSpecAbsSqStd = 2 * np.abs(BSpec) * BSpecStd
-    BSpecAbsSqRer = BSpecAbsSqStd / BSpecAbsSq * CV
+    BSpecAbsSqRer = BSpecAbsSqStd / BSpecAbsSq
 
-    biCohSq = BSpecAbsSq / (X1X2AbsSqAvg * X3AbsSqAvg)
-    biCohSqRer = np.sqrt(BSpecAbsSqRer**2 + X1X2AbsSqRer**2 + X3AbsSqRer**2)
+    biCohSq = BSpecAbsSq / (X2X1AbsSqAvg * X3AbsSqAvg)
+    biCohSqRer = np.sqrt(BSpecAbsSqRer ** 2 + X2X1AbsSqRer ** 2 + X3AbsSqRer ** 2)
     biCohSqErr = biCohSq * biCohSqRer
 
     return biCohSq, biCohSqErr
 
 
-def biPhase(BSpec, BSpecReStd, BSpecImStd, CV):
+def biPhase(BSpec, BSpecReStd, BSpecImStd):
 
-    BSpecIm = np.imag(BSpec)
     BSpecRe = np.real(BSpec)
+    BSpecIm = np.imag(BSpec)
 
-    BSpecImRer = BSpecImStd / BSpecIm * CV
-    BSpecReRer = BSpecReStd / BSpecRe * CV
+    BSpecReRer = BSpecReStd / BSpecRe
+    BSpecImRer = BSpecImStd / BSpecIm
 
     BSpecImRe = BSpecIm / BSpecRe
     BSpecImReRer = np.sqrt(BSpecImRer ** 2 + BSpecReRer ** 2)
@@ -458,8 +492,8 @@ def biPhase(BSpec, BSpecReStd, BSpecImStd, CV):
 def makeIdxsForAutoBiSpectrum(NFFT):
 
     idxf0 = int(NFFT / 2 + 0.5)
-    idxMx2 = np.tile(np.arange(NFFT), (NFFT, 1))
-    idxMx1 = np.transpose(idxMx2, (1, 0))
+    idxMx1 = np.tile(np.arange(NFFT), (NFFT, 1))
+    idxMx2 = idxMx1.T
     coefMx1 = idxMx1 - idxf0
     coefMx2 = idxMx2 - idxf0
     coefMx3 = coefMx1 + coefMx2
@@ -470,17 +504,38 @@ def makeIdxsForAutoBiSpectrum(NFFT):
     return idxMx3, idxNan
 
 
-def autoBiSpectralAnalysis(freq, XX, NFFT, NEns, CV):
+def makeIdxsForCrossBiSpectrum(NFFTs):
+    NFFTx, NFFTy, NFFTz = NFFTs
+
+    idxf0x = int(NFFTx / 2 + 0.5)
+    idxf0y = int(NFFTy / 2 + 0.5)
+    idxf0z = int(NFFTz / 2 + 0.5)
+
+    idxMx1 = np.tile(np.arange(NFFTx), (NFFTy, 1))
+    idxMx2 = np.tile(np.arange(NFFTy), (NFFTx, 1)).T
+    coefMx1 = idxMx1 - idxf0x
+    coefMx2 = idxMx2 - idxf0y
+    coefMx3 = coefMx1 + coefMx2
+    idxMx3 = coefMx3 + idxf0z
+    idxNan = np.where(((idxMx3 < 0) | (idxMx3 >= NFFTz)))
+    idxMx3[idxNan] = False
+
+    return idxMx3, idxNan
+
+
+def autoBiSpectralAnalysis(freq, XX, NFFT, NEns, NOV):
 
     idxMx3, idxNan = makeIdxsForAutoBiSpectrum(NFFT)
 
-    X1 = np.reshape(XX, (NEns, NFFT, 1))
-    X2 = np.reshape(XX, (NEns, 1, NFFT))
+    X1 = np.reshape(XX, (NEns, 1, NFFT))
+    X2 = np.reshape(XX, (NEns, NFFT, 1))
     X3 = XX[:, idxMx3]
     BSpec, BSpecStd, BSpecReStd, BSpecImStd = biSpectrum(X1, X2, X3)
 
-    biCohSq, biCohSqErr = biCoherenceSq(BSpec, BSpecStd, X1, X2, X3, CV)
-    biPhs, biPhsErr = biPhase(BSpec, BSpecReStd, BSpecImStd, CV)
+    NFFTs = (NFFT, NFFT, NFFT)
+
+    biCohSq, biCohSqErr = biCoherenceSq(BSpec, BSpecStd, X1, X2, X3, NFFTs, NEns, NOV)
+    biPhs, biPhsErr = biPhase(BSpec, BSpecReStd, BSpecImStd)
 
     # symmetry
     freq1 = np.tile(freq, (NFFT, 1))
@@ -488,9 +543,43 @@ def autoBiSpectralAnalysis(freq, XX, NFFT, NEns, CV):
     idxNan2 = np.where((freq2 >= freq1) | (freq2 < - 0.5 * freq1))
 
     biCohSq[idxNan] = np.nan
+    biCohSqErr[idxNan] = np.nan
     biPhs[idxNan] = np.nan
     biPhsErr[idxNan] = np.nan
     biCohSq[idxNan2] = np.nan
+    biCohSqErr[idxNan2] = np.nan
+    biPhs[idxNan2] = np.nan
+    biPhsErr[idxNan2] = np.nan
+
+    return biCohSq, biCohSqErr, biPhs, biPhsErr
+
+
+def crossBiSpecAna(freqs, XX, YY, ZZ, NFFTs, NEns, NOV):
+    freqx, freqy, freqz = freqs
+
+    NFFTx, NFFTy, NFFTz = NFFTs
+    idxMxz, idxNan = makeIdxsForCrossBiSpectrum(NFFTs)
+
+    XX = np.reshape(XX, (NEns, 1, NFFTx))
+    YY = np.reshape(YY, (NEns, NFFTy, 1))
+    ZZ = ZZ[:, idxMxz]
+
+    BSpec, BSpecStd, BSpecReStd, BSpecImStd = biSpectrum(XX, YY, ZZ)
+
+    biCohSq, biCohSqErr = biCoherenceSq(BSpec, BSpecStd, XX, YY, ZZ, NFFTs, NEns, NOV)
+    biPhs, biPhsErr = biPhase(BSpec, BSpecReStd, BSpecImStd)
+
+    # symmetry
+    freq1 = np.tile(freqx, (NFFTy, 1))
+    freq2 = np.tile(freqy, (NFFTx, 1)).T
+    idxNan2 = np.where((freq2 >= freq1) | (freq2 < - 0.5 * freq1))
+
+    biCohSq[idxNan] = np.nan
+    biCohSqErr[idxNan] = np.nan
+    biPhs[idxNan] = np.nan
+    biPhsErr[idxNan] = np.nan
+    biCohSq[idxNan2] = np.nan
+    biCohSqErr[idxNan2] = np.nan
     biPhs[idxNan2] = np.nan
     biPhsErr[idxNan2] = np.nan
 
