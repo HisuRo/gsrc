@@ -353,7 +353,7 @@ class EG(object):
         if vidx == -1:
             return []
         seq_indices = self.dims_indices_2d(dimxy)
-        return self.data_values(seq_indices, vidx)
+        return self.data_values(seq_indices, vidx)   # 1d array which size = Ndimx * Ndimy
 
 
 class EG_Writer(object):

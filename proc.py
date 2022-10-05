@@ -5,6 +5,11 @@ from scipy import signal, fft
 import gc
 
 
+def findIndex(point, array1d):
+    idx = np.nanargmin(np.abs(point - array1d))
+    return idx
+
+
 def decimate_timeSeries(ti_raw, sr_raw, dt_dec):
     size_raw = ti_raw.size
     if size_raw != sr_raw.size:

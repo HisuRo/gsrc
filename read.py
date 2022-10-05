@@ -238,7 +238,7 @@ def choose_ch():
     diagch_highK = {
         1: ['MWRM-COMB2', [17, 18]],
         2: ['MWRM-PXI', [11, 12]],
-        3: ['MWRM-PXI', [1, 2]]
+        3: ['MWRM-COMB2', [19, 20]]
     }
 
     fsig_comb = {0: '27.7G', 1: '29.1G', 2: '30.5G', 3: '32.0G',
@@ -522,7 +522,7 @@ def fDSk_local(sn, tstart, tend, diag, chIQ, dT, Nfft_pw, window, Nens, OVR, fra
         idxs_use_fDSk = np.where((time_fDSk >= tstart_out) & (time_fDSk <= tend_out))
         dat_Sk, err_Sk = fDSk[5:7]
         dat_Sk = np.sqrt(dat_Sk) * 1e4
-        err_Sk = 0.5 / np.sqrt(dat_Sk) * err_Sk * 1e4
+        err_Sk = 0.5 / dat_Sk * err_Sk * 1e4
         dat_fD, err_fD = fDSk[3:5]
 
         if sw_BSmod == 1:
