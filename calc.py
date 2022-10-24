@@ -3,6 +3,12 @@ from scipy import signal, fft, interpolate, optimize
 import gc
 
 
+def dB(spec, spec_err):
+    spec_db = 10 * np.log10(spec)
+    spec_err_db = 10 / np.log(10) / spec * spec_err
+    return spec_db, spec_err_db
+
+
 def toZeroMeanTimeSliceEnsemble(xx, NFFT, NEns, NOV):
     xens = toTimeSliceEnsemble(xx, NFFT, NEns, NOV)
     xensAvg = np.average(xens, axis=-1)

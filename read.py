@@ -433,6 +433,47 @@ def LHD_ss(sn, subsn, diagname, ch, ss):
     return tdat, dat, dT, Fs, tsize
 
 
+def LHD_tat(sn, subsn, diag, chIQ, tat, NSamp):
+
+    tiI, tprmsI = LHDR.RetrieveTime(diag, sn, subsn, chIQ[0])
+    print('\n')
+    tiQ, tprmsQ = LHDR.RetrieveTime(diag, sn, subsn, chIQ[1])
+    print('\n')
+
+    dTI = parse('{:f}{:S}', tprmsI['ClockCycle'][0])[0]
+    dTQ = parse('{:f}{:S}', tprmsQ['ClockCycle'][0])[0]
+    print(f'dT= I:{dTI:g}s, Q:{dTQ:g}s\n')
+    if dTI != dTQ:
+        print('dT are different between I and Q.')
+        exit()
+    else:
+        dT = dTI
+
+    if False in tiI == tiQ:
+        print('ti are different between I and Q.')
+        exit()
+    else:
+        ti = tiI
+    idx_at = int(tat / dT + 0.5)
+    N_half = int(NSamp / 2 + 0.5)
+    ss = (idx_at - N_half, idx_at + N_half - 1)
+    tmp = np.arange(ss[0], ss[1] + 1)
+    ti = ti[tmp]
+
+    Idat, prmsI = LHDR.RetrieveData_ss(diag, sn, subsn, chIQ[0], ss)
+    print('\n')
+    Qdat, prmsQ = LHDR.RetrieveData_ss(diag, sn, subsn, chIQ[1], ss)
+    print('\n')
+    if ti.size != Idat.size or Idat.size != Qdat.size:
+        print('size are different among ti, I and Q.')
+        exit()
+
+    print(f'FFT time: {dT * NSamp * 1e6:.1f} us')
+    print('\n')
+
+    return ti, Idat, Qdat, dT
+
+
 def call_crossspec(dirin, sn, tstart, tend, diag1, chIQ1, diag2, chIQ2,
                    dT, Fsp, Nfft_pw, window, Nens):
 

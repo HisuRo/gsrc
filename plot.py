@@ -30,7 +30,7 @@ def capsave(fig, fig_title, fnm, path):
     return fig
 
 
-def errorbar_single(x, y, yerr, xlabel, ylabel, xlim, ylim=False,
+def errorbar_single(x, y, yerr, xlabel, ylabel, xlim=False, ylim=False,
                     color='black', lw=1, fmt='.', label=False):
 
     fig, ax = plt.subplots()
@@ -44,7 +44,8 @@ def errorbar_single(x, y, yerr, xlabel, ylabel, xlim, ylim=False,
                     lw=lw, elinewidth=lw, fmt=fmt)
     ax.axhline(0, color='grey', ls='--')
     ax.axvline(0, color='grey', ls='--')
-    ax.set_xlim(xlim)
+    if xlim:
+        ax.set_xlim(xlim)
     if ylim:
         ax.set_ylim(ylim)
     ax.set_ylabel(ylabel)
