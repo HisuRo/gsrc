@@ -157,8 +157,8 @@ def spectrogram_1s_fk(time, freq_k, flim_k, any, bottom, top, label, cmap):
                          any, cmap=cmap, vmin=bottom, vmax=top)
     fig.colorbar(pcf, ax=ax, label=label)
     ax.set_ylim(0, flim_k)
-    ax.set_xlabel('Time (s)')
-    ax.set_ylabel('Frequency (kHz)')
+    ax.set_xlabel('Time [s]')
+    ax.set_ylabel('Frequency [kHz]')
     ax.set_xlim(time.min() - 0.5*dt, time.max() + 0.5*dt)
 
     return fig, ax
@@ -175,8 +175,8 @@ def spectrogram_2s_fk(time, freq_k, flim_k, any, bottom, top, label, cmap):
                          any, cmap=cmap, vmin=bottom, vmax=top)
     fig.colorbar(pcf, ax=ax, label=label)
     ax.set_ylim(-flim_k, flim_k)
-    ax.set_xlabel('Time (s)')
-    ax.set_ylabel('Frequency (kHz)')
+    ax.set_xlabel('Time [s]')
+    ax.set_ylabel('Frequency [kHz]')
     ax.set_xlim(time.min() - 0.5 * dt, time.max() + 0.5 * dt)
 
     return fig, ax
@@ -209,8 +209,8 @@ def ax0_spectrogram_2s_fk(time0, dat0, err0, label0, time, freq_k, flim_k, spec,
     fig.colorbar(pcf, cax=cax1, label=label)
     ax1.set_xlim(time.min() - 0.5 * dt, time.max() + 0.5 * dt)
     ax1.set_ylim(-flim_k, flim_k)
-    ax1.set_xlabel('Time (s)')
-    ax1.set_ylabel('Frequency (kHz)')
+    ax1.set_xlabel('Time [s]')
+    ax1.set_ylabel('Frequency [kHz]')
 
     return fig, ax0, ax1, cax1
 
@@ -222,8 +222,8 @@ def any_t_fk_2s(time, dt, freq_k, dfk, flim_k, any, bottom, top, label, cmap):
                          any, cmap=cmap, vmin=bottom, vmax=top)
     fig.colorbar(pcf, ax=ax, label=label)
     ax.set_ylim(-flim_k, flim_k)
-    ax.set_xlabel('Time (s)')
-    ax.set_ylabel('Frequency (kHz)')
+    ax.set_xlabel('Time [s]')
+    ax.set_ylabel('Frequency [kHz]')
     ax.set_xlim(time.min(), time.max() + dt)
 
     return fig, ax
@@ -235,7 +235,7 @@ def errorbar_fk_2s(freq_k, flim_k, any, any_err, bottom, top, label, fmt='-'):
     ax.errorbar(freq_k, any, any_err, color='red', ecolor='blue', fmt=fmt)
     ax.set_xlim(-flim_k, flim_k)
     ax.set_ylim(bottom, top)
-    ax.set_xlabel('Frequency (kHz)')
+    ax.set_xlabel('Frequency [kHz]')
     ax.set_ylabel(label)
 
     return fig, ax
@@ -249,7 +249,7 @@ def errorbar_t_mul(time, huelabels, any, any_err, bottom, top, label, fmt, palet
                     color=sns.color_palette(palette)[i], ecolor='grey', fmt=fmt)
     ax.set_xlim(time.min(), time.max())
     ax.set_ylim(bottom, top)
-    ax.set_xlabel('Time (s)')
+    ax.set_xlabel('Time [s]')
     ax.set_ylabel(label)
     ax.legend()
 
@@ -273,7 +273,7 @@ def errorbar2_t_mul(time, huelabels, any1, any1_err, any2, any2_err, range1, ran
                         color=sns.color_palette(palette)[i], ecolor='grey', fmt=fmt2)
     axs[1].set_xlim(time.min(), time.max())
     axs[1].set_ylim(range2)
-    axs[1].set_xlabel('Time (s)')
+    axs[1].set_xlabel('Time [s]')
     axs[1].set_ylabel(label2)
 
     fig.legend()
@@ -296,7 +296,7 @@ def any2_t(time, any1, any2, range1, range2, label1, label2):
                 color='black')
     axs[1].set_xlim(time.min(), time.max())
     axs[1].set_ylim(range2)
-    axs[1].set_xlabel('Time (s)')
+    axs[1].set_xlabel('Time [s]')
     axs[1].set_ylabel(label2)
 
     return fig, axs
@@ -319,7 +319,7 @@ def any2_t_mul(time, huelabels, any1, any2, range1, range2, label1, label2, colo
                         color=colors[i])
     axs[1].set_xlim(time.min(), time.max())
     axs[1].set_ylim(range2)
-    axs[1].set_xlabel('Time (s)')
+    axs[1].set_xlabel('Time [s]')
     axs[1].set_ylabel(label2)
 
     fig.legend()
