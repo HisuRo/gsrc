@@ -3,6 +3,21 @@ from scipy import signal, fft, interpolate, optimize
 import gc
 
 
+def timeAverageDatByRefs(timeDat, dat, err, timeRef):
+    dtDat = timeDat[1] - timeDat[0]
+    dtRef = timeRef[1] - timeRef[0]
+    dNDatRef = int(dtRef / dtDat + 0.5)
+    timeRef_ext = repeat_and_add_lastdim(timeRef, len(timeDat))
+    idxDatAtRef = np.argsort(np.abs(timeDat - timeRef_ext))[:, :dNDatRef]
+
+    datAtRef = dat[idxDatAtRef]
+    errAtRef = err[idxDatAtRef]
+    dat_Ref = np.nanmean(datAtRef, axis=1)
+    err_Ref = np.sqrt(np.nanvar(datAtRef, axis=1, ddof=1) + np.nanmean(errAtRef ** 2, axis=1))
+
+    return dat_Ref, err_Ref
+
+
 def dB(spec, spec_err):
     spec_db = 10 * np.log10(spec)
     spec_err_db = 10 / np.log(10) / spec * spec_err
@@ -195,6 +210,16 @@ def power_spectre_2s(xx, dt, NFFT, window, NEns, NOV):
     return freq, psd, psd_err
 
 
+def lowpass(x, samplerate, fp, fs, gpass, gstop):
+    fn = samplerate / 2                           #ナイキスト周波数
+    wp = fp / fn                                  #ナイキスト周波数で通過域端周波数を正規化
+    ws = fs / fn                                  #ナイキスト周波数で阻止域端周波数を正規化
+    N, Wn = signal.buttord(wp, ws, gpass, gstop)  #オーダーとバターワースの正規化周波数を計算
+    b, a = signal.butter(N, Wn, "low")            #フィルタ伝達関数の分子と分母を計算
+    y = signal.filtfilt(b, a, x)                  #信号に対してフィルタをかける
+    return y                                      #フィルタ後の信号を返す
+
+
 def bandPass(xx, sampleRate, fp, fs, gpass, gstop):
     fn = sampleRate / 2                           # ナイキスト周波数
     wp = fp / fn                                  # ナイキスト周波数で通過域端周波数を正規化
@@ -203,6 +228,16 @@ def bandPass(xx, sampleRate, fp, fs, gpass, gstop):
     b, a = signal.butter(N, Wn, "band")           # フィルタ伝達関数の分子と分母を計算
     yy = signal.filtfilt(b, a, xx)                 # 信号に対してフィルタをかける
     return yy
+
+
+def highpass(x, samplerate, fp, fs, gpass, gstop):
+    fn = samplerate / 2  # ナイキスト周波数
+    wp = fp / fn  # ナイキスト周波数で通過域端周波数を正規化
+    ws = fs / fn  # ナイキスト周波数で阻止域端周波数を正規化
+    N, Wn = signal.buttord(wp, ws, gpass, gstop)  # オーダーとバターワースの正規化周波数を計算
+    b, a = signal.butter(N, Wn, "high")  # フィルタ伝達関数の分子と分母を計算
+    y = signal.filtfilt(b, a, x)  # 信号に対してフィルタをかける
+    return y  # フィルタ後の信号を返す
 
 
 def THDF(rfreq, rpsd, FF, maxH):
@@ -374,63 +409,54 @@ def corrcoef_series(time, sig1, sig2, Nsamp):
     return time_cor, corrcoef
 
 
-def cross_spectre_2s(x, y, Fs, tana, dtsp, Nsp, dten, NEns, NFFT, window, Ndiv):
+def cross_spectre_2s(x, y, Fs, NEns, NFFT, window, NOV):
 
     dT = 1. / Fs
 
-    tsp = np.linspace(0, tana - dtsp, Nsp)
-    tmp = np.linspace(tsp, tsp + dten * (NEns - 1), num=NEns)
-    tmp = (tmp / dT + 0.5).astype(int)
-    idx_arr = np.linspace(tmp, tmp + NFFT - 1, num=NFFT, dtype=np.int32)
-    idx_arr = np.transpose(idx_arr, (2, 1, 0))
-
-    x_arr = x[idx_arr]
-    y_arr = y[idx_arr]
+    x_arr = toZeroMeanTimeSliceEnsemble(x, NFFT, NEns, NOV)
+    y_arr = toZeroMeanTimeSliceEnsemble(y, NFFT, NEns, NOV)
 
     win = signal.get_window(window, NFFT)
     enbw = NFFT * np.sum(win ** 2) / (np.sum(win) ** 2)
     CG = np.abs(np.sum(win)) / NFFT
 
-    # win_CV = np.sqrt(CG**2 * enbw)  # boxcar以外の窓関数の適用による相対誤差の変化率
-    div_CV = np.sqrt(1. / Ndiv)  # 分割平均平滑化による相対誤差の変化率
-    # sp_CV = win_CV * div_CV
-    sp_CV = div_CV
+    CV = CV_overlap(NFFT, NEns, NOV)
 
     freq = fft.fftshift(fft.fftfreq(NFFT, dT))
 
     # https://watlab-blog.com/2020/07/24/coherence-function/
 
     fft_x = fft.fft(x_arr * win)
-    fft_x = fft.fftshift(fft_x, axes=(2,))
+    fft_x = fft.fftshift(fft_x, axes=(1,))
     fft_y = fft.fft(y_arr * win)
-    fft_y = fft.fftshift(fft_y, axes=(2,))
+    fft_y = fft.fftshift(fft_y, axes=(1,))
 
     c_xy = fft_y * fft_x.conj()
     p_xx = np.real(fft_x * fft_x.conj())
     p_yy = np.real(fft_y * fft_y.conj())
 
-    c_xy_ave = np.mean(c_xy, axis=1)
-    p_xx_ave = np.mean(p_xx, axis=1)
-    p_yy_ave = np.mean(p_yy, axis=1)
-    p_xx_err = np.std(p_xx, axis=1, ddof=1)
-    p_yy_err = np.std(p_yy, axis=1, ddof=1)
-    p_xx_rerr = p_xx_err / p_xx_ave * sp_CV
-    p_yy_rerr = p_yy_err / p_yy_ave * sp_CV
+    c_xy_ave = np.mean(c_xy, axis=0)
+    p_xx_ave = np.mean(p_xx, axis=0)
+    p_yy_ave = np.mean(p_yy, axis=0)
+    p_xx_err = np.std(p_xx, axis=0, ddof=1)
+    p_yy_err = np.std(p_yy, axis=0, ddof=1)
+    p_xx_rerr = p_xx_err / p_xx_ave * CV
+    p_yy_rerr = p_yy_err / p_yy_ave * CV
 
     Kxy = np.real(c_xy)
     Qxy = - np.imag(c_xy)
-    Kxy_ave = np.mean(Kxy, axis=1)
-    Qxy_ave = np.mean(Qxy, axis=1)
-    Kxy_err = np.std(Kxy, axis=1, ddof=1)
-    Qxy_err = np.std(Qxy, axis=1, ddof=1)
-    Kxy_rerr = Kxy_err / Kxy_ave * sp_CV
-    Qxy_rerr = Qxy_err / Qxy_ave * sp_CV
+    Kxy_ave = np.mean(Kxy, axis=0)
+    Qxy_ave = np.mean(Qxy, axis=0)
+    Kxy_err = np.std(Kxy, axis=0, ddof=1)
+    Qxy_err = np.std(Qxy, axis=0, ddof=1)
+    Kxy_rerr = Kxy_err / Kxy_ave * CV
+    Qxy_rerr = Qxy_err / Qxy_ave * CV
 
     CSDxy = np.abs(c_xy_ave) / (Fs * NFFT * enbw * CG**2)
     cs_err = np.sqrt((Kxy_ave * Kxy_err)**2 + (Qxy_ave * Qxy_err)**2) / \
              np.abs(c_xy_ave)
-    cs_rerr = cs_err / np.abs(c_xy_ave) * sp_CV
-    CSDxy_err = CSDxy * sp_CV
+    cs_rerr = cs_err / np.abs(c_xy_ave) * CV
+    CSDxy_err = CSDxy * CV
 
     coh2 = (np.abs(c_xy_ave) ** 2) / (p_xx_ave * p_yy_ave)
     coh2_rerr = np.sqrt(2 * cs_rerr**2 + p_xx_rerr**2 + p_yy_rerr**2)
@@ -867,10 +893,11 @@ def make_fitted_profiles_with_MovingPolyLSM(reff, raw_profiles, profiles_errs, w
         fitted_profiles = popt[1]
         aa = repeat_and_add_lastdim(popt[0], window_len)
         bb = repeat_and_add_lastdim(popt[1], window_len)
-        fitted_profiles_wo_average = aa * reff_for_fitting + bb
-        fitted_profiles_errs = np.sqrt(np.sum(profiles_errs_for_fitting**2 + (profiles_for_fitting - fitted_profiles_wo_average)**2, axis=-1)/(window_len - 2))
+        # fitted_profiles_wo_average = aa * reff_for_fitting + bb
+        # fitted_profiles_errs = np.sqrt(np.sum(profiles_errs_for_fitting**2 + (profiles_for_fitting - fitted_profiles_wo_average)**2, axis=-1)/(window_len - 2))
         S = np.sqrt(np.sum((reff_for_fitting - repeat_and_add_lastdim(reff_avgs, window_len)) ** 2, axis=-1) / window_len)
         fitted_profs_grads_errs = perr[0]
+        fitted_profiles_errs = perr[1]
 
     elif poly == 2:
         print('polynomial 2\n')
@@ -881,9 +908,10 @@ def make_fitted_profiles_with_MovingPolyLSM(reff, raw_profiles, profiles_errs, w
         aa = repeat_and_add_lastdim(popt[0], window_len)
         bb = repeat_and_add_lastdim(popt[1], window_len)
         cc = repeat_and_add_lastdim(popt[2], window_len)
-        fitted_profiles_wo_average = aa * reff_for_fitting**2 + bb * reff_for_fitting + cc
-        fitted_profiles_errs = np.sqrt(np.sum(profiles_errs_for_fitting**2 + (profiles_for_fitting - fitted_profiles_wo_average)**2, axis=-1)/(window_len - 2))
+        # fitted_profiles_wo_average = aa * reff_for_fitting**2 + bb * reff_for_fitting + cc
+        # fitted_profiles_errs = np.sqrt(np.sum(profiles_errs_for_fitting**2 + (profiles_for_fitting - fitted_profiles_wo_average)**2, axis=-1)/(window_len - 2))
         fitted_profs_grads_errs = perr[1]
+        fitted_profiles_errs = perr[2]
 
     else:
         print('It has not developed yet...\n')

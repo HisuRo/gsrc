@@ -8,6 +8,41 @@ import nasu.LHDRetrieve as LHDR
 from nasu import getShotInfo
 
 
+def fftSetting(inputfile):
+    Nfft_pw, Nfft, window, Nens, OVR, NOV = input_FFT(inputfile)
+    frangefD_k, frangeSk_k = input_fDSk(inputfile)
+    input_df = pd.read_csv(inputfile, header=None, index_col=0)
+    flim_k = int(input_df.at['flimk', 1])
+    return Nfft_pw, Nfft, window, Nens, OVR, NOV, frangefD_k, frangeSk_k, flim_k
+
+
+def ei_setting(idx_dev, ch, sn):
+
+    dT = dT_Retrieve(idx_dev, ch, sn)
+
+    if idx_dev == 0:
+        color_fDSk = 'red'
+        label_Sk = f'$I_{{amp,BS(3-O),ch{ch:d}}}$\n(a.u.)'
+    elif idx_dev == 1:
+        color_fDSk = 'blue'
+        label_Sk = f'$I_{{amp,DBS(3-O),{ch:s}}}$\n(a.u.)'
+    elif idx_dev == 2:
+        color_fDSk = 'green'
+        label_Sk = f'$I_{{amp,DBS(9-O),{ch:s}}}$\n(a.u.)'
+
+    return dT, color_fDSk, label_Sk
+
+
+def dT_Retrieve(idx_dev, ch, sn):
+
+    if idx_dev == 0 and ch == 3 and sn <= 179616:
+        dT = '1e-06'
+    else:
+        dT = '4e-07'
+
+    return dT
+
+
 def dirs():
 
     cwd = os.getcwd()
@@ -230,16 +265,23 @@ def cxsmap9(EG):
            dat_Ti, err_Ti
 
 
-def choose_ch():
+def choose_ch(sn):
 
     # information
     devices = {0: 'BS (3-O)', 1: 'DBS (3-O)', 2: 'DBS (9-O)'}
 
-    diagch_highK = {
-        1: ['MWRM-COMB2', [17, 18]],
-        2: ['MWRM-PXI', [11, 12]],
-        3: ['MWRM-COMB2', [19, 20]]
-    }
+    if sn >= 179617:
+        diagch_highK = {
+            1: ['MWRM-COMB2', [17, 18]],
+            2: ['MWRM-PXI', [11, 12]],
+            3: ['MWRM-COMB2', [19, 20]]
+        }
+    else:
+        diagch_highK = {
+            1: ['MWRM-COMB2', [17, 18]],
+            2: ['MWRM-PXI', [11, 12]],
+            3: ['MWRM-PXI', [1, 2]]
+        }
 
     fsig_comb = {0: '27.7G', 1: '29.1G', 2: '30.5G', 3: '32.0G',
                  4: '33.4G', 5: '34.8G', 6: '36.9G', 7: '38.3G'}
@@ -336,24 +378,10 @@ def input_fDSk(inputFFTfile):
     inputFFT_df = pd.read_csv(inputFFTfile, header=None, index_col=0)
     fdelDopp_k_L = int(inputFFT_df.at['fdelk_L', 1])
     fdelDopp_k_H = int(inputFFT_df.at['fdelk_H', 1])
+    fForSk_k_L = int(inputFFT_df.at['fForSk_k_L', 1])
+    fForSk_k_H = int(inputFFT_df.at['fForSk_k_H', 1])
     frangefD_k = (fdelDopp_k_L, fdelDopp_k_H)
-    frangeSk_dict = {0: '3-30kHz', 1: '30-150kHz', 2: '150-490kHz', 3: '20-490kHz',
-                     4: '100-490kHz', 5: '20-200kHz', 6: '200-500kHz', 99: 'other'}
-    critfrangeSk = 2
-    if critfrangeSk == 1:
-        No_frangeSk = int(input(f'Which frequency range use ?\n'
-                                f'{frangeSk_dict} \n'
-                                f'>>> '))
-    elif critfrangeSk == 2:
-        No_frangeSk = int(inputFFT_df.at['NofrangeSk', 1])
-
-    if No_frangeSk == 99:
-        frangeSk_l_k = int(input('Lowest Frequency [kHz] >>> '))
-        frangeSk_h_k = int(input('Highest Frequency [kHz] >>> '))
-        frangeSk_k = [frangeSk_l_k, frangeSk_h_k]
-    else:
-        frangeSk_list = [[3, 30], [30, 150], [150, 490], [20, 490], [100, 490], [20, 200], [200, 500]]
-        frangeSk_k = frangeSk_list[No_frangeSk]
+    frangeSk_k = (fForSk_k_L, fForSk_k_H)
 
     return frangefD_k, frangeSk_k
 
@@ -548,7 +576,11 @@ def nb_local(sn, tstart_out, tend_out):
 
 
 def fDSk_local(sn, tstart, tend, diag, chIQ, dT, Nfft_pw, window, Nens, OVR, frangefD_k, frangeSk_k,
-               sw_BSmod, sw_nb5mod, tstart_out, tend_out):
+               sw_BSmod, sw_nb5mod, tstart_out=False, tend_out=False):
+    if tstart_out == False:
+        tstart_out = tstart
+    if tend_out == False:
+        tend_out = tend
 
     dir_fDSk = os.path.join(dirs()[1], '02-PowerSpecfDSk')
     fnm_fDSk = f'#{sn:d}_{tstart:g}-{tend:g}s_' \
