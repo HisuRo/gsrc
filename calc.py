@@ -3,6 +3,19 @@ from scipy import signal, fft, interpolate, optimize
 import gc
 
 
+def nanWeightedAvg2D(dat_Te, err_Te):
+
+    areNotNansInDatTe = (~np.isnan(dat_Te)).astype(np.int8)
+    dat_Te = np.nan_to_num(dat_Te)
+    err_Te = np.nan_to_num(err_Te)
+    TeWgts = 1. / (err_Te ** 2)
+
+    TeAvg = np.sum(TeWgts * dat_Te, axis=0) / np.sum(TeWgts * areNotNansInDatTe, axis=0)
+    TeAvgErr = np.sum(TeWgts * err_Te, axis=0) / np.sum(TeWgts, axis=0)
+
+    return TeAvg, TeAvgErr
+
+
 def timeAverageDatByRefs(timeDat, dat, err, timeRef):
     dtDat = timeDat[1] - timeDat[0]
     dtRef = timeRef[1] - timeRef[0]
@@ -77,20 +90,21 @@ def CV_overlap(NFFT, NEns, NOV):
     return CV_randND
 
 
-def CVForBiSpecAna(NFFTs, NEns, NOV):
+def CVForBiSpecAna(NFFTs, NEns, NOVs):
     NFFT1, NFFT2, NFFT3 = NFFTs
+    NOV1, NOV2, NOV3 = NOVs
 
     idxMx3, idxNan = makeIdxsForCrossBiSpectrum(NFFTs)
 
-    NSamp1 = NEns * NFFT1 - (NEns - 1) * NOV
-    NSamp2 = NEns * NFFT2 - (NEns - 1) * NOV
-    NSamp3 = NEns * NFFT3 - (NEns - 1) * NOV
+    NSamp1 = NEns * NFFT1 - (NEns - 1) * NOV1
+    NSamp2 = NEns * NFFT2 - (NEns - 1) * NOV2
+    NSamp3 = NEns * NFFT3 - (NEns - 1) * NOV3
     randND1 = np.random.normal(size=NSamp1)
-    randND1 = toTimeSliceEnsemble(randND1, NFFT1, NEns, NOV)
+    randND1 = toTimeSliceEnsemble(randND1, NFFT1, NEns, NOV1)
     randND2 = np.random.normal(size=NSamp2)
-    randND2 = toTimeSliceEnsemble(randND2, NFFT2, NEns, NOV)
+    randND2 = toTimeSliceEnsemble(randND2, NFFT2, NEns, NOV2)
     randND3 = np.random.normal(size=NSamp3)
-    randND3 = toTimeSliceEnsemble(randND3, NFFT3, NEns, NOV)
+    randND3 = toTimeSliceEnsemble(randND3, NFFT3, NEns, NOV3)
     ND1 = fft.fft(randND1)
     ND2 = fft.fft(randND2)
     ND3 = fft.fft(randND3)
@@ -486,9 +500,9 @@ def biSpectrum(X1, X2, X3):
     return BSpec, BSpecStd, BSpecReStd, BSpecImStd
 
 
-def biCoherenceSq(BSpec, BSpecStd, X1, X2, X3, NFFTs, NEns, NOV):
+def biCoherenceSq(BSpec, BSpecStd, X1, X2, X3, NFFTs, NEns, NOVs):
 
-    CV_X2X1, CV_X3 = CVForBiSpecAna(NFFTs, NEns, NOV)
+    CV_X2X1, CV_X3 = CVForBiSpecAna(NFFTs, NEns, NOVs)
 
     X2X1 = np.matmul(X2, X1)
     X2X1AbsSq = np.abs(X2X1) ** 2
@@ -582,7 +596,8 @@ def autoBiSpectralAnalysis(freq, XX, NFFT, NEns, NOV):
     # symmetry
     freq1 = np.tile(freq, (NFFT, 1))
     freq2 = freq1.T
-    idxNan2 = np.where((freq2 >= freq1) | (freq2 < - 0.5 * freq1))
+    # idxNan2 = np.where((freq2 >= freq1) | (freq2 < - 0.5 * freq1))
+    idxNan2 = np.where(freq2 >= freq1)
 
     biCohSq[idxNan] = np.nan
     biCohSqErr[idxNan] = np.nan
@@ -596,10 +611,11 @@ def autoBiSpectralAnalysis(freq, XX, NFFT, NEns, NOV):
     return biCohSq, biCohSqErr, biPhs, biPhsErr
 
 
-def crossBiSpecAna(freqs, XX, YY, ZZ, NFFTs, NEns, NOV):
+def crossBiSpecAna(freqs, XX, YY, ZZ, NFFTs, NEns, NOVs):
     freqx, freqy, freqz = freqs
 
     NFFTx, NFFTy, NFFTz = NFFTs
+    NOVx, NOVy, NOVz = NOVs
     idxMxz, idxNan = makeIdxsForCrossBiSpectrum(NFFTs)
 
     XX = np.reshape(XX, (NEns, 1, NFFTx))
@@ -608,13 +624,14 @@ def crossBiSpecAna(freqs, XX, YY, ZZ, NFFTs, NEns, NOV):
 
     BSpec, BSpecStd, BSpecReStd, BSpecImStd = biSpectrum(XX, YY, ZZ)
 
-    biCohSq, biCohSqErr = biCoherenceSq(BSpec, BSpecStd, XX, YY, ZZ, NFFTs, NEns, NOV)
+    biCohSq, biCohSqErr = biCoherenceSq(BSpec, BSpecStd, XX, YY, ZZ, NFFTs, NEns, NOVs)
     biPhs, biPhsErr = biPhase(BSpec, BSpecReStd, BSpecImStd)
 
     # symmetry
     freq1 = np.tile(freqx, (NFFTy, 1))
     freq2 = np.tile(freqy, (NFFTx, 1)).T
-    idxNan2 = np.where((freq2 >= freq1) | (freq2 < - 0.5 * freq1))
+    # idxNan2 = np.where((freq2 >= freq1) | (freq2 < - 0.5 * freq1))
+    idxNan2 = np.where(freq2 >= freq1)
 
     biCohSq[idxNan] = np.nan
     biCohSqErr[idxNan] = np.nan

@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-sns.set_context('notebook')
+sns.set_context('talk')
 sns.set_style('ticks')
 
 

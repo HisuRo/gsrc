@@ -502,6 +502,25 @@ def LHD_tat(sn, subsn, diag, chIQ, tat, NSamp):
     return ti, Idat, Qdat, dT
 
 
+def LHD_IQsignal_atTime(sn, subsn, diag, chIQ, tat, NFFT, NEns, NOV):
+    tiI0, dTI0, sizeI0 = LHD_time(sn, subsn, diag, chIQ[0])
+
+    NSamp = NEns * NFFT - (NEns - 1) * NOV
+    idx_tat = int((tat - 10 * (subsn - 1)) / dTI0 + 0.5)
+    ss = (idx_tat - int(0.5 * NSamp + 0.5), idx_tat + int(0.5 * NSamp + 0.5) - 1)
+
+    tiI, vI, dtI, FsI, sizeI = LHD_ss(sn, subsn, diag, chIQ[0], ss)
+    tiQ, vQ, dtQ, FsQ, sizeQ = LHD_ss(sn, subsn, diag, chIQ[1], ss)
+
+    if dtI != dtQ:
+        print('Time data set is different between I and Q.')
+        exit()
+
+    dt = dtI
+
+    return vI, vQ, dt
+
+
 def call_crossspec(dirin, sn, tstart, tend, diag1, chIQ1, diag2, chIQ2,
                    dT, Fsp, Nfft_pw, window, Nens):
 
@@ -606,12 +625,14 @@ def fDSk_local(sn, tstart, tend, diag, chIQ, dT, Nfft_pw, window, Nens, OVR, fra
             time_mod, dat_mod = BSmod
             idx_del = np.where(dat_mod < 0.75)[0]
             dat_Sk[idx_del] = np.nan
+            err_Sk[idx_del] = np.nan
         elif sw_nb5mod == 1:
             time_nb, dat_nb1, dat_nb2, dat_nb3, dat_nb4a, dat_nb5a = nb_local(sn, tstart, tend)
             dat_nb5a_fDSk = interp1d(time_nb, dat_nb5a)(time_fDSk)
             dat_diff_nb5a = np.diff(dat_nb5a_fDSk)
             idx_del = np.where(dat_diff_nb5a < -0.5)[0]
             dat_Sk[idx_del] = np.nan
+            err_Sk[idx_del] = np.nan
 
         time_fDSk = time_fDSk[idxs_use_fDSk]
         dat_Sk = dat_Sk[idxs_use_fDSk]
