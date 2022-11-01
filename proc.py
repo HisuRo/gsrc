@@ -51,15 +51,14 @@ def takeat_rho_R(R, rho, rho_at):
     return R_at
 
 
-def takeat_tlist(dat, err, R, reff, rho, time, tlist):
+def takeat_tlist(dat, err, reff, rho, time, tlist):
     idxs_tlist = [np.nanargmin(np.abs(time - t)) for t in tlist]
     time_tl = time[idxs_tlist]
-    R_tl = R[idxs_tlist]
     reff_tl = reff[idxs_tlist]
     rho_tl = rho[idxs_tlist]
     dat_tl = dat[idxs_tlist]
     err_tl = err[idxs_tlist]
-    return time_tl, R_tl, reff_tl, rho_tl, dat_tl, err_tl
+    return time_tl, reff_tl, rho_tl, dat_tl, err_tl
 
 
 def interpolate1d(time, val, err, t_ref):

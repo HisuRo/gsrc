@@ -3,17 +3,18 @@ from scipy import signal, fft, interpolate, optimize
 import gc
 
 
-def nanWeightedAvg2D(dat_Te, err_Te):
+def nanWeightedAvg(dat, err):
 
-    areNotNansInDatTe = (~np.isnan(dat_Te)).astype(np.int8)
-    dat_Te = np.nan_to_num(dat_Te)
-    err_Te = np.nan_to_num(err_Te)
-    TeWgts = 1. / (err_Te ** 2)
+    areNotNansInDatTe = (~np.isnan(dat)).astype(np.int8)
+    dat = np.nan_to_num(dat)
+    Wg = 1. / (err ** 2)
+    err = np.nan_to_num(err)
+    Wg = np.nan_to_num(Wg)
 
-    TeAvg = np.sum(TeWgts * dat_Te, axis=0) / np.sum(TeWgts * areNotNansInDatTe, axis=0)
-    TeAvgErr = np.sum(TeWgts * err_Te, axis=0) / np.sum(TeWgts, axis=0)
+    Avg = np.sum(Wg * dat, axis=0) / np.sum(Wg * areNotNansInDatTe, axis=0)
+    AvgErr = np.sum(Wg * err, axis=0) / np.sum(Wg, axis=0)
 
-    return TeAvg, TeAvgErr
+    return Avg, AvgErr
 
 
 def timeAverageDatByRefs(timeDat, dat, err, timeRef):
