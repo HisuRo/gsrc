@@ -235,12 +235,15 @@ def lowpass(x, samplerate, fp, fs, gpass, gstop):
     return y                                      #フィルタ後の信号を返す
 
 
-def bandPass(xx, sampleRate, fp, fs, gpass, gstop):
+def bandPass(xx, sampleRate, fp, fs, gpass, gstop, cut=False):
     fn = sampleRate / 2                           # ナイキスト周波数
     wp = fp / fn                                  # ナイキスト周波数で通過域端周波数を正規化
     ws = fs / fn                                  # ナイキスト周波数で阻止域端周波数を正規化
     N, Wn = signal.buttord(wp, ws, gpass, gstop)        # オーダーとバターワースの正規化周波数を計算
-    b, a = signal.butter(N, Wn, "band")           # フィルタ伝達関数の分子と分母を計算
+    if cut:
+        b, a = signal.butter(N, Wn, "bandstop")  # フィルタ伝達関数の分子と分母を計算
+    else:
+        b, a = signal.butter(N, Wn, "band")           # フィルタ伝達関数の分子と分母を計算
     yy = signal.filtfilt(b, a, xx)                 # 信号に対してフィルタをかける
     return yy
 
@@ -899,7 +902,7 @@ def make_fitted_profiles_with_MovingPolyLSM(reff, raw_profiles, profiles_errs, w
     output_profiles_count = idxs_for_Moving.shape[0]
 
     reff_for_Moving = reff[:, idxs_for_Moving]
-    reff_avgs = np.average(reff_for_Moving, axis=-1)
+    reff_avgs = np.nanmean(reff_for_Moving, axis=-1)
     reff_for_fitting = reff_for_Moving - repeat_and_add_lastdim(reff_avgs, window_len)
     profiles_for_fitting = raw_profiles[:, idxs_for_Moving]
     profiles_errs_for_fitting = profiles_errs[:, idxs_for_Moving]
