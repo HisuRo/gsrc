@@ -8,6 +8,22 @@ import nasu.LHDRetrieve as LHDR
 from nasu import getShotInfo
 
 
+def ece(EG):
+    time = EG.dims(0)
+    R = EG.dims(1)
+    shape_tR = (time.size, R.size)
+
+    Te = EG.trace_of_2d('Te', [0, 1])
+    Te[Te <= 0.] = np.nan
+    Te = np.reshape(Te, shape_tR)
+
+    idxs_sort = np.argsort(R)
+    R = R[idxs_sort]
+    Te = Te[:, idxs_sort]
+
+    return time, R, Te
+
+
 def fftSetting(inputfile):
     Nfft_pw, Nfft, window, Nens, OVR, NOV = input_FFT(inputfile)
     frangefD_k, frangeSk_k = input_fDSk(inputfile)
