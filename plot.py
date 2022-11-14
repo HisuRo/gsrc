@@ -74,13 +74,13 @@ def errorbar_hue(li_x, li_y, li_xerr, li_yerr, li_huecolor, li_lab_hue, xlabel, 
     return fig, axs
 
 
-def errorbar_vert(li_x, li_y, li_yerr, xlabel, li_lab_y, xlim=False, ylims=False, color='black', lw=1):
+def errorbar_vert(li_x, li_y, li_yerr, xlabel, li_lab_y, xlim=False, ylims=False, color='black', lw=1, fmt='-'):
 
     fig, axs = plt.subplots(len(li_lab_y))
     for i in range(len(li_lab_y)):
         axs[i].errorbar(li_x[i], li_y[i], li_yerr[i],
                          color=color, ecolor='grey',
-                         lw=lw, elinewidth=lw)
+                         lw=lw, elinewidth=lw, fmt=fmt)
         axs[i].axhline(0, color='grey', ls='--')
         axs[i].axvline(0, color='grey', ls='--')
         if xlim:

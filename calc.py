@@ -729,17 +729,18 @@ def poly2_LSM(x, y, y_err):
     otherNs_array = np.array(x.shape[:-1])
     others_ndim = otherNs_array.size
 
+    weight = 1./(y_err**2)
     areNotNansInY = (~np.isnan(y)).astype(np.int8)
     y = np.nan_to_num(y)
-    weight = 1./(y_err**2)
-    weight = np.nan_to_num(weight) * areNotNansInY
-    y_err = np.nan_to_num(y_err) * areNotNansInY
+    weight = np.nan_to_num(weight)
+    y_err = np.nan_to_num(y_err)
 
     x2 = x**2
     x3 = x**3
     x4 = x**4
     wx04 = np.array([np.ones(weight.shape), x, x2, x3, x4]) * weight
     Swx04 = np.nansum(wx04, axis=-1)
+    # Swx04 = np.sum(wx04, axis=-1)
     matrix = np.array([[Swx04[2], Swx04[1], Swx04[0]],
                        [Swx04[3], Swx04[2], Swx04[1]],
                        [Swx04[4], Swx04[3], Swx04[2]]])
@@ -944,6 +945,19 @@ def make_fitted_profiles_with_MovingPolyLSM(reff, raw_profiles, profiles_errs, w
 
     return reff_avgs, fitted_profiles, fitted_profiles_errs, fitted_profs_gradients, fitted_profs_grads_errs
 
+
+def make_radialAxes_for_MovingPolyLSM(reff, window_len):
+
+    # profiles_count, profile_len = reff.shape
+    idxs_for_Moving = make_idxs_for_MovingLSM(reff.shape[-1], window_len)
+
+    reff_for_Moving = reff[:, idxs_for_Moving]
+    reff_avgs = np.nanmean(reff_for_Moving, axis=-1)
+    reff_for_fitting = reff_for_Moving - repeat_and_add_lastdim(reff_avgs, window_len)
+
+    return reff_avgs
+
+
 def make_fitted_profiles_with_MovingPolyLSM_1d(reff, raw_profiles, profiles_errs, window_len, poly=2):
 
     if reff.shape != raw_profiles.shape:
@@ -995,11 +1009,19 @@ def make_fitted_profiles_with_MovingPolyLSM_1d(reff, raw_profiles, profiles_errs
 
 def gradient_reg(R, reff, a99, dat, err, Nfit, poly):
 
-    # reff_f, dat_grad, err_grad, dat_reg, err_reg = gradient_reg_reff(reff, dat, err, Nfit)
-    reff_f, dat_reg, err_reg, dat_grad, err_grad = make_fitted_profiles_with_MovingPolyLSM(reff, dat, err, Nfit, poly=poly)
+    notNanIdxs = np.argwhere(~np.isnan(dat).all(axis=1)).T[0]
+    reff_c = reff[notNanIdxs]
+    dat_c = dat[notNanIdxs]
+    err_c = err[notNanIdxs]
 
     Nt, NR = reff.shape
+    Ntc, NR = reff_c.shape
     NRf = NR - Nfit + 1
+
+    # reff_f, dat_grad, err_grad, dat_reg, err_reg = gradient_reg_reff(reff, dat, err, Nfit)
+    reff_f_c, dat_reg_c, err_reg_c, dat_grad_c, err_grad_c = make_fitted_profiles_with_MovingPolyLSM(reff_c, dat_c, err_c, Nfit, poly=poly)
+    reff_f = make_radialAxes_for_MovingPolyLSM(reff, Nfit)
+
     reff_ext = np.repeat(np.reshape(reff, (Nt, 1, NR)), NRf, axis=1)  # (Nt, NRf, NR)
     reff_f_ext = np.repeat(np.reshape(reff_f, (Nt, NRf, 1)), NR, axis=2)  # (Nt, NRf, NR)
 
@@ -1014,6 +1036,15 @@ def gradient_reg(R, reff, a99, dat, err, Nfit, poly):
     reff2 = reff[idxs_t, idxs2]
 
     R_f = (R2 - R1) / (reff2 - reff1) * (reff_f - reff1) + R1
+
+    dat_reg = np.full((Nt, NRf), np.nan)
+    dat_reg[notNanIdxs] = dat_reg_c
+    err_reg = np.full((Nt, NRf), np.nan)
+    err_reg[notNanIdxs] = err_reg_c
+    dat_grad = np.full((Nt, NRf), np.nan)
+    dat_grad[notNanIdxs] = dat_grad_c
+    err_grad = np.full((Nt, NRf), np.nan)
+    err_grad[notNanIdxs] = err_grad_c
 
     a99 = np.repeat(np.reshape(a99, (Nt, 1)), NRf, axis=-1)
     rho_f = reff_f / a99
