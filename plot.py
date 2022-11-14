@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-sns.set_context('talk')
+sns.set_context('notebook')
 sns.set_style('ticks')
 
 
@@ -74,7 +74,7 @@ def errorbar_hue(li_x, li_y, li_xerr, li_yerr, li_huecolor, li_lab_hue, xlabel, 
     return fig, axs
 
 
-def errorbar_vert(li_x, li_y, li_yerr, xlabel, li_lab_y, xlim, ylims, color='black', lw=1):
+def errorbar_vert(li_x, li_y, li_yerr, xlabel, li_lab_y, xlim=False, ylims=False, color='black', lw=1):
 
     fig, axs = plt.subplots(len(li_lab_y))
     for i in range(len(li_lab_y)):
@@ -83,8 +83,10 @@ def errorbar_vert(li_x, li_y, li_yerr, xlabel, li_lab_y, xlim, ylims, color='bla
                          lw=lw, elinewidth=lw)
         axs[i].axhline(0, color='grey', ls='--')
         axs[i].axvline(0, color='grey', ls='--')
-        axs[i].set_xlim(xlim)
-        axs[i].set_ylim(ylims)
+        if xlim:
+            axs[i].set_xlim(xlim)
+        if ylims:
+            axs[i].set_ylim(ylims)
         axs[i].set_ylabel(li_lab_y[i])
         if i == len(li_lab_y) - 1:
             axs[i].set_xlabel(xlabel)

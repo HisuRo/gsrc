@@ -8,6 +8,60 @@ import nasu.LHDRetrieve as LHDR
 from nasu import getShotInfo
 
 
+def colorLabelFdSk(idx_dev, ch, frangeSk_k):
+    label_fD = 'Doppler Shift [kHz]'
+    if idx_dev == 0:
+        color_fDSk = 'red'
+        label_Sk = f'$I_{{amp,BS(3-O),ch{ch:d}}}$\n' \
+                   f'{frangeSk_k[0]:d}-{frangeSk_k[1]:d} kHz (a.u.)'
+    elif idx_dev == 1:
+        color_fDSk = 'blue'
+        label_Sk = f'$I_{{amp,DBS(3-O),{ch:s}}}$\n' \
+                   f'{frangeSk_k[0]:d}-{frangeSk_k[1]:d} kHz (a.u.)'
+    elif idx_dev == 2:
+        color_fDSk = 'green'
+        label_Sk = f'$I_{{amp,DBS(9-O),{ch:s}}}$\n' \
+                   f'{frangeSk_k[0]:d}-{frangeSk_k[1]:d} kHz (a.u.)'
+    else:
+        exit()
+
+    return color_fDSk, label_Sk, label_fD
+
+
+def tsFromLocal(filepath):
+
+    datDf = pd.read_csv(filepath)
+    columns = datDf.columns.values
+    print(columns)
+    time_ts = datDf[columns[0]].unique()
+    R_ts = datDf[columns[1]].unique()
+    datDf = datDf.pivot(columns[0], columns[1])
+    reff_ts = datDf[columns[2]].to_numpy()
+    rho_ts = datDf[columns[3]].to_numpy()
+    dat_Te = datDf[columns[4]].to_numpy()
+    err_Te = datDf[columns[5]].to_numpy()
+    dat_ne = datDf[columns[6]].to_numpy()
+    err_ne = datDf[columns[7]].to_numpy()
+
+    return time_ts, R_ts, reff_ts, rho_ts, dat_Te, err_Te, dat_ne, err_ne
+
+
+def cxs7FromLocal(filepath):
+
+    datDf = pd.read_csv(filepath)
+    columns = datDf.columns.values
+    print(columns)
+    time_cxs7 = datDf[columns[0]].unique()
+    R_cxs7 = datDf[columns[1]].unique()
+    datDf = datDf.pivot(columns[0], columns[1])
+    reff_cxs7 = datDf[columns[2]].to_numpy()
+    rho_cxs7 = datDf[columns[3]].to_numpy()
+    dat_Ti = datDf[columns[4]].to_numpy()
+    err_Ti = datDf[columns[5]].to_numpy()
+
+    return time_cxs7, R_cxs7, reff_cxs7, rho_cxs7, dat_Ti, err_Ti
+
+
 def ece(EG):
     time = EG.dims(0)
     R = EG.dims(1)
@@ -236,6 +290,84 @@ def cxsmap7(EG):
     return time, R_pol, R_tor, \
            reff_pol, reff_tor, rho_pol, rho_tor, a99_pol, a99_tor, \
            dat_Tipol, err_Tipol, dat_Titor, err_Titor
+
+
+def cxsmap7_v1(EG):
+
+    time = EG.dims(0)
+    R = EG.dims(1)
+    shape_tR = (time.size, R.size)
+
+    ary = EG.trace_of('ary', 1, [0])
+    idxs_pol = np.where((ary == 1.) | (ary == 3.))[0]
+    idxs_tor = np.where((ary == 5.) | (ary == 7.))[0]
+
+    a99 = EG.trace_of_2d('a99', [0, 1])
+    reff = EG.trace_of_2d('reff', [0, 1])
+    a99[a99 == 0.] = np.nan
+    reff[np.abs(reff) > 1.5] = np.nan
+    a99 = a99.reshape(shape_tR)
+    reff = reff.reshape(shape_tR)
+
+    a99b = ~np.isnan(a99).all(axis=1)
+    time = time[a99b]
+    a99 = a99[a99b]
+    reff = reff[a99b]
+
+    dat_Ti = EG.trace_of_2d('Ti', [0, 1])
+    err_Ti = EG.trace_of_2d('Tier', [0, 1])
+    dat_Vc = EG.trace_of_2d('Vc', [0, 1])
+    err_Vc = EG.trace_of_2d('Ver', [0, 1])
+    dat_Ti[dat_Ti == 0.] = np.nan
+    err_Ti[err_Ti == 0.] = np.nan
+    dat_Ti = dat_Ti.reshape(shape_tR)
+    err_Ti = err_Ti.reshape(shape_tR)
+    dat_Vc = dat_Vc.reshape(shape_tR)
+    err_Vc = err_Vc.reshape(shape_tR)
+
+    dat_Ti = dat_Ti[a99b]
+    err_Ti = err_Ti[a99b]
+    dat_Vc = dat_Vc[a99b]
+    err_Vc = err_Vc[a99b]
+
+    rho = reff / a99
+    R_pol = R[idxs_pol]
+    R_tor = R[idxs_tor]
+    reff_pol = reff[:, idxs_pol]
+    reff_tor = reff[:, idxs_tor]
+    rho_pol = rho[:, idxs_pol]
+    rho_tor = rho[:, idxs_tor]
+    a99 = a99[:, 0]
+    dat_Tipol = dat_Ti[:, idxs_pol]
+    dat_Titor = dat_Ti[:, idxs_tor]
+    err_Tipol = err_Ti[:, idxs_pol]
+    err_Titor = err_Ti[:, idxs_tor]
+    dat_Vcpol = dat_Vc[:, idxs_pol]
+    dat_Vctor = dat_Vc[:, idxs_tor]
+    err_Vcpol = err_Vc[:, idxs_pol]
+    err_Vctor = err_Vc[:, idxs_tor]
+
+    idxs_sort_pol = np.argsort(R_pol)
+    idxs_sort_tor = np.argsort(R_tor)
+    R_pol = R_pol[idxs_sort_pol]
+    reff_pol = reff_pol[:, idxs_sort_pol]
+    rho_pol = rho_pol[:, idxs_sort_pol]
+    dat_Tipol = dat_Tipol[:, idxs_sort_pol]
+    err_Tipol = err_Tipol[:, idxs_sort_pol]
+    dat_Vcpol = dat_Vcpol[:, idxs_sort_pol]
+    err_Vcpol = err_Vcpol[:, idxs_sort_pol]
+    R_tor = R_tor[idxs_sort_tor]
+    reff_tor = reff_tor[:, idxs_sort_tor]
+    rho_tor = rho_tor[:, idxs_sort_tor]
+    dat_Titor = dat_Titor[:, idxs_sort_tor]
+    err_Titor = err_Titor[:, idxs_sort_tor]
+    dat_Vctor = dat_Vctor[:, idxs_sort_tor]
+    err_Vctor = err_Vctor[:, idxs_sort_tor]
+
+    return time, R_pol, R_tor, \
+           reff_pol, reff_tor, rho_pol, rho_tor, a99, \
+           dat_Tipol, err_Tipol, dat_Titor, err_Titor, \
+           dat_Vcpol, err_Vcpol, dat_Vctor, err_Vctor
 
 
 def cxsmap9(EG):
@@ -629,8 +761,10 @@ def fDSk_local(sn, tstart, tend, diag, chIQ, dT, Nfft_pw, window, Nens, OVR, fra
         time_fDSk = fDSk[0]
         idxs_use_fDSk = np.where((time_fDSk >= tstart_out) & (time_fDSk <= tend_out))
         dat_Sk, err_Sk = fDSk[5:7]
-        dat_Sk = np.sqrt(dat_Sk) * 1e4
-        err_Sk = 0.5 / dat_Sk * err_Sk * 1e4
+        dat_Ia = np.sqrt(dat_Sk)
+        err_Ia = 0.5 / dat_Ia * err_Sk
+        dat_Ia *= 1e4
+        err_Ia *= 1e4
         dat_fD, err_fD = fDSk[3:5]
 
         if sw_BSmod == 1:
@@ -640,30 +774,30 @@ def fDSk_local(sn, tstart, tend, diag, chIQ, dT, Nfft_pw, window, Nens, OVR, fra
             BSmod = np.loadtxt(path_mod, delimiter=',').T
             time_mod, dat_mod = BSmod
             idx_del = np.where(dat_mod < 0.75)[0]
-            dat_Sk[idx_del] = np.nan
-            err_Sk[idx_del] = np.nan
+            dat_Ia[idx_del] = np.nan
+            err_Ia[idx_del] = np.nan
         elif sw_nb5mod == 1:
             time_nb, dat_nb1, dat_nb2, dat_nb3, dat_nb4a, dat_nb5a = nb_local(sn, tstart, tend)
             dat_nb5a_fDSk = interp1d(time_nb, dat_nb5a)(time_fDSk)
             dat_diff_nb5a = np.diff(dat_nb5a_fDSk)
             idx_del = np.where(dat_diff_nb5a < -0.5)[0]
-            dat_Sk[idx_del] = np.nan
-            err_Sk[idx_del] = np.nan
+            dat_Ia[idx_del] = np.nan
+            err_Ia[idx_del] = np.nan
 
         time_fDSk = time_fDSk[idxs_use_fDSk]
-        dat_Sk = dat_Sk[idxs_use_fDSk]
-        err_Sk = err_Sk[idxs_use_fDSk]
+        dat_Ia = dat_Ia[idxs_use_fDSk]
+        err_Ia = err_Ia[idxs_use_fDSk]
         dat_fD = dat_fD[idxs_use_fDSk]
         err_fD = err_fD[idxs_use_fDSk]
     else:
         print(f'{path_fDSk} is not exist. \n')
         time_fDSk = np.nan
-        dat_Sk = np.nan
-        err_Sk = np.nan
+        dat_Ia = np.nan
+        err_Ia = np.nan
         dat_fD = np.nan
         err_fD = np.nan
 
-    return time_fDSk, dat_Sk, err_Sk, dat_fD, err_fD
+    return time_fDSk, dat_Ia, err_Ia, dat_fD, err_fD
 
 
 def dat1_woerr_local(path, col, tstart_out, tend_out):

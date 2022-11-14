@@ -5,13 +5,13 @@ import gc
 
 def nanWeightedAvg(dat, err):
 
-    areNotNansInDatTe = (~np.isnan(dat)).astype(np.int8)
+    areNotNansInDat = (~np.isnan(dat)).astype(np.int8)
     dat = np.nan_to_num(dat)
     Wg = 1. / (err ** 2)
     err = np.nan_to_num(err)
     Wg = np.nan_to_num(Wg)
 
-    Avg = np.sum(Wg * dat, axis=0) / np.sum(Wg * areNotNansInDatTe, axis=0)
+    Avg = np.sum(Wg * dat, axis=0) / np.sum(Wg * areNotNansInDat, axis=0)
     AvgErr = np.sum(Wg * err, axis=0) / np.sum(Wg, axis=0)
 
     return Avg, AvgErr
@@ -657,7 +657,7 @@ def LSM1(x, y, y_err):
 
     x2 = x**2
     wx02 = np.array([np.ones(weight.shape), x, x2]) * weight
-    Swx02 = np.sum(wx02, axis=-1)
+    Swx02 = np.nansum(wx02, axis=-1)
     matrix = np.array([[Swx02[1], Swx02[0]],
                        [Swx02[2], Swx02[1]]])
     matrix = np.transpose(matrix, axes=(2, 0, 1))
@@ -694,7 +694,7 @@ def poly1_LSM(x, y, y_err):
 
     x2 = x**2
     wx02 = np.array([np.ones(weight.shape), x, x2]) * weight
-    Swx02 = np.sum(wx02, axis=-1)
+    Swx02 = np.nansum(wx02, axis=-1)
     matrix = np.array([[Swx02[1], Swx02[0]],
                        [Swx02[2], Swx02[1]]])
     matrix = np.transpose(matrix, axes=tuple(np.append((np.arange(others_ndim) + 2), [0, 1])))
@@ -729,13 +729,17 @@ def poly2_LSM(x, y, y_err):
     otherNs_array = np.array(x.shape[:-1])
     others_ndim = otherNs_array.size
 
+    areNotNansInY = (~np.isnan(y)).astype(np.int8)
+    y = np.nan_to_num(y)
     weight = 1./(y_err**2)
+    weight = np.nan_to_num(weight) * areNotNansInY
+    y_err = np.nan_to_num(y_err) * areNotNansInY
 
     x2 = x**2
     x3 = x**3
     x4 = x**4
     wx04 = np.array([np.ones(weight.shape), x, x2, x3, x4]) * weight
-    Swx04 = np.sum(wx04, axis=-1)
+    Swx04 = np.nansum(wx04, axis=-1)
     matrix = np.array([[Swx04[2], Swx04[1], Swx04[0]],
                        [Swx04[3], Swx04[2], Swx04[1]],
                        [Swx04[4], Swx04[3], Swx04[2]]])
@@ -897,8 +901,8 @@ def make_fitted_profiles_with_MovingPolyLSM(reff, raw_profiles, profiles_errs, w
     if reff.shape != raw_profiles.shape:
         print('Improper data shape')
         exit()
-    profiles_count, profile_len = reff.shape
-    idxs_for_Moving = make_idxs_for_MovingLSM(profile_len, window_len)
+    # profiles_count, profile_len = reff.shape
+    idxs_for_Moving = make_idxs_for_MovingLSM(reff.shape[-1], window_len)
     output_profiles_count = idxs_for_Moving.shape[0]
 
     reff_for_Moving = reff[:, idxs_for_Moving]
@@ -906,6 +910,54 @@ def make_fitted_profiles_with_MovingPolyLSM(reff, raw_profiles, profiles_errs, w
     reff_for_fitting = reff_for_Moving - repeat_and_add_lastdim(reff_avgs, window_len)
     profiles_for_fitting = raw_profiles[:, idxs_for_Moving]
     profiles_errs_for_fitting = profiles_errs[:, idxs_for_Moving]
+
+    if poly == 1:
+        print('polynomial 1\n')
+        popt, perr = poly1_LSM(reff_for_fitting, profiles_for_fitting, profiles_errs_for_fitting)
+        fitted_profs_gradients = popt[0]
+        fitted_profiles = popt[1]
+        aa = repeat_and_add_lastdim(popt[0], window_len)
+        bb = repeat_and_add_lastdim(popt[1], window_len)
+        # fitted_profiles_wo_average = aa * reff_for_fitting + bb
+        # fitted_profiles_errs = np.sqrt(np.sum(profiles_errs_for_fitting**2 + (profiles_for_fitting - fitted_profiles_wo_average)**2, axis=-1)/(window_len - 2))
+        S = np.sqrt(np.sum((reff_for_fitting - repeat_and_add_lastdim(reff_avgs, window_len)) ** 2, axis=-1) / window_len)
+        fitted_profs_grads_errs = perr[0]
+        fitted_profiles_errs = perr[1]
+
+    elif poly == 2:
+        print('polynomial 2\n')
+        popt, perr = poly2_LSM(reff_for_fitting, profiles_for_fitting, profiles_errs_for_fitting)
+        fitted_profs_gradients = popt[1]
+        fitted_profiles = popt[2]
+
+        aa = repeat_and_add_lastdim(popt[0], window_len)
+        bb = repeat_and_add_lastdim(popt[1], window_len)
+        cc = repeat_and_add_lastdim(popt[2], window_len)
+        # fitted_profiles_wo_average = aa * reff_for_fitting**2 + bb * reff_for_fitting + cc
+        # fitted_profiles_errs = np.sqrt(np.sum(profiles_errs_for_fitting**2 + (profiles_for_fitting - fitted_profiles_wo_average)**2, axis=-1)/(window_len - 2))
+        fitted_profs_grads_errs = perr[1]
+        fitted_profiles_errs = perr[2]
+
+    else:
+        print('It has not developed yet...\n')
+        exit()
+
+    return reff_avgs, fitted_profiles, fitted_profiles_errs, fitted_profs_gradients, fitted_profs_grads_errs
+
+def make_fitted_profiles_with_MovingPolyLSM_1d(reff, raw_profiles, profiles_errs, window_len, poly=2):
+
+    if reff.shape != raw_profiles.shape:
+        print('Improper data shape')
+        exit()
+    # profiles_count, profile_len = reff.shape
+    idxs_for_Moving = make_idxs_for_MovingLSM(reff.shape[-1], window_len)
+    output_profiles_count = idxs_for_Moving.shape[0]
+
+    reff_for_Moving = reff[idxs_for_Moving]
+    reff_avgs = np.nanmean(reff_for_Moving, axis=-1)
+    reff_for_fitting = reff_for_Moving - repeat_and_add_lastdim(reff_avgs, window_len)
+    profiles_for_fitting = raw_profiles[idxs_for_Moving]
+    profiles_errs_for_fitting = profiles_errs[idxs_for_Moving]
 
     if poly == 1:
         print('polynomial 1\n')
@@ -965,6 +1017,39 @@ def gradient_reg(R, reff, a99, dat, err, Nfit, poly):
 
     a99 = np.repeat(np.reshape(a99, (Nt, 1)), NRf, axis=-1)
     rho_f = reff_f / a99
+
+    return R_f, reff_f, rho_f, dat_grad, err_grad, dat_reg, err_reg
+
+
+def gradient_reg_1d(R, reff, a99, dat, err, Nfit, poly):
+
+    # reff_f, dat_grad, err_grad, dat_reg, err_reg = gradient_reg_reff(reff, dat, err, Nfit)
+    reff_f, dat_reg, err_reg, dat_grad, err_grad = make_fitted_profiles_with_MovingPolyLSM_1d(reff, dat, err, Nfit, poly=poly)
+
+    # Nt, NR = reff.shape
+    NR = reff.shape[-1]
+    Ndim = reff.ndim
+    NRf = NR - Nfit + 1
+    # reff_ext = np.repeat(np.reshape(reff, (Nt, 1, NR)), NRf, axis=1)  # (Nt, NRf, NR)
+    # reff_f_ext = np.repeat(np.reshape(reff_f, (Nt, NRf, 1)), NR, axis=2)  # (Nt, NRf, NR)
+
+    reff_ext = repeat_and_add_lastdim(reff, NRf).transpose([1, 0])
+    reff_f_ext = repeat_and_add_lastdim(reff_f, NR)
+
+    dreff = reff_f_ext - reff_ext
+    idxs1 = np.nanargmin(np.where(dreff <= 0, np.nan, dreff), axis=-1)
+    idxs2 = np.nanargmax(np.where(dreff >= 0, np.nan, dreff), axis=-1)
+
+    R1 = R[idxs1]
+    R2 = R[idxs2]
+    reff1 = reff[idxs1]
+    reff2 = reff[idxs2]
+
+    R_f = (R2 - R1) / (reff2 - reff1) * (reff_f - reff1) + R1
+
+    a99_ext = np.repeat(a99, NRf)
+    # a99_ext = repeat_and_add_lastdim(a99, NRf)
+    rho_f = reff_f / a99_ext
 
     return R_f, reff_f, rho_f, dat_grad, err_grad, dat_reg, err_reg
 
