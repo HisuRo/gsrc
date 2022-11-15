@@ -8,6 +8,14 @@ import nasu.LHDRetrieve as LHDR
 from nasu import getShotInfo
 
 
+def inputSnOnTerminal():
+    snstart = int(input('Start Shot # >>> '))
+    snend = int(input('End Shot (if take only one shot, enter 0) # >>> '))
+    if snend == 0:
+        snend = snstart
+    return snstart, snend
+
+
 def colorLabelFdSk(idx_dev, ch, frangeSk_k):
     label_fD = 'Doppler Shift [kHz]'
     if idx_dev == 0:
