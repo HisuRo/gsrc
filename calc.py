@@ -32,6 +32,25 @@ def timeAverageDatByRefs(timeDat, dat, err, timeRef):
     return dat_Ref, err_Ref
 
 
+def timeAverageDatByRefs_v2(timeDat, dat, timeRef, err=False):
+    dtDat = timeDat[1] - timeDat[0]
+    dtRef = timeRef[1] - timeRef[0]
+    dNDatRef = int(dtRef / dtDat + 0.5)
+    timeRef_ext = repeat_and_add_lastdim(timeRef, len(timeDat))
+    idxDatAtRef = np.argsort(np.abs(timeDat - timeRef_ext))[:, :dNDatRef]
+
+    datAtRef = dat[idxDatAtRef]
+    dat_Ref = np.nanmean(datAtRef, axis=1)
+    
+    if err:
+        errAtRef = err[idxDatAtRef]
+        err_Ref = np.sqrt(np.nanvar(datAtRef, axis=1, ddof=1) + np.nanmean(errAtRef ** 2, axis=1))
+    else:
+        err_Ref = np.nanstd(datAtRef, axis=1, ddof=1)
+
+    return dat_Ref, err_Ref
+
+
 def dB(spec, spec_err):
     spec_db = 10 * np.log10(spec)
     spec_err_db = 10 / np.log(10) / spec * spec_err
@@ -767,6 +786,49 @@ def poly2_LSM(x, y, y_err):
     return prms, errs
 
 
+def polyN_LSM(x, y, y_err, polyN):
+
+    if x.shape != y.shape:
+        print('Improper data shape')
+        exit()
+
+    Nfit = x.shape[-1]
+    otherNs_array = np.array(x.shape[:-1])
+    others_ndim = otherNs_array.size
+
+    weight = 1./(y_err**2)
+    areNotNansInY = (~np.isnan(y)).astype(np.int8)
+    y = np.nan_to_num(y)
+    weight = np.nan_to_num(weight)
+    y_err = np.nan_to_num(y_err)
+
+    wx02N = np.array([x**ii for ii in range(polyN * 2 + 1)]) * weight
+    Swx02N = np.nansum(wx02N, axis=-1)
+    tempArr = np.tile(np.arange(polyN + 1), (polyN + 1, 1))
+    matIdxs = np.fliplr(tempArr + np.transpose(tempArr))
+    matrix = Swx02N[matIdxs]
+    matrix = np.transpose(matrix, axes=tuple(np.append((np.arange(others_ndim) + 2), [0, 1])))
+    matinv = np.linalg.inv(matrix)
+
+    wx0N = np.array([x ** ii for ii in range(polyN + 1)]) * weight
+
+    wx0N = np.transpose(wx0N, axes=tuple(np.append((np.arange(others_ndim) + 1), [0, others_ndim + 1])))
+    Minvwx0N = np.matmul(matinv, wx0N)
+    y = np.reshape(y, tuple(np.concatenate([otherNs_array, Nfit, 1], axis=None)))
+    y_err = np.reshape(y_err, tuple(np.concatenate([otherNs_array, Nfit, 1], axis=None)))
+
+    prms = np.matmul(Minvwx0N, y)
+    errs = np.sqrt(np.matmul(Minvwx0N**2, y_err**2))
+
+    prms = np.reshape(prms, tuple(np.concatenate([otherNs_array, polyN + 1], axis=None)))
+    errs = np.reshape(errs, tuple(np.concatenate([otherNs_array, polyN + 1], axis=None)))
+
+    prms = np.transpose(prms, axes=tuple(np.concatenate([others_ndim, np.arange(others_ndim)], axis=None)))
+    errs = np.transpose(errs, axes=tuple(np.concatenate([others_ndim, np.arange(others_ndim)], axis=None)))
+
+    return prms, errs
+
+
 def gauss_LS(x, y, y_err):
 
     Nt, Nx = y.shape
@@ -1149,6 +1211,12 @@ def weighted_average_1D(x1D, weight1D):
 
 
 def weighted_average_2D(x2D, weight2D):
+    
+    areNotNansInX = (~np.isnan(x2D)).astype(np.int8)
+    areNotNansInWgt = (~np.isnan(weight2D)).astype(np.int8)
+    x2D = np.nan_to_num(x2D) * areNotNansInWgt
+    weight2D = np.nan_to_num(weight2D) * areNotNansInX
+    
     Sw = np.sum(weight2D, axis=1)
     wx = x2D * weight2D
     Swx = np.sum(wx, axis=1)

@@ -497,6 +497,67 @@ def choose_ch(sn):
     return idx_dev, ch, diag, chIQ
 
 
+def choose_ch_2(sn, idx_dev, ch):
+
+    # information
+    devices = {0: 'BS (3-O)', 1: 'DBS (3-O)', 2: 'DBS (9-O)'}
+
+    if sn >= 179617:
+        diagch_highK = {
+            1: ['MWRM-COMB2', [17, 18]],
+            2: ['MWRM-PXI', [11, 12]],
+            3: ['MWRM-COMB2', [19, 20]]
+        }
+    else:
+        diagch_highK = {
+            1: ['MWRM-COMB2', [17, 18]],
+            2: ['MWRM-PXI', [11, 12]],
+            3: ['MWRM-PXI', [1, 2]]
+        }
+
+    fsig_comb = {0: '27.7G', 1: '29.1G', 2: '30.5G', 3: '32.0G',
+                 4: '33.4G', 5: '34.8G', 6: '36.9G', 7: '38.3G'}
+    diagch_comb = {
+        '27.7G': ['MWRM-COMB', [7, 8]],
+        '29.1G': ['MWRM-COMB', [5, 6]],
+        '30.5G': ['MWRM-COMB', [3, 4]],
+        '32.0G': ['MWRM-COMB', [1, 2]],
+        '33.4G': ['MWRM-COMB', [9, 10]],
+        '34.8G': ['MWRM-PXI', [7, 8]],
+        '36.9G': ['MWRM-COMB', [11, 12]],
+        '38.3G': ['MWRM-COMB', [13, 14]]
+    }
+
+    diagch_comb2 = {
+        '27.7G': ['MWRM-COMB2', [1, 2]],
+        '29.1G': ['MWRM-COMB2', [3, 4]],
+        '30.5G': ['MWRM-COMB2', [5, 6]],
+        '32.0G': ['MWRM-COMB2', [7, 8]],
+        '33.4G': ['MWRM-COMB2', [9, 10]],
+        '34.8G': ['MWRM-COMB2', [11, 12]],
+        '36.9G': ['MWRM-COMB2', [13, 14]],
+        '38.3G': ['MWRM-COMB2', [15, 16]]
+    }
+
+    # input
+    if idx_dev == 0:
+        diag = diagch_highK[ch][0]
+        chIQ = diagch_highK[ch][1]
+    elif idx_dev == 1:
+        diag = diagch_comb[ch][0]
+        chIQ = diagch_comb[ch][1]
+    elif idx_dev == 2:
+        diag = diagch_comb2[ch][0]
+        chIQ = diagch_comb2[ch][1]
+    else:
+        print(f'It does not exist.\n')
+        exit()
+
+    print('\n')
+
+    return diag, chIQ
+
+
 def choose_sn(inputfile):
 
     critsn = int(input(f'Choose shot# and sub-shot# by ...\n'

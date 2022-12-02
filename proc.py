@@ -5,6 +5,13 @@ from scipy import signal, fft
 import gc
 
 
+def getTimeIdxsAndDats(time, startTime, endTime, datList):
+    idxs = np.argwhere((time >= startTime) & (time <= endTime)).T[0]
+    for ii, dat in enumerate(datList):
+        datList[ii] = dat[tsIdxs]
+    return idxs, datList
+
+
 def findIndex(point, array1d):
     idx = np.nanargmin(np.abs(point - array1d))
     return idx
