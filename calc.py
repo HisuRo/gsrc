@@ -964,7 +964,6 @@ def make_fitted_profiles_with_MovingPolyLSM(reff, raw_profiles, profiles_errs, w
     if reff.shape != raw_profiles.shape:
         print('Improper data shape')
         exit()
-    # profiles_count, profile_len = reff.shape
     idxs_for_Moving = make_idxs_for_MovingLSM(reff.shape[-1], window_len)
     output_profiles_count = idxs_for_Moving.shape[0]
 
