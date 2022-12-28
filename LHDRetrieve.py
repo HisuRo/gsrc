@@ -39,7 +39,9 @@ def Retrieve_et(diagname, sn, subsn, ch, et, force=False):
         subprocess.run(cmd)
 
 def Retrieve_t(diagname, sn, subsn, ch, force=False):
+    print(type(ch))
     if force or not os.path.exists(Datafile(sn, subsn, ch, '.time')):
+        print(type(ch))
         cmd = f'retrieve_t {diagname:s} {sn:d} {subsn:d} {ch:d} -D'
         os.system(cmd)
 
@@ -79,7 +81,17 @@ def RetrieveData_et(diagname, sn, subsn, ch, et, flg_remove=True):
 
     return data, prms
 
+def RetrieveData_only_et(diagname, sn, subsn, ch, et, flg_remove=True):
+    Retrieve_et(diagname, sn, subsn, ch, et, True)
+    datafile = Datafile(diagname, sn, subsn, ch)
+    data = ReadDatafile(datafile)
+    if flg_remove:
+        os.unlink(datafile)
+
+    return data
+
 def RetrieveTime(diagname, sn, subsn, ch, flg_remove=True):
+    print(type(ch))
     Retrieve_t(diagname, sn, subsn, ch, True)
     tprmfile = Parameterfile(diagname, sn, subsn, ch, '.tprm')
     tprms = ReadParameterfile(tprmfile, start=0)

@@ -1,6 +1,42 @@
 import numpy as np
 from scipy import signal, fft, interpolate, optimize
 import gc
+from nasu import proc
+
+
+def avgByWeightHavingError(xxs, weights, weights_err):
+    areNotNansInX = (~np.isnan(xxs)).astype(np.int8)
+    areNotNansInWgt = (~np.isnan(weights)).astype(np.int8)
+    xxs = np.nan_to_num(xxs) * areNotNansInWgt
+    weights = np.nan_to_num(weights) * areNotNansInX
+    weights_err = np.nan_to_num(weights_err) * areNotNansInX
+
+    Sws = np.sum(weights, axis=-1)
+    Swxs = np.sum(weights * xxs, axis=-1)
+    xAvgs = Swxs / Sws
+    if Sws.size != 1:
+        Sws_ex = repeat_and_add_lastdim(Sws, weights.shape[-1])
+        Swxs_ex = repeat_and_add_lastdim(Swxs, weights.shape[-1])
+        xStErrs = np.sqrt(np.sum((Sws_ex ** 2 * xxs ** 2 + Swxs_ex ** 2) * weights_err ** 2, axis=-1)) / (Sws ** 2)
+    else:
+        xStErrs = np.sqrt(np.sum((Sws ** 2 * xxs ** 2 + Swxs ** 2) * weights_err ** 2, axis=-1)) / (Sws ** 2)
+    return xAvgs, xStErrs
+
+
+def gradRegAtInterestRhoWithErr(ReffAvg, RhoAvg, Dat, DatEr, InterestingRho, NFit, polyGrad):
+    reffIdxsForLSMAtInterest, shiftedReffsForLSMAtInterest = proc.makeReffArraysForLSMAtInterestRho(ReffAvg, RhoAvg, InterestingRho)
+
+    reffsForLSMAtInterest = np.tile(shiftedReffsForLSMAtInterest[:NFit], (Dat.shape[0], 1))
+    DatAtInterest = Dat[:, reffIdxsForLSMAtInterest][:, :NFit]
+    DatErAtInterest = DatEr[:, reffIdxsForLSMAtInterest][:, :NFit]
+
+    prms, errs = polyN_LSM(reffsForLSMAtInterest, DatAtInterest, DatErAtInterest, polyGrad)
+    RegDat = prms[-1]
+    DatGrad = prms[-2]
+    RegDatEr = errs[-1]
+    DatGradEr = errs[-2]
+
+    return RegDat, RegDatEr, DatGrad, DatGradEr
 
 
 def nanWeightedAvg(dat, err):
@@ -178,6 +214,10 @@ def fourier_components_2s(xens, dt, NFFT, win):
     return freq, fft_x
 
 
+def NSampleForFFT(NFFT, NEns, NOV):
+    return NEns * NFFT - (NEns - 1) * NOV
+
+
 def power_spectre_1s(xx, dt, NFFT, window, NEns, NOV):
 
     xens = toTimeSliceEnsemble(xx, NFFT, NEns, NOV)
@@ -319,12 +359,66 @@ def calibIQComp2(datI, datQ, VAR, VOS_I, VOS_Q, phDif):
     return datICalib, datQCalib
 
 
-def power_spectrogram_1s(ti, xx, dt, NFFT, window, Ndiv, Ntisp):
+# def power_spectrogram_1s(ti, xx, dt, NFFT, window, Ndiv, Ntisp):
+#
+#     idxs = np.arange(0, NFFT * Ndiv * Ntisp)
+#     idxs = idxs.reshape((Ntisp, Ndiv, NFFT))
+#
+#     dtisp = Ndiv * NFFT * dt
+#     tisp = ti[idxs.T[0][0]] + 0.5 * dtisp
+#     xens = xx[idxs]
+#
+#     win = signal.get_window(window, NFFT)
+#     enbw = NFFT * np.sum(win ** 2) / (np.sum(win) ** 2)
+#     CG = np.abs(np.sum(win)) / NFFT
+#
+#     div_CV = np.sqrt(1. / Ndiv)  # 分割平均平滑化による相対誤差の変化率
+#     sp_CV = div_CV
+#
+#     rfreq = fft.rfftfreq(NFFT, dt)
+#
+#     rfft_x = fft.rfft(xens * win)
+#
+#     p_xx = np.real(rfft_x * rfft_x.conj())
+#     p_xx[:, :, 1:-1] *= 2
+#     p_xx_ave = np.mean(p_xx, axis=1)
+#     p_xx_err = np.std(p_xx, axis=1, ddof=1)
+#     p_xx_rerr = p_xx_err / np.abs(p_xx_ave) * sp_CV
+#
+#     Fs = 1. / dt
+#     psd = p_xx_ave / (Fs * NFFT * enbw * (CG ** 2))
+#     psd_err = np.abs(psd) * p_xx_rerr
+#
+#     dfreq = 1. / (NFFT * dt)
+#     print(f'Power x^2_bar             = {np.sum(xx[idxs][0] ** 2) / (NFFT * Ndiv):.3f}V^2 '
+#           f'@{tisp[0]:.3f}+-{0.5 * dtisp:.3f}s')
+#     print(f'Power integral of P(f)*df = {np.sum(psd[0] * dfreq):.3f}V^2'
+#           f' @{tisp[0]:.3f}+-{0.5 * dtisp:.3f}s')
+#
+#     return tisp, rfreq, psd, psd_err
 
-    idxs = np.arange(0, NFFT * Ndiv * Ntisp)
-    idxs = idxs.reshape((Ntisp, Ndiv, NFFT))
 
-    dtisp = Ndiv * NFFT * dt
+def power_spectrogram_1s(ti, xx, dt, NFFT, window, NEns, NOV):
+
+    print(f'Overlap ratio: {NOV/NFFT*100:.0f}%\n')
+
+    Nsamp = NEns * NFFT - (NEns - 1) * NOV
+    Nsp = int(len(ti) / Nsamp + 0.5)
+
+    if len(xx) % Nsamp != 0 or len(ti) % Nsamp != 0 or len(xx) != len(ti):
+        print('The number of data points is improper. \n')
+        exit()
+    else:
+        print(f'The number of samples a spectrum: {Nsamp:d}')
+        print(f'The number of spectra: {Nsp:d}\n')
+
+    if NOV != 0:
+        tmp = (np.reshape(np.arange(NEns * NFFT), (NEns, NFFT)).T - np.arange(0, NEns * NOV, NOV)).T
+    else:
+        tmp = np.reshape(np.arange(NEns * NFFT), (NEns, NFFT))
+    idxs = np.transpose(np.tile(tmp, (Nsp, 1, 1)).T + np.arange(0, Nsp*Nsamp, Nsamp))
+
+    dtisp = Nsamp * dt
     tisp = ti[idxs.T[0][0]] + 0.5 * dtisp
     xens = xx[idxs]
 
@@ -332,28 +426,26 @@ def power_spectrogram_1s(ti, xx, dt, NFFT, window, Ndiv, Ntisp):
     enbw = NFFT * np.sum(win ** 2) / (np.sum(win) ** 2)
     CG = np.abs(np.sum(win)) / NFFT
 
-    div_CV = np.sqrt(1. / Ndiv)  # 分割平均平滑化による相対誤差の変化率
-    sp_CV = div_CV
+    CV = CV_overlap(NFFT, NEns, NOV)
 
     rfreq = fft.rfftfreq(NFFT, dt)
 
-    rfft_x = fft.rfft(xens * win)
+    fft_x = fft.rfft(xens * win)
 
-    p_xx = np.real(rfft_x * rfft_x.conj())
-    p_xx[:, :, 1:-1] *= 2
+    p_xx = np.real(fft_x * fft_x.conj())
     p_xx_ave = np.mean(p_xx, axis=1)
     p_xx_err = np.std(p_xx, axis=1, ddof=1)
-    p_xx_rerr = p_xx_err / np.abs(p_xx_ave) * sp_CV
+    p_xx_rerr = p_xx_err / np.abs(p_xx_ave) * CV
 
     Fs = 1. / dt
     psd = p_xx_ave / (Fs * NFFT * enbw * (CG ** 2))
     psd_err = np.abs(psd) * p_xx_rerr
 
     dfreq = 1. / (NFFT * dt)
-    print(f'Power x^2_bar             = {np.sum(xx[idxs][0] ** 2) / (NFFT * Ndiv):.3f}V^2 '
-          f'@{tisp[0]:.3f}+-{0.5 * dtisp:.3f}s')
-    print(f'Power integral of P(f)*df = {np.sum(psd[0] * dfreq):.3f}V^2'
-          f' @{tisp[0]:.3f}+-{0.5 * dtisp:.3f}s')
+    print(f'Power: Time average of x(t)^2 = {np.sum(np.abs(xx[0:Nsamp])**2) / Nsamp:.6f} V^2 '
+          f'@{tisp[0]:.3f}+-{0.5 * dtisp:.3f} s')
+    print(f'Power: Integral of P(f)       = {np.sum(psd[0] * dfreq):.6f} V^2 '
+          f'@{tisp[0]:.3f}+-{0.5 * dtisp:.3f} s')
 
     return tisp, rfreq, psd, psd_err
 
@@ -1188,49 +1280,49 @@ def Tratio(Te, Ti, Te_err, Ti_err):
     return Tratio, Tratio_err
 
 
-def weighted_average_1D(x1D, weight1D):
-    Sw = np.sum(weight1D)
-    wx = x1D * weight1D
-    Swx = np.sum(wx)
-    xm = Swx / Sw
-    w2 = weight1D ** 2
-    Sw2 = np.sum(w2)
-    errsq = (x1D - np.full(x1D.T.shape, xm).T) ** 2
-    werrsq = weight1D * errsq
-    Swerrsq = np.sum(werrsq)
-    U = Sw / (Sw ** 2 - Sw2) * Swerrsq
-    xerr = np.sqrt(U)
-
-    wwerrsq = weight1D * werrsq
-    Swwerrsq = np.sum(wwerrsq)
-    Um = Sw / (Sw ** 2 - Sw2) * Swwerrsq / Sw
-    xmerr = np.sqrt(Um)
-
-    return xm, xerr, xmerr
-
-
-def weighted_average_2D(x2D, weight2D):
-    
-    areNotNansInX = (~np.isnan(x2D)).astype(np.int8)
-    areNotNansInWgt = (~np.isnan(weight2D)).astype(np.int8)
-    x2D = np.nan_to_num(x2D) * areNotNansInWgt
-    weight2D = np.nan_to_num(weight2D) * areNotNansInX
-    
-    Sw = np.sum(weight2D, axis=1)
-    wx = x2D * weight2D
-    Swx = np.sum(wx, axis=1)
-    xm = Swx / Sw
-    w2 = weight2D ** 2
-    Sw2 = np.sum(w2, axis=1)
-    errsq = (x2D - np.full(x2D.T.shape, xm).T) ** 2
-    werrsq = weight2D * errsq
-    Swerrsq = np.sum(werrsq, axis=1)
-    U = Sw / (Sw ** 2 - Sw2) * Swerrsq
-    xerr = np.sqrt(U)
-    
-    wwerrsq = weight2D * werrsq
-    Swwerrsq = np.sum(wwerrsq, axis=1)
-    Um = Sw / (Sw ** 2 - Sw2) * Swwerrsq / Sw
-    xmerr = np.sqrt(Um)
-
-    return xm, xerr, xmerr
+# def weighted_average_1D(x1D, weight1D):
+#     Sw = np.sum(weight1D)
+#     wx = x1D * weight1D
+#     Swx = np.sum(wx)
+#     xm = Swx / Sw
+#     w2 = weight1D ** 2
+#     Sw2 = np.sum(w2)
+#     errsq = (x1D - np.full(x1D.T.shape, xm).T) ** 2
+#     werrsq = weight1D * errsq
+#     Swerrsq = np.sum(werrsq)
+#     U = Sw / (Sw ** 2 - Sw2) * Swerrsq
+#     xerr = np.sqrt(U)
+#
+#     wwerrsq = weight1D * werrsq
+#     Swwerrsq = np.sum(wwerrsq)
+#     Um = Sw / (Sw ** 2 - Sw2) * Swwerrsq / Sw
+#     xmerr = np.sqrt(Um)
+#
+#     return xm, xerr, xmerr
+#
+#
+# def weighted_average_2D(x2D, weight2D):
+#
+#     areNotNansInX = (~np.isnan(x2D)).astype(np.int8)
+#     areNotNansInWgt = (~np.isnan(weight2D)).astype(np.int8)
+#     x2D = np.nan_to_num(x2D) * areNotNansInWgt
+#     weight2D = np.nan_to_num(weight2D) * areNotNansInX
+#
+#     Sw = np.sum(weight2D, axis=1)
+#     wx = x2D * weight2D
+#     Swx = np.sum(wx, axis=1)
+#     xm = Swx / Sw
+#     w2 = weight2D ** 2
+#     Sw2 = np.sum(w2, axis=1)
+#     errsq = (x2D - np.full(x2D.T.shape, xm).T) ** 2
+#     werrsq = weight2D * errsq
+#     Swerrsq = np.sum(werrsq, axis=1)
+#     U = Sw / (Sw ** 2 - Sw2) * Swerrsq
+#     xerr = np.sqrt(U)
+#
+#     wwerrsq = weight2D * werrsq
+#     Swwerrsq = np.sum(wwerrsq, axis=1)
+#     Um = Sw / (Sw ** 2 - Sw2) * Swwerrsq / Sw
+#     xmerr = np.sqrt(Um)
+#
+#     return xm, xerr, xmerr

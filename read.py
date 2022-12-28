@@ -642,6 +642,7 @@ def LHD_IQ_ss(sn, subsn, diagname, chs, ss):
 
 def LHD_time(sn, subsn, diagname, ch):
 
+    print(type(ch))
     tdat, tprms = LHDR.RetrieveTime(diagname, sn, subsn, ch)
     tsize = len(tdat)
     dT = parse('{:f}{:S}', tprms['ClockCycle'][0])[0]
@@ -763,7 +764,7 @@ def call_crossspec(dirin, sn, tstart, tend, diag1, chIQ1, diag2, chIQ2,
     return csd, csd_err, coh, coh_err, phs, phs_err
 
 
-def ech_local(sn, tstart_out, tend_out):
+def ech_local(sn, tstart_out, tend_out): ## dat_ech == Total ech power
     dir_heat = os.path.join(dirs()[1], '04-heat')
     fnm_ech = f'#{sn:d}.csv'
     path_ech = os.path.join(dir_heat, 'ech', fnm_ech)
@@ -771,7 +772,7 @@ def ech_local(sn, tstart_out, tend_out):
         ech = np.loadtxt(path_ech, delimiter=',').T
         time_ech = ech[0]
         idxs_use_ech = np.where((time_ech >= tstart_out) & (time_ech <= tend_out))
-        dat_ech = ech[1]
+        dat_ech = ech[6]
         time_ech = time_ech[idxs_use_ech]
         dat_ech = dat_ech[idxs_use_ech]
     else:

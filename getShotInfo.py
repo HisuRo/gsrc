@@ -49,11 +49,11 @@ def info(sn):
     rows = cursor.fetchall()
 
     BT, Rax, Bq, Gamma, date0 = rows[0]
-    dt = (date0.year, date0.month, date0.day, date0.hour, date0.minute, date0.second, 0, 0, 0)
+    datet = (date0.year, date0.month, date0.day, date0.hour, date0.minute, date0.second, 0, 0, 0)
 
     cursor.close()
     connection.close()
-    return BT, Rax, Bq, Gamma, dt, cycle_of(sn)
+    return BT, Rax, Bq, Gamma, datet, cycle_of(sn)
 
 if __name__ == '__main__':
     import time

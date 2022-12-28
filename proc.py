@@ -1,14 +1,34 @@
 import numpy as np
 from scipy.interpolate import interp1d
 from scipy import signal, fft
+import os
 
 import gc
 
 
+def makeReffArraysForLSMAtInterestRho(reff1d, rho1d, InterestingRho):
+    InterestingReff = interp1d(rho1d, reff1d)(InterestingRho)
+
+    shiftedReff = reff1d - InterestingReff
+    reffIdxsForLSMAtInterest = np.argsort(np.abs(shiftedReff))
+    shiftedReffsForLSMAtInterest = shiftedReff[reffIdxsForLSMAtInterest]
+
+    return reffIdxsForLSMAtInterest, shiftedReffsForLSMAtInterest
+
+
+def ifNotMake(dirPath):
+    if not os.path.exists(dirPath):
+        os.mkdir(dirPath)
+
+
 def getTimeIdxsAndDats(time, startTime, endTime, datList):
-    idxs = np.argwhere((time >= startTime) & (time <= endTime)).T[0]
+    idxs = np.argwhere((time > startTime) & (time < endTime)).T[0]
+    if idxs[0] > 0:
+        idxs = np.insert(idxs, 0, idxs[0] - 1)
+    if idxs[-1] < len(time) - 1:
+        idxs = np.append(idxs, idxs[-1] + 1)
     for ii, dat in enumerate(datList):
-        datList[ii] = dat[tsIdxs]
+        datList[ii] = dat[idxs]
     return idxs, datList
 
 

@@ -163,10 +163,20 @@ def ech(sn, tstart, tend):
 def ech_all(sn):
 
     diagech = 'echpw'
+    ech_77G_55Uout = '77G_5.5Uout'
+    ech_77G_2Our = '77G_2Our'
+    ech_154G_2Oll = '154G_2Oll'
+    ech_154G_2Oul = '154G_2Oul'
+    ech_154G_2Olr = '154G_2Olr'
     ech_tot = 'Total ECH'
 
     egech = LoadEG(diagech, sn)
     echtime = egech.dims(0)
-    echpw = egech.trace_of(ech_tot, dim=0, other_idxs=[0])
+    ech_77G_55UOut_pw = egech.trace_of(ech_77G_55Uout, dim=0, other_idxs=[0])
+    ech_77G_2Our_pw = egech.trace_of(ech_77G_2Our, dim=0, other_idxs=[0])
+    ech_154G_2Oll_pw = egech.trace_of(ech_154G_2Oll, dim=0, other_idxs=[0])
+    ech_154G_2Oul_pw = egech.trace_of(ech_154G_2Oul, dim=0, other_idxs=[0])
+    ech_154G_2Olr_pw = egech.trace_of(ech_154G_2Olr, dim=0, other_idxs=[0])
+    ech_tot_pw = egech.trace_of(ech_tot, dim=0, other_idxs=[0])
 
-    return echtime, echpw
+    return echtime, ech_77G_55UOut_pw, ech_77G_2Our_pw, ech_154G_2Oll_pw, ech_154G_2Oul_pw, ech_154G_2Olr_pw, ech_tot_pw
