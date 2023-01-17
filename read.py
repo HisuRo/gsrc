@@ -161,6 +161,12 @@ def field_from_tsmap_calib(EG):
     Bz = np.reshape(Bz, shape_tR)
     Bphi = np.reshape(Bphi, shape_tR)
 
+    Bt = nasu.getShotInfo.info()[0]
+    coef = Bt/3
+    Br = coef * Br
+    Bz = coef * Bz
+    Bphi = coef * Bphi
+
     B = np.sqrt(Br ** 2 + Bz ** 2 + Bphi ** 2)
 
     return time, R, reff, rho, B, Br, Bz, Bphi

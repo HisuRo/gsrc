@@ -232,10 +232,10 @@ def any_t_fk_2s(time, dt, freq_k, dfk, flim_k, any, bottom, top, label, cmap):
     return fig, ax
 
 
-def errorbar_fk_2s(freq_k, any, any_err, label=False, flim_k=False, level=False, fmt='-'): # level=(bottom, top)
+def errorbar_fk_2s(freq_k, any, any_err, c='red', label=False, flim_k=False, level=False, fmt='-'): # level=(bottom, top)
 
     fig, ax = plt.subplots()
-    ax.errorbar(freq_k, any, any_err, color='red', ecolor='black', fmt=fmt)
+    ax.errorbar(freq_k, any, any_err, color=c, ecolor='black', fmt=fmt)
     if flim_k:
         ax.set_xlim(-flim_k, flim_k)
     if level:
