@@ -138,7 +138,7 @@ def calibPrms_df(path_calibPrms):
     return calibPrms_df
 
 
-def field_from_tsmap_calib(EG):
+def field_from_tsmap_calib(EG, sn):
 
     time = EG.dims(0)
     R = EG.dims(1)
@@ -161,7 +161,7 @@ def field_from_tsmap_calib(EG):
     Bz = np.reshape(Bz, shape_tR)
     Bphi = np.reshape(Bphi, shape_tR)
 
-    Bt = nasu.getShotInfo.info()[0]
+    Bt = getShotInfo.info(sn)[0]
     coef = Bt/3
     Br = coef * Br
     Bz = coef * Bz
@@ -172,7 +172,20 @@ def field_from_tsmap_calib(EG):
     return time, R, reff, rho, B, Br, Bz, Bphi
 
 
-def field_from_tsmap_reff(EG):
+def nTB_from_tsmap_calib(EG, sn):
+
+    time, R, reff, rho, B, Br, Bz, Bphi = field_from_tsmap_calib(EG, sn)
+    time, R, reff, rho, \
+    dat_Te, err_Te, dat_ne, err_ne, \
+    dat_Tefit, err_Tefit, dat_nefit, err_nefit = tsmap_calib(EG)
+
+    return time, R, reff, rho, \
+           dat_Te, err_Te, dat_ne, err_ne, \
+           dat_Tefit, err_Tefit, dat_nefit, err_nefit, \
+           B, Br, Bz, Bphi
+
+
+def field_from_tsmap_reff(EG, sn):
 
     time = EG.dims(0)
     R = EG.dims(1)
@@ -191,6 +204,12 @@ def field_from_tsmap_reff(EG):
     Br = np.reshape(Br, shape_tR)
     Bz = np.reshape(Bz, shape_tR)
     Bphi = np.reshape(Bphi, shape_tR)
+
+    Bt = getShotInfo.info(sn)[0]
+    coef = Bt/3
+    Br = coef * Br
+    Bz = coef * Bz
+    Bphi = coef * Bphi
 
     B = np.sqrt(Br ** 2 + Bz ** 2 + Bphi ** 2)
 

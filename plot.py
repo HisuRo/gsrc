@@ -2,8 +2,11 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-sns.set_context('notebook')
-sns.set_style('ticks')
+
+def set(context, style):
+    sns.set_context(context)  # 'talk', 'paper', ...
+    sns.set_style(style)   # 'ticks', ...
+    return
 
 
 def check(duration):
@@ -30,8 +33,10 @@ def capsave(fig, fig_title, fnm, path):
     return fig
 
 
-def errorbar_single(x, y, yerr, xlabel, ylabel, xlim=False, ylim=False,
+def errorbar_single(x, y, xlabel, ylabel, yerr=False, xlim=False, ylim=False,
                     color='black', lw=1, fmt='.', label=False):
+    if not yerr:
+        yerr = [0]*len(y)
 
     fig, ax = plt.subplots()
     if label:
@@ -54,14 +59,25 @@ def errorbar_single(x, y, yerr, xlabel, ylabel, xlim=False, ylim=False,
     return fig, ax
 
 
-def errorbar_hue(li_x, li_y, li_xerr, li_yerr, li_huecolor, li_lab_hue, xlabel, ylabel, xlim=None, ylim=None, fmt='.'):
+def errorbar_hue(li_x, li_y, li_lab_hue, xlabel, ylabel, li_xerr=None, li_yerr=None, xlim=None, ylim=None, fmt='.', li_huecolor=None, figsize=(8, 4)):
 
-    fig, axs = plt.subplots()
-    for j in range(len(li_x)):
-        axs.errorbar(li_x[j], li_y[j], li_yerr[j], li_xerr[j],
-                     color='black', ecolor='grey', fmt=fmt,
-                     mfc=li_huecolor[j], mew=0.1, lw=1)
-    axs.legend(li_lab_hue)
+    if li_xerr == None:
+        li_xerr = [0]*len(li_x)
+    if li_yerr == None:
+        li_yerr = [0] * len(li_y)
+
+    fig, axs = plt.subplots(figsize=figsize)
+    if li_huecolor != None:
+        for j in range(len(li_x)):
+            axs.errorbar(li_x[j], li_y[j], li_yerr[j], li_xerr[j],
+                         color=li_huecolor[j], ecolor='grey', fmt=fmt,
+                         mfc=li_huecolor[j], mew=0.1, lw=1)
+    else:
+        for j in range(len(li_x)):
+            axs.errorbar(li_x[j], li_y[j], li_yerr[j], li_xerr[j],
+                         ecolor='grey', fmt=fmt,
+                         mew=0.1, lw=1)
+    axs.legend(li_lab_hue, bbox_to_anchor=(1.05, 1), loc='upper left')
     axs.axhline(0, color='grey', ls='--', label=None)
     axs.axvline(0, color='grey', ls='--', label=None)
     if xlim != None:
@@ -74,15 +90,16 @@ def errorbar_hue(li_x, li_y, li_xerr, li_yerr, li_huecolor, li_lab_hue, xlabel, 
     return fig, axs
 
 
-def errorbar_vert(li_x, li_y, li_yerr, xlabel, li_lab_y, xlim=False, ylims=False, color='black', lw=1, fmt='-'):
+def errorbar_vert(li_x, li_y, li_yerr, xlabel, li_lab_y, xlim=False, ylims=False, color='black', lw=1, fmt='-', includezero=False):
 
     fig, axs = plt.subplots(len(li_lab_y))
     for i in range(len(li_lab_y)):
         axs[i].errorbar(li_x[i], li_y[i], li_yerr[i],
                          color=color, ecolor='grey',
                          lw=lw, elinewidth=lw, fmt=fmt)
-        axs[i].axhline(0, color='grey', ls='--')
-        axs[i].axvline(0, color='grey', ls='--')
+        if includezero:
+            axs[i].axhline(0, color='grey', ls='--')
+            axs[i].axvline(0, color='grey', ls='--')
         if xlim:
             axs[i].set_xlim(xlim)
         if ylims:
@@ -286,6 +303,20 @@ def errorbar2_t_mul(time, huelabels, any1, any1_err, any2, any2_err, range1, ran
     fig.legend()
 
     return fig, axs
+
+
+def any_t(time, dat, datLabel, ylim=False):
+
+    tLabel = 'Time [s]'
+    fig, ax = plt.subplots()
+    ax.plot(time, dat)
+    ax.set_ylabel(datLabel)
+    ax.set_xlabel(tLabel)
+
+    if ylim:
+        ax.set_ylim(ylim)
+
+    return fig, ax
 
 
 def any2_t(time, any1, any2, range1, range2, label1, label2):

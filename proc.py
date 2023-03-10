@@ -21,6 +21,14 @@ def ifNotMake(dirPath):
         os.mkdir(dirPath)
 
 
+def getTimeIdxAndDats(time, time_at, datList):
+    idx = np.nanargmin(np.abs(time - time_at))
+    datList_at = [0]*len(datList)
+    for ii, dat in enumerate(datList):
+        datList_at[ii] = dat[idx]
+    return idx, datList_at
+
+
 def getTimeIdxsAndDats(time, startTime, endTime, datList):
     idxs = np.argwhere((time > startTime) & (time < endTime)).T[0]
     if idxs[0] > 0:
