@@ -1,6 +1,13 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
+from itertools import chain
+
+
+def maxAndMin(dat):
+    max = np.max([np.max(dat) * 1.2, 0])
+    min = np.min([np.min(dat) * 1.2, 0])
+    return max, min
 
 
 def set(context, style):
@@ -33,10 +40,8 @@ def capsave(fig, fig_title, fnm, path):
     return fig
 
 
-def errorbar_single(x, y, xlabel, ylabel, yerr=False, xlim=False, ylim=False,
+def errorbar_single(x, y, yerr, xlabel, ylabel, xlim=False, ylim=False,
                     color='black', lw=1, fmt='.', label=False):
-    if not yerr:
-        yerr = [0]*len(y)
 
     fig, ax = plt.subplots()
     if label:
@@ -47,12 +52,18 @@ def errorbar_single(x, y, xlabel, ylabel, yerr=False, xlim=False, ylim=False,
         ax.errorbar(x, y, yerr,
                     color=color, ecolor='grey',
                     lw=lw, elinewidth=lw, fmt=fmt)
-    ax.axhline(0, color='grey', ls='--')
-    ax.axvline(0, color='grey', ls='--')
+    # ax.axhline(0, color='grey', ls='--')
+    # ax.axvline(0, color='grey', ls='--')
     if xlim:
         ax.set_xlim(xlim)
+    else:
+        xmax, xmin = maxAndMin(x)
+        ax.set_xlim((xmin, xmax))
     if ylim:
         ax.set_ylim(ylim)
+    else:
+        ymax, ymin = maxAndMin(y)
+        ax.set_ylim((ymin, ymax))
     ax.set_ylabel(ylabel)
     ax.set_xlabel(xlabel)
 
@@ -163,6 +174,31 @@ def errorbar_horz_hue(li_x, li_y, li_yerr, li_huecolor, li_lw, li_lab_y, li_lab_
         if i != 0:
             axs[i].set_yticklabels([])
         axs[i].set_title(li_lab_y[i])
+
+    return fig, axs
+
+
+def errorbar_t_anyRows_hue(xList, yList, yErrList, yLabList, yHueLabList):
+    fig, axs = plt.subplots(len(xList), 1)
+    xMin = min([dat.min() for dat in list(chain.from_iterable(xList))])
+    xMax = max([dat.max() for dat in list(chain.from_iterable(xList))])
+    for ii, xDat in enumerate(xList):
+        yDat = yList[ii]
+        yErr = yErrList[ii]
+        if isinstance(yDat, list):
+            for jj, xDatDet in enumerate(xDat):
+                yDatDet = yDat[jj]
+                yErrDet = yErr[jj]
+                axs[ii].errorbar(xDatDet, yDatDet, yErrDet, fmt='.', label=yHueLabList[ii][jj])
+                axs[ii].legend()
+        else:
+            axs[ii].errorbar(xDat, yDat, yErr, fmt='.')
+        axs[ii].set_ylabel(yLabList[ii])
+        axs[ii].set_xlim(xMin, xMax)
+        if ii != (len(xList) - 1):
+            axs[ii].set_xticklabels([])
+        else:
+            axs[ii].set_xlabel('Time [s]')
 
     return fig, axs
 
@@ -305,16 +341,32 @@ def errorbar2_t_mul(time, huelabels, any1, any1_err, any2, any2_err, range1, ran
     return fig, axs
 
 
-def any_t(time, dat, datLabel, ylim=False):
+def any_t(time, dat, datLabel, ylim=False, fmt='-'):
 
     tLabel = 'Time [s]'
     fig, ax = plt.subplots()
-    ax.plot(time, dat)
+    ax.plot(time, dat, fmt)
     ax.set_ylabel(datLabel)
     ax.set_xlabel(tLabel)
 
     if ylim:
         ax.set_ylim(ylim)
+
+    return fig, ax
+
+
+def any(x, y, xLabel, yLabel, ylim=False, fmt='-'):
+
+    fig, ax = plt.subplots()
+    ax.plot(x, y, fmt)
+    ax.set_ylabel(yLabel)
+    ax.set_xlabel(xLabel)
+
+    if ylim:
+        ax.set_ylim(ylim)
+    else:
+        ymax, ymin = maxAndMin(y)
+        ax.set_ylim((ymin, ymax))
 
     return fig, ax
 

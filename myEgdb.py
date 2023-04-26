@@ -95,15 +95,26 @@ def CloseFile(zf, fp):
         fp.close()
 
 def LoadEG(diagname, sn, sub=1, flg_remove=True):
-    filepath = f'{diagname:s}@{sn:06d}_{sub:03d}.txt'
-    igetfile(diagname, sn, sub, filepath)
-    if not os.path.exists(filepath):
-        return None
+    filepath = LoadEGFile(diagname, sn, sub=1)
     eg = EG(filepath)
     if flg_remove:
         os.unlink(filepath)
     return eg
 
+
+def LoadEGFile(diagname, sn, sub=1):
+    filepath = f'{diagname:s}@{sn:06d}_{sub:03d}.txt'
+    igetfile(diagname, sn, sub, filepath)
+    if not os.path.exists(filepath):
+        return None
+    return filepath
+
+
+def LoadEGSimple(diagname, sn, sub=1):
+    os.chdir(os.path.join('C:', os.sep, 'eg', 'GUIclient2'))
+    filepath = f'{diagname:s}@{sn:06d}_{sub:03d}.txt'
+    eg = EG(filepath)
+    return eg
 
 
 #------------------------------------------------------

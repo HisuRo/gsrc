@@ -1,10 +1,71 @@
 import numpy as np
 from scipy import signal, fft, interpolate, optimize
 import gc
-from nasu import proc
+import matplotlib.pyplot as plt
+from nasu import proc, plot
+import os
+
+
+def weightedAverage_alongLastAxis(datArray, errArray):
+    datAvgs = np.average(datArray, axis=-1, weights=1. / (errArray ** 2))
+    datStds = np.sqrt(np.var(datArray, axis=-1) + np.average(errArray ** 2, axis=-1))
+    return datAvgs, datStds
+
+
+def Er_vExB_1ion(Ti, LTi, Lne, Vtor, Vpol, Btor, Bpol, Zi,
+                 Ti_er, LTi_er, Lne_er, Vtor_er, Vpol_er, Btor_er, Bpol_er):
+    # [keV, keV/m, e19m^-3, e19m^-4, km/s, km/s, T, T, -]
+
+    gradTi, gradTi_er = inverseDat_andErr(LTi, LTi_er)
+    gradne, gradne_er = inverseDat_andErr(Lne, Lne_er)
+    sumgrad = gradTi + gradne
+    sumgrad_er = sumErr([gradTi_er, gradne_er])
+    Er_gradp = Ti * sumgrad / Zi
+    Er_gradp_err = multiRer([Ti, sumgrad], [Ti_er, sumgrad_er]) * np.abs(Er_gradp)
+    VtBp = Vtor * Bpol
+    VtBp_err = multiRer([Vtor, Bpol], [Vtor_er, Bpol_er]) * np.abs(VtBp)
+    VpBt = Vpol * Btor
+    VpBt_err = multiRer([Vpol, Btor], [Vpol_er, Btor_er]) * np.abs(VpBt)
+    Er_lorenz = - (VtBp - VpBt)
+    Er_lorenz_err = sumErr([VtBp_err, VpBt_err])
+    print(f'grad p term: {Er_gradp} pm {Er_gradp_err}')
+    print(f'lorenz term: {Er_lorenz} pm {Er_lorenz_err}')
+
+    Er = Er_gradp + Er_lorenz   # [k V/m = k N/C]
+    Er_err = sumErr([Er_gradp_err, Er_lorenz_err])
+
+    vExB = Er / Btor  # [km/s]
+    vExB_err = multiRer([Er, Btor], [Er_err, Btor_er]) * np.abs(vExB)
+
+    return Er, Er_err, vExB, vExB_err   # [kV/m, km/s]
+
+
+def sumErr(errList):
+    err = np.sqrt(np.sum(np.array(errList)**2, axis=0))
+    return err
+
+
+def multiRer(datList, errList):
+    rerArray = np.array(errList) / np.array(datList)
+    rer = np.sqrt(np.sum(rerArray**2, axis=0))
+    return rer
+
+
+def inverseDat_andErr(dat, err):
+    inv = 1 / dat
+    rer = err / np.abs(dat)
+    inv_err = inv * rer
+    return inv, inv_err
+
+
+def sqrt_AndErr(x, x_err):
+    y = np.sqrt(x)
+    y_err = 0.5 / y * x_err
+    return y, y_err
 
 
 def avgByWeightHavingError(xxs, weights, weights_err):
+
     areNotNansInX = (~np.isnan(xxs)).astype(np.int8)
     areNotNansInWgt = (~np.isnan(weights)).astype(np.int8)
     xxs = np.nan_to_num(xxs) * areNotNansInWgt
@@ -13,17 +74,15 @@ def avgByWeightHavingError(xxs, weights, weights_err):
 
     Sws = np.sum(weights, axis=-1)
     Swxs = np.sum(weights * xxs, axis=-1)
-    xAvgs = Swxs / Sws
-    if Sws.size != 1:
-        Sws_ex = repeat_and_add_lastdim(Sws, weights.shape[-1])
-        Swxs_ex = repeat_and_add_lastdim(Swxs, weights.shape[-1])
-        xStErrs = np.sqrt(np.sum((Sws_ex ** 2 * xxs ** 2 + Swxs_ex ** 2) * weights_err ** 2, axis=-1)) / (Sws ** 2)
-    else:
-        xStErrs = np.sqrt(np.sum((Sws ** 2 * xxs ** 2 + Swxs ** 2) * weights_err ** 2, axis=-1)) / (Sws ** 2)
-    return xAvgs, xStErrs
+    xWAvgs = Swxs / Sws
+    xWAvgs_ex = proc.repeat_and_add_lastdim(xWAvgs, weights.shape[-1])
+    xWAvgErrs = np.sqrt(np.sum((xxs - xWAvgs_ex) ** 2 * weights_err ** 2, axis=-1)) / Sws
+
+    return xWAvgs, xWAvgErrs
 
 
 def gradRegAtInterestRhoWithErr(ReffAvg, RhoAvg, Dat, DatEr, InterestingRho, NFit, polyGrad):
+    print('Newest ver. -> calc.timeSeriesRegGradAtRhoOfInterest')
     reffIdxsForLSMAtInterest, shiftedReffsForLSMAtInterest = proc.makeReffArraysForLSMAtInterestRho(ReffAvg, RhoAvg, InterestingRho)
 
     reffsForLSMAtInterest = np.tile(shiftedReffsForLSMAtInterest[:NFit], (Dat.shape[0], 1))
@@ -39,21 +98,169 @@ def gradRegAtInterestRhoWithErr(ReffAvg, RhoAvg, Dat, DatEr, InterestingRho, NFi
     return RegDat, RegDatEr, DatGrad, DatGradEr
 
 
-def nanWeightedAvg(dat, err):
+def timeSeriesRegGradAtRhoOfInterest1d(reff1d, rho1d, dat, err, rhoOfInterest, NFit, polyGrad, fname_base=None, dir_name=None):
 
-    areNotNansInDat = (~np.isnan(dat)).astype(np.int8)
-    dat = np.nan_to_num(dat)
-    Wg = 1. / (err ** 2)
-    err = np.nan_to_num(err)
-    Wg = np.nan_to_num(Wg)
+    reffOfInterest, idxsForLSMAtInterest, shiftedReffsForLSMAtInterest = \
+        proc.makeReffArraysForLSMAtInterestRho(reff1d, rho1d, rhoOfInterest)
 
-    Avg = np.sum(Wg * dat, axis=0) / np.sum(Wg * areNotNansInDat, axis=0)
-    AvgErr = np.sum(Wg * err, axis=0) / np.sum(Wg, axis=0)
+    newShape = (len(dat), len(reff1d))
+    shiftedReffsForLSMAtInterest = np.full(newShape, shiftedReffsForLSMAtInterest)
 
-    return Avg, AvgErr
+    reffsForLSMAtInterest = shiftedReffsForLSMAtInterest[:, :NFit]
+    DatAtInterest = dat[:, idxsForLSMAtInterest][:, :NFit]
+    DatErAtInterest = err[:, idxsForLSMAtInterest][:, :NFit]
+
+    idxs_sort = proc.argsort(reffsForLSMAtInterest)
+    reffsForLSMAtInterest = reffsForLSMAtInterest[idxs_sort]
+    DatAtInterest = DatAtInterest[idxs_sort]
+    DatErAtInterest = DatErAtInterest[idxs_sort]
+
+    prms, errs, fitErr, datFit, fitCurveErrs = \
+        polyN_LSM_v2(reffsForLSMAtInterest, DatAtInterest, polyGrad, DatErAtInterest)
+    RegDat = prms[-1]
+    RegDatEr = fitErr
+    DatGrad = prms[-2]
+    DatGradEr = errs[-2]
+
+    if fname_base is not None:
+
+        figOutDir = os.path.join(dir_name, 'fig')
+        proc.ifNotMake(figOutDir)
+
+        for i in range(len(reffsForLSMAtInterest)):
+            Nrepeat = 1000
+            yNoise_set = np.random.normal(datFit[i], fitErr[i], (Nrepeat, len(datFit[i])))
+            prms, errs, sigma_y, y_hut, y_hut_errs = \
+                polyN_LSM_v2(np.full((Nrepeat, len(datFit[i])), reffsForLSMAtInterest[i]), yNoise_set, polyGrad)
+            prms_avg = np.average(prms, axis=1)
+            prms_std = np.std(prms, axis=1, ddof=1)
+            errs_avg = np.average(errs, axis=1)
+
+            print(f'dat = {prms[-1][i]:.3f} pm {errs[-1][i]:.3f}\n'
+                  f'grd = {prms[-2][i]:.3f} pm {errs[-2][i]:.3f}\n')
+            print(f'fitErr = {fitErr[i]:.3f}\n')
+            print(f'dat = {prms_avg[-1]:.3f} pm {prms_std[-1]:.3f}\n'
+                  f'grd = {prms_avg[-2]:.3f} pm {prms_std[-2]:.3f}\n')
+            print(f'daterr = {errs_avg[-1]:.3f}, grderr = {errs_avg[-2]:.3f}\n')
+            fig, ax = plt.subplots()
+            ax.errorbar(reff1d, dat[i], err[i], color='black', fmt='.', capsize=3)
+            ax.errorbar(reffsForLSMAtInterest[i] + reffOfInterest, DatAtInterest[i], DatErAtInterest[i],
+                         color='blue', fmt='.', capsize=3)
+            ax.plot(reffsForLSMAtInterest[i] + reffOfInterest, datFit[i], color='red')
+            ax.errorbar(reffOfInterest, RegDat[i], RegDatEr[i], color='red', capsize=5)
+            ax.fill_between(reffsForLSMAtInterest[i] + reffOfInterest, datFit[i] - fitCurveErrs[i],
+                             datFit[i] + fitCurveErrs[i],
+                             color='green', alpha=0.3)
+            idxs_center = np.nanargmin(np.abs(reff1d))
+            max = dat[i][idxs_center] + 0.5
+            ax.set_ylim(0, max)
+            ax.set_xlim(0, np.nanmax(reff1d))
+            fnm = f'{fname_base}_{i}.png'
+            plot.capsave(fig, '', fnm, os.path.join(figOutDir, fnm))
+            plot.check(0.1)
+
+    return reffOfInterest, RegDat, RegDatEr, DatGrad, DatGradEr
+
+
+def timeSeriesRegGradAtRhoOfInterest(reff2d, rho2d, dat, err, rhoOfInterest, NFit, polyGrad, fname_base=None, dir_name=None):
+
+    reffsOfInterest, idxsForLSMAtInterest, shiftedReffsForLSMAtInterest = \
+        proc.makeReffsForLSMAtRhoOfInterest2d(reff2d, rho2d, rhoOfInterest)
+
+    reffsForLSMAtInterest = shiftedReffsForLSMAtInterest[:, :NFit]
+    DatAtInterest = dat[idxsForLSMAtInterest][:, :NFit]
+    DatErAtInterest = err[idxsForLSMAtInterest][:, :NFit]
+
+    idxs_sort = proc.argsort(reffsForLSMAtInterest)
+    reffsForLSMAtInterest = reffsForLSMAtInterest[idxs_sort]
+    DatAtInterest = DatAtInterest[idxs_sort]
+    DatErAtInterest = DatErAtInterest[idxs_sort]
+
+    prms, errs, fitErr, datFit, fitCurveErrs = \
+        polyN_LSM_v2(reffsForLSMAtInterest, DatAtInterest, polyGrad, DatErAtInterest)
+    RegDat = prms[-1]
+    RegDatEr = fitErr
+    DatGrad = prms[-2]
+    DatGradEr = errs[-2]
+
+    if fname_base is not None:
+
+        figOutDir = os.path.join(dir_name, 'fig')
+        proc.ifNotMake(figOutDir)
+
+        for i in range(len(reffsForLSMAtInterest)):
+            Nrepeat = 1000
+            yNoise_set = np.random.normal(datFit[i], fitErr[i], (Nrepeat, len(datFit[i])))
+            prmsSamp, errsSamp, sigma_y, y_hut, y_hut_errs = \
+                polyN_LSM_v2(np.full((Nrepeat, len(datFit[i])), reffsForLSMAtInterest[i]), yNoise_set, polyGrad)
+            prms_avg = np.average(prmsSamp, axis=-1)
+            prms_std = np.std(prmsSamp, axis=-1, ddof=1)
+            errs_avg = np.average(errsSamp, axis=-1)
+
+            print(i)
+            print(f'dat = {prms[-1][i]:.3f} pm {errs[-1][i]:.3f}\n'
+                  f'grd = {prms[-2][i]:.3f} pm {errs[-2][i]:.3f}\n')
+            print(f'fitErr = {fitErr[i]:.3f}\n')
+            print(f'dat = {prms_avg[-1]:.3f} pm {prms_std[-1]:.3f}\n'
+                  f'grd = {prms_avg[-2]:.3f} pm {prms_std[-2]:.3f}\n')
+            print(f'daterr = {errs_avg[-1]:.3f}, grderr = {errs_avg[-2]:.3f}\n')
+            fig, ax = plt.subplots()
+            ax.errorbar(reff2d[i], dat[i], err[i], color='black', fmt='.', capsize=3)
+            ax.errorbar(reffsForLSMAtInterest[i] + reffsOfInterest[i], DatAtInterest[i], DatErAtInterest[i],
+                         color='blue', fmt='.', capsize=3)
+            ax.plot(reffsForLSMAtInterest[i] + reffsOfInterest[i], datFit[i], color='red')
+            ax.errorbar(reffsOfInterest[i], RegDat[i], RegDatEr[i], color='red', capsize=5)
+            ax.fill_between(reffsForLSMAtInterest[i] + reffsOfInterest[i], datFit[i] - fitCurveErrs[i],
+                             datFit[i] + fitCurveErrs[i],
+                             color='green', alpha=0.3)
+            # idxs_center = np.nanargmin(np.abs(reff2d[i]))
+            # max = dat[i][idxs_center] + 0.5
+            max = np.nanmax(dat[i]) * 1.2
+            min = np.nanmin(dat[i]) * 1.2
+            ax.set_ylim(np.min([0, min]), np.max([0, max]))
+            ax.set_xlim(0, np.nanmax(reff2d))
+            fnm = f'{fname_base}_{i}.png'
+            plot.capsave(fig, '', fnm, os.path.join(figOutDir, fnm))
+            plot.check(0.1)
+
+    return reffsOfInterest, RegDat, RegDatEr, DatGrad, DatGradEr
+
+
+# def nanWeightedAvg(dat, err):
+#
+#     areNotNansInDat = (~np.isnan(dat)).astype(np.int8)
+#     dat = np.nan_to_num(dat)
+#     Wg = 1. / (err ** 2)
+#     err = np.nan_to_num(err)
+#     Wg = np.nan_to_num(Wg)
+#
+#     Avg = np.sum(Wg * dat, axis=0) / np.sum(Wg * areNotNansInDat, axis=0)
+#     AvgErr = np.sum(Wg * err, axis=0) / np.sum(Wg, axis=0)
+#
+#     return Avg, AvgErr
+
+
+def timeAverageProfiles(dat2d, err=np.array([False])):
+    if err.all():
+        idxs_isnanInDat2d = np.isnan(dat2d)
+        idxs_isnanInErr = np.isnan(err)
+        idxs_isnan = idxs_isnanInErr + idxs_isnanInDat2d
+        dat2d[idxs_isnan] = np.nan
+        err[idxs_isnan] = np.nan
+
+        avg = np.nanmean(dat2d, axis=0)
+        std = np.sqrt(np.nanvar(dat2d, axis=0) + np.nanmean(err ** 2, axis=0))
+    else:
+        avg = np.nanmean(dat2d, axis=0)
+        std = np.nanstd(dat2d, axis=0, ddof=1)
+
+    return avg, std
 
 
 def timeAverageDatByRefs(timeDat, dat, err, timeRef):
+
+    proc.suggestNewVer(2, 'timeAverageDatByRefs')
+
     dtDat = timeDat[1] - timeDat[0]
     dtRef = timeRef[1] - timeRef[0]
     dNDatRef = int(dtRef / dtDat + 0.5)
@@ -63,12 +270,12 @@ def timeAverageDatByRefs(timeDat, dat, err, timeRef):
     datAtRef = dat[idxDatAtRef]
     errAtRef = err[idxDatAtRef]
     dat_Ref = np.nanmean(datAtRef, axis=1)
-    err_Ref = np.sqrt(np.nanvar(datAtRef, axis=1, ddof=1) + np.nanmean(errAtRef ** 2, axis=1))
+    err_Ref = np.sqrt(np.nanvar(datAtRef, axis=1) + np.nanmean(errAtRef ** 2, axis=1))
 
     return dat_Ref, err_Ref
 
 
-def timeAverageDatByRefs_v2(timeDat, dat, timeRef, err=False):
+def timeAverageDatByRefs_v2(timeDat, dat, timeRef, err=np.array([False])):
     dtDat = timeDat[1] - timeDat[0]
     dtRef = timeRef[1] - timeRef[0]
     dNDatRef = int(dtRef / dtDat + 0.5)
@@ -78,13 +285,30 @@ def timeAverageDatByRefs_v2(timeDat, dat, timeRef, err=False):
     datAtRef = dat[idxDatAtRef]
     dat_Ref = np.nanmean(datAtRef, axis=1)
     
-    if err:
+    if err.all():
         errAtRef = err[idxDatAtRef]
-        err_Ref = np.sqrt(np.nanvar(datAtRef, axis=1, ddof=1) + np.nanmean(errAtRef ** 2, axis=1))
+        err_Ref = np.sqrt(np.nanvar(datAtRef, axis=1) + np.nanmean(errAtRef ** 2, axis=1))
     else:
         err_Ref = np.nanstd(datAtRef, axis=1, ddof=1)
 
     return dat_Ref, err_Ref
+
+
+def timeAverageDatListByRefs(timeDat, datList, timeRef, errList=None):
+
+    datRefList = [0] * len(datList)
+    errRefList = [0] * len(datList)
+
+    for ii, dat in enumerate(datList):
+        if errList is None:
+            datRef, errRef = timeAverageDatByRefs_v2(timeDat, dat, timeRef)
+        else:
+            err = errList[ii]
+            datRef, errRef = timeAverageDatByRefs_v2(timeDat, dat, timeRef, err)
+        datRefList[ii] = datRef
+        errRefList[ii] = errRef
+
+    return datRefList, errRefList
 
 
 def dB(spec, spec_err):
@@ -452,6 +676,8 @@ def power_spectrogram_1s(ti, xx, dt, NFFT, window, NEns, NOV):
 
 def power_spectrogram_2s(ti, xx, dt, NFFT, window, NEns, NOV):
 
+    proc.suggestNewVer(2)
+
     print(f'Overlap ratio: {NOV/NFFT*100:.0f}%\n')
 
     Nsamp = NEns * NFFT - (NEns - 1) * NOV
@@ -500,6 +726,59 @@ def power_spectrogram_2s(ti, xx, dt, NFFT, window, NEns, NOV):
           f'@{tisp[0]:.3f}+-{0.5 * dtisp:.3f} s')
 
     return tisp, freq, psd, psd_err
+
+
+def power_spectrogram_2s_v2(ti, xx, dt, NFFT, window, NEns, NOV):
+
+    print(f'Overlap ratio: {NOV / NFFT * 100:.0f}%\n')
+
+    Nsamp = NEns * NFFT - (NEns - 1) * NOV
+    Nsp = int(len(ti) / Nsamp + 0.5)
+
+    if len(xx) % Nsamp != 0 or len(ti) % Nsamp != 0 or len(xx) != len(ti):
+        print('The number of data points is improper. \n')
+        exit()
+    else:
+        print(f'The number of samples a spectrum: {Nsamp:d}')
+        print(f'The number of spectra: {Nsp:d}\n')
+
+    if NOV != 0:
+        tmp = (np.reshape(np.arange(NEns * NFFT), (NEns, NFFT)).T - np.arange(0, NEns * NOV, NOV)).T
+    else:
+        tmp = np.reshape(np.arange(NEns * NFFT), (NEns, NFFT))
+    idxs = np.transpose(np.tile(tmp, (Nsp, 1, 1)).T + np.arange(0, Nsp * Nsamp, Nsamp))
+
+    dtisp = Nsamp * dt
+    tisp = ti[idxs.T[0][0]] + 0.5 * dtisp
+    xens = xx[idxs]
+
+    win = signal.get_window(window, NFFT)
+    enbw = NFFT * np.sum(win ** 2) / (np.sum(win) ** 2)
+    CG = np.abs(np.sum(win)) / NFFT
+
+    CV = CV_overlap(NFFT, NEns, NOV)
+
+    freq = fft.fftshift(fft.fftfreq(NFFT, dt))
+
+    fft_x = fft.fftshift(fft.fft(xens * win), axes=2)
+
+    p_xx = np.real(fft_x * fft_x.conj())
+    p_xx_ave = np.mean(p_xx, axis=1)
+    p_xx_std = np.std(p_xx, axis=1, ddof=1)
+    p_xx_rerr = p_xx_std / np.abs(p_xx_ave) * CV
+
+    Fs = 1. / dt
+    psd = p_xx_ave / (Fs * NFFT * enbw * (CG ** 2))
+    psd_std = p_xx_std / (Fs * NFFT * enbw * (CG ** 2))
+    psd_err = np.abs(psd) * p_xx_rerr
+
+    dfreq = 1. / (NFFT * dt)
+    print(f'Power: Time average of x(t)^2 = {np.sum(np.abs(xx[0:Nsamp]) ** 2) / Nsamp:.6f} V^2 '
+          f'@{tisp[0]:.3f}+-{0.5 * dtisp:.3f} s')
+    print(f'Power: Integral of P(f)       = {np.sum(psd[0] * dfreq):.6f} V^2 '
+          f'@{tisp[0]:.3f}+-{0.5 * dtisp:.3f} s')
+
+    return tisp, freq, psd, psd_std, psd_err
 
 
 def cross_cor(sig, ref, dt):
@@ -880,12 +1159,14 @@ def poly2_LSM(x, y, y_err):
 
 def polyN_LSM(x, y, y_err, polyN):
 
+    proc.suggestNewVer(2)
+
     if x.shape != y.shape:
         print('Improper data shape')
         exit()
 
     Nfit = x.shape[-1]
-    otherNs_array = np.array(x.shape[:-1])
+    otherNs_array = np.array(x.shape[:-1]).astype(int)
     others_ndim = otherNs_array.size
 
     weight = 1./(y_err**2)
@@ -919,6 +1200,84 @@ def polyN_LSM(x, y, y_err, polyN):
     errs = np.transpose(errs, axes=tuple(np.concatenate([others_ndim, np.arange(others_ndim)], axis=None)))
 
     return prms, errs
+
+
+def polyN_LSM_v2(xx, yy, polyN, yErr=np.array([False])):
+
+    if xx.shape != yy.shape:
+        print('Improper data shape')
+        exit()
+
+    Nfit = xx.shape[-1]
+    otherNs_array = np.array(xx.shape[:-1]).astype(int)
+    others_ndim = otherNs_array.size
+
+    xN0 = np.array([xx ** (polyN - ii) for ii in range(polyN + 1)])
+    XT = np.transpose(xN0, axes=tuple(np.append((np.arange(others_ndim) + 1), [0, others_ndim + 1])))
+    XX = transposeLast2Dims(XT)
+
+    XTX = np.matmul(XT, XX)
+    XTXinv = np.linalg.inv(XTX)
+
+    y_vec = turnLastDimToColumnVector(yy)
+
+    if not yErr.all():
+
+        prms_vec = np.matmul(XTXinv, np.matmul(XT, y_vec))
+        yHut_vec = np.matmul(XX, prms_vec)
+        yHut = turnLastColumnVectorToDim(yHut_vec)
+        sigma_y = np.sqrt(np.sum((yy - yHut)**2, axis=-1)/ (Nfit - (polyN + 1)))
+
+    else:
+
+        weight = 1./(yErr**2)
+
+        wX = XX * proc.repeat_and_add_lastdim(weight, polyN + 1)
+        wXT = transposeLast2Dims(wX)
+        wXTX = np.matmul(XT, wX)
+        wXTXinv = np.linalg.inv(wXTX)
+
+        prms_vec = np.matmul(wXTXinv, np.matmul(wXT, y_vec))
+        yHut_vec = np.matmul(XX, prms_vec)
+
+        yHut = turnLastColumnVectorToDim(yHut_vec)
+
+        sigma_y = np.sqrt(np.sum(yErr ** 2 + (yy - yHut) ** 2, axis=-1) / Nfit)
+
+    errs = np.sqrt(np.diagonal(XTXinv, axis1=-2, axis2=-1)) * repeat_and_add_lastdim(sigma_y, polyN + 1)
+    prms = turnLastColumnVectorToDim(prms_vec)
+    yHutErr = np.sqrt(np.diagonal(np.matmul(np.matmul(XX, XTXinv), XT), axis1=-2, axis2=-1)) * repeat_and_add_lastdim(sigma_y, Nfit)
+
+    prms = np.transpose(prms, axes=tuple(np.concatenate([others_ndim, np.arange(others_ndim)], axis=None)))
+    errs = np.transpose(errs, axes=tuple(np.concatenate([others_ndim, np.arange(others_ndim)], axis=None)))
+
+    return prms, errs, sigma_y, yHut, yHutErr
+
+
+def transposeLast2Dims(ndarray):
+
+    N_otherDim = np.array(ndarray.shape[:-2]).astype(int).size
+    ndarrayT = np.transpose(ndarray, axes=tuple(np.append(np.arange(N_otherDim), [N_otherDim + 1, N_otherDim])))
+
+    return ndarrayT
+
+
+def turnLastDimToColumnVector(array):
+
+    temp = list(array.shape)
+    temp.append(1)
+    newShape = tuple(temp)
+
+    return np.reshape(array, newShape)
+
+
+def turnLastColumnVectorToDim(array):
+
+    temp = list(array.shape)
+    temp = temp[:-1]
+    newShape = tuple(temp)
+
+    return np.reshape(array, newShape)
 
 
 def gauss_LS(x, y, y_err):
@@ -1021,7 +1380,7 @@ def make_idxs_for_MovingLSM(data_len, window_len):
 def gradient_reg_reff(reff, dat, err, Nfit):
 
     Nt, NR = reff.shape
-    idxs_calc = make_idxs_for_moving_LSM(NR, Nfit)
+    idxs_calc = make_idxs_for_MovingLSM(NR, Nfit)
     # Rcal = R[idxs_calc]
     reffcal = reff[:, idxs_calc]
     # rhocal = rho[:, idxs_calc]
@@ -1047,11 +1406,13 @@ def gradient_reg_reff(reff, dat, err, Nfit):
 
 
 def repeat_and_add_lastdim(Array, Nrepeat):
-    tmp = tuple(np.concatenate([np.array(Array.shape), 1], axis=None))
+    tmp = tuple(np.concatenate([np.array(Array.shape), 1], axis=None).astype(int))
     return np.repeat(np.reshape(Array, tmp), Nrepeat, axis=-1)
 
 
 def make_fitted_profiles_with_MovingPolyLSM(reff, raw_profiles, profiles_errs, window_len, poly=2):
+
+    print(proc.suggestNewVer(2, 'make_fitted_profiles_with_MovingPolyLSM'))
 
     if reff.shape != raw_profiles.shape:
         print('Improper data shape')
@@ -1097,6 +1458,30 @@ def make_fitted_profiles_with_MovingPolyLSM(reff, raw_profiles, profiles_errs, w
         exit()
 
     return reff_avgs, fitted_profiles, fitted_profiles_errs, fitted_profs_gradients, fitted_profs_grads_errs
+
+
+def make_fitted_profiles_with_MovingPolyLSM_v2(reff, raw_profiles, profiles_errs, window_len, poly=1):
+
+    if reff.shape != raw_profiles.shape:
+        print('Improper data shape')
+        exit()
+    idxs_for_Moving = make_idxs_for_MovingLSM(reff.shape[-1], window_len)
+    output_profiles_count = idxs_for_Moving.shape[0]
+
+    reff_for_Moving = reff[:, idxs_for_Moving]
+    reff_cent = np.nanmean(reff_for_Moving, axis=-1)
+    reff_for_fitting = reff_for_Moving - repeat_and_add_lastdim(reff_cent, window_len)
+    profiles_for_fitting = raw_profiles[:, idxs_for_Moving]
+    profiles_errs_for_fitting = profiles_errs[:, idxs_for_Moving]
+
+    popt, perr, sigma_y, yHut, yHutErr = \
+        polyN_LSM_v2(reff_for_fitting, profiles_for_fitting, poly, profiles_errs_for_fitting)
+    fitted_profs_gradients = popt[-2]
+    fitted_profiles = popt[-1]
+    fitted_profs_grads_errs = perr[-2]
+    fitted_profiles_errs = sigma_y
+
+    return reff_cent, fitted_profiles, fitted_profiles_errs, fitted_profs_gradients, fitted_profs_grads_errs
 
 
 def make_radialAxes_for_MovingPolyLSM(reff, window_len):
@@ -1160,7 +1545,35 @@ def make_fitted_profiles_with_MovingPolyLSM_1d(reff, raw_profiles, profiles_errs
     return reff_avgs, fitted_profiles, fitted_profiles_errs, fitted_profs_gradients, fitted_profs_grads_errs
 
 
+def linInterp1dOf2dDat(x2d, y1d, x2d_ref):
+
+    Nt, Ny = x2d.shape
+    Nt_ref, Ny_ref = x2d_ref.shape
+    if Nt != Nt_ref:
+        print('Error: Nt != Ntf')
+        exit()
+
+    x2d_ext = np.repeat(np.reshape(x2d, (Nt, 1, Ny)), Ny_ref, axis=1)  # (Nt, Ny_ref, Ny)
+    x2d_ref_ext = np.repeat(np.reshape(x2d_ref, (Nt, Ny_ref, 1)), Ny, axis=2)  # (Nt, Ny_ref, Ny)
+
+    dx2d = x2d_ref_ext - x2d_ext
+    idxs1 = np.nanargmin(np.where(dx2d <= 0, np.nan, dx2d), axis=-1)
+    idxs2 = np.nanargmax(np.where(dx2d >= 0, np.nan, dx2d), axis=-1)
+
+    y1 = y1d[idxs1]
+    y2 = y1d[idxs2]
+    idxs_t = np.tile(np.reshape(np.arange(Nt), (Nt, 1)), (1, Ny_ref))
+    x1 = x2d[idxs_t, idxs1]
+    x2 = x2d[idxs_t, idxs2]
+
+    y2d_ref = (y2 - y1) / (x2 - x1) * (x2d_ref - x1) + y1
+
+    return y2d_ref
+
+
 def gradient_reg(R, reff, a99, dat, err, Nfit, poly):
+
+    proc.suggestNewVer(2, 'gradient_reg')
 
     notNanIdxs = np.argwhere(~np.isnan(dat).all(axis=1)).T[0]
     reff_c = reff[notNanIdxs]
@@ -1175,20 +1588,7 @@ def gradient_reg(R, reff, a99, dat, err, Nfit, poly):
     reff_f_c, dat_reg_c, err_reg_c, dat_grad_c, err_grad_c = make_fitted_profiles_with_MovingPolyLSM(reff_c, dat_c, err_c, Nfit, poly=poly)
     reff_f = make_radialAxes_for_MovingPolyLSM(reff, Nfit)
 
-    reff_ext = np.repeat(np.reshape(reff, (Nt, 1, NR)), NRf, axis=1)  # (Nt, NRf, NR)
-    reff_f_ext = np.repeat(np.reshape(reff_f, (Nt, NRf, 1)), NR, axis=2)  # (Nt, NRf, NR)
-
-    dreff = reff_f_ext - reff_ext
-    idxs1 = np.nanargmin(np.where(dreff <= 0, np.nan, dreff), axis=-1)
-    idxs2 = np.nanargmax(np.where(dreff >= 0, np.nan, dreff), axis=-1)
-
-    R1 = R[idxs1]
-    R2 = R[idxs2]
-    idxs_t = np.tile(np.reshape(np.arange(Nt), (Nt, 1)), (1, NRf))
-    reff1 = reff[idxs_t, idxs1]
-    reff2 = reff[idxs_t, idxs2]
-
-    R_f = (R2 - R1) / (reff2 - reff1) * (reff_f - reff1) + R1
+    R_f = linInterp1dOf2dDat(reff, R, reff_f)
 
     dat_reg = np.full((Nt, NRf), np.nan)
     dat_reg[notNanIdxs] = dat_reg_c
@@ -1199,6 +1599,21 @@ def gradient_reg(R, reff, a99, dat, err, Nfit, poly):
     err_grad = np.full((Nt, NRf), np.nan)
     err_grad[notNanIdxs] = err_grad_c
 
+    a99 = np.repeat(np.reshape(a99, (Nt, 1)), NRf, axis=-1)
+    rho_f = reff_f / a99
+
+    return R_f, reff_f, rho_f, dat_grad, err_grad, dat_reg, err_reg
+
+
+def gradient_reg_v2(R, reff, a99, dat, err, Nfit, poly):
+
+    Nt, NR = reff.shape
+    NRf = NR - Nfit + 1
+
+    reff_f, dat_reg, err_reg, dat_grad, err_grad = \
+        make_fitted_profiles_with_MovingPolyLSM_v2(reff, dat, err, Nfit, poly=poly)
+
+    R_f = linInterp1dOf2dDat(reff, R, reff_f)
     a99 = np.repeat(np.reshape(a99, (Nt, 1)), NRf, axis=-1)
     rho_f = reff_f / a99
 

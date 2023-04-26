@@ -4,16 +4,94 @@ from scipy import signal, fft
 import os
 
 import gc
+from nasu import calc
+import copy
+
+
+def deepCopy_list_multiply(list_ref, N_list):
+    return [copy.deepcopy(list_ref) for i in range(N_list)]
+
+
+def alternately_arrange_dat_and_err(dat_list, err_list):
+    array = np.array([dat_list, err_list]).transpose((2, 0, 1))
+    array = array.reshape(array.shape[0] * array.shape[1], array.shape[2])
+    return array
+
+
+def check_shapes(arr_list):
+    # 最初のndarrayのshapeを取得します
+    shape = arr_list[0].shape
+
+    # リスト内のすべてのndarrayのshapeが等しいかどうかを確認します
+    for arr in arr_list:
+        if arr.shape != shape:
+            return False
+    return True
+
+
+def notNanInDat2d(dat2dList, axis):
+    isNanList = [0] * len(dat2dList)
+
+    if not check_shapes(dat2dList):
+        print('if not check_shapes(dat2dList)')
+        exit()
+
+    for ii, dat2d in enumerate(dat2dList):
+        isNan = np.isnan(dat2d).any(axis=axis)
+        isNanList[ii] = isNan
+    isNotNan = np.logical_not(np.logical_or.reduce(isNanList))
+    dat2dOutList = [0] * len(dat2dList)
+    if axis == 0:
+        for ii, dat2d in enumerate(dat2dList):
+            dat2dOutList[ii] = dat2d[:, isNotNan]
+    if axis == 1:
+        for ii, dat2d in enumerate(dat2dList):
+            dat2dOutList[ii] = dat2d[isNotNan]
+
+    return isNotNan, dat2dOutList
+
+
+def suggestNewVer(version, fname):
+
+    print(f'There is ver. {version:d} on {fname:s} !!!!\n')
+    input('Push enter to continue >>> ')
+
+    return
 
 
 def makeReffArraysForLSMAtInterestRho(reff1d, rho1d, InterestingRho):
+
     InterestingReff = interp1d(rho1d, reff1d)(InterestingRho)
 
     shiftedReff = reff1d - InterestingReff
     reffIdxsForLSMAtInterest = np.argsort(np.abs(shiftedReff))
     shiftedReffsForLSMAtInterest = shiftedReff[reffIdxsForLSMAtInterest]
 
-    return reffIdxsForLSMAtInterest, shiftedReffsForLSMAtInterest
+    return InterestingReff, reffIdxsForLSMAtInterest, shiftedReffsForLSMAtInterest
+
+
+def makeReffsForLSMAtRhoOfInterest2d(reff2d, rho2d, rhoOfInterest):
+
+    reffsOfInterest = np.zeros(len(rho2d))
+    for i in range(len(rho2d)):
+        reffOfInterest = interp1d(rho2d[i], reff2d[i])(rhoOfInterest)
+        reffsOfInterest[i] = reffOfInterest
+    shiftedReffs = reff2d - repeat_and_add_lastdim(reffsOfInterest, len(rho2d[0]))
+    idxsForLSMAtInterest = argsort(np.abs(shiftedReffs))
+    shiftedReffsForLSMAtInterest = shiftedReffs[idxsForLSMAtInterest[0], idxsForLSMAtInterest[1]]
+
+    return reffsOfInterest, idxsForLSMAtInterest, shiftedReffsForLSMAtInterest
+
+
+def argsort(array2d):
+    idxs_right = np.argsort(array2d)
+    idxs_left = repeat_and_add_lastdim(np.arange(len(array2d)).T, len(array2d[0]))
+    return (idxs_left, idxs_right)
+
+
+def repeat_and_add_lastdim(Array, Nrepeat):
+    tmp = tuple(np.concatenate([np.array(Array.shape), 1], axis=None).astype(int))
+    return np.repeat(np.reshape(Array, tmp), Nrepeat, axis=-1)
 
 
 def ifNotMake(dirPath):
@@ -30,7 +108,7 @@ def getTimeIdxAndDats(time, time_at, datList):
 
 
 def getTimeIdxsAndDats(time, startTime, endTime, datList):
-    idxs = np.argwhere((time > startTime) & (time < endTime)).T[0]
+    idxs = np.argwhere((time >= startTime) & (time <= endTime)).T[0]
     if idxs[0] > 0:
         idxs = np.insert(idxs, 0, idxs[0] - 1)
     if idxs[-1] < len(time) - 1:
@@ -38,6 +116,17 @@ def getTimeIdxsAndDats(time, startTime, endTime, datList):
     for ii, dat in enumerate(datList):
         datList[ii] = dat[idxs]
     return idxs, datList
+
+
+def getXIdxsAndYs(xx, x_start, x_end, Ys_list):
+    idxs = np.argwhere((xx >= x_start) & (xx <= x_end)).T[0]
+    if idxs[0] > 0:
+        idxs = np.insert(idxs, 0, idxs[0] - 1)
+    if idxs[-1] < len(xx) - 1:
+        idxs = np.append(idxs, idxs[-1] + 1)
+    for ii, dat in enumerate(Ys_list):
+        Ys_list[ii] = dat[idxs]
+    return idxs, Ys_list
 
 
 def findIndex(point, array1d):
@@ -106,6 +195,18 @@ def interpolate1d(time, val, err, t_ref):
     return val_intp, err_intp
 
 
+def refPrevTime(time, val, err, t_ref):
+
+    ft = interp1d(time, time, kind='zero', bounds_error=False, fill_value=np.nan)
+    f = interp1d(time, val, kind='zero', bounds_error=False, fill_value=np.nan)
+    fer = interp1d(time, err, kind='zero', bounds_error=False, fill_value=np.nan)
+    tim_intp = ft(t_ref)
+    val_intp = f(t_ref)
+    err_intp = fer(t_ref)
+
+    return tim_intp, val_intp, err_intp
+
+
 def adjustVt_comb2(ch, sn, Vt0):
 
     Vt = 0
@@ -153,3 +254,11 @@ def outlier_Sk(dat_Sk, diag, chIQ, path_mod, time_nb, dat_nb5a, time_fDSk):
         dat_Sk[idx_del] = np.nan
 
     return dat_Sk
+
+
+def datAtRhoByTimeVariatingRho(rho2d, dat2d, rho_at):
+    datAtRho = [0]*len(rho2d)
+    for i in range(len(rho2d)):
+        datAtRho[i] = interp1d(rho2d[i], dat2d[i])(rho_at)
+    datAtRho = np.array(datAtRho)
+    return datAtRho

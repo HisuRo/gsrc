@@ -5,7 +5,8 @@ import os
 from parse import parse
 from nasu.myEgdb import LoadEG
 import nasu.LHDRetrieve as LHDR
-from nasu import getShotInfo
+from nasu import getShotInfo, proc
+import inspect
 
 
 def inputSnOnTerminal():
@@ -206,7 +207,7 @@ def field_from_tsmap_reff(EG, sn):
     Bphi = np.reshape(Bphi, shape_tR)
 
     Bt = getShotInfo.info(sn)[0]
-    coef = Bt/3
+    coef = np.abs(Bt/3)
     Br = coef * Br
     Bz = coef * Bz
     Bphi = coef * Bphi
@@ -260,6 +261,8 @@ def tsmap_calib(EG):
 
 
 def cxsmap7(EG):
+
+    proc.suggestNewVer(1, 'cxsmap7')
 
     time = EG.dims(0)
     R = EG.dims(1)
@@ -617,6 +620,8 @@ def input_FFT(inputFFTfile):
 
 def input_fDSk(inputFFTfile):
 
+    proc.suggestNewVer(2, 'input_fDSk')
+
     inputFFT_df = pd.read_csv(inputFFTfile, header=None, index_col=0)
     fdelDopp_k_L = int(inputFFT_df.at['fdelk_L', 1])
     fdelDopp_k_H = int(inputFFT_df.at['fdelk_H', 1])
@@ -626,6 +631,21 @@ def input_fDSk(inputFFTfile):
     frangeSk_k = (fForSk_k_L, fForSk_k_H)
 
     return frangefD_k, frangeSk_k
+
+
+def input_fDSk_v2(inputFFTfile):
+
+    inputFFT_df = pd.read_csv(inputFFTfile, header=None, index_col=0)
+    fdelDopp_k_L = int(inputFFT_df.at['fdelk_L', 1])
+    fdelDopp_k_H = int(inputFFT_df.at['fdelk_H', 1])
+    fForSk_k_L = int(inputFFT_df.at['fForSk_k_L', 1])
+    fForSk_k_H = int(inputFFT_df.at['fForSk_k_H', 1])
+    SkCoefPow = int(inputFFT_df.at['SkCoefPow', 1])
+    SkCoef = 10**SkCoefPow
+    frangefD_k = (fdelDopp_k_L, fdelDopp_k_H)
+    frangeSk_k = (fForSk_k_L, fForSk_k_H)
+
+    return frangefD_k, frangeSk_k, SkCoef
 
 
 def input_specrange(inputfile):
@@ -839,6 +859,9 @@ def nb_local(sn, tstart_out, tend_out):
 
 def fDSk_local(sn, tstart, tend, diag, chIQ, dT, Nfft_pw, window, Nens, OVR, frangefD_k, frangeSk_k,
                sw_BSmod, sw_nb5mod, tstart_out=False, tend_out=False):
+
+    proc.suggestNewVer(2, 'fDSk_local')
+
     if tstart_out == False:
         tstart_out = tstart
     if tend_out == False:
@@ -894,6 +917,62 @@ def fDSk_local(sn, tstart, tend, diag, chIQ, dT, Nfft_pw, window, Nens, OVR, fra
 
     return time_fDSk, dat_Ia, err_Ia, dat_fD, err_fD
 
+def fDSk_local_v2(sn, tstart, tend, diag, chIQ, dT, Nfft_pw, window, Nens, OVR, frangefD_k, frangeSk_k,
+                  sw_BSmod, sw_nb5mod, tstart_out=False, tend_out=False):
+    if tstart_out == False:
+        tstart_out = tstart
+    if tend_out == False:
+        tend_out = tend
+
+    dir_fDSk = os.path.join(dirs()[1], '02-PowerSpecfDSk')
+    fnm_fDSk = f'#{sn:d}_{tstart:g}-{tend:g}s_' \
+               f'{diag:s}_{chIQ[0]:d}_{chIQ[1]:d}_' \
+               f'{dT:s}_2^{Nfft_pw:d}_{window:s}_{Nens:g}_{OVR:g}_' \
+               f'fD={frangefD_k[0]:d}-{frangefD_k[1]:d}kHz_Sk={frangeSk_k[0]:d}-{frangeSk_k[1]:d}kHz.csv'
+    path_fDSk = os.path.join(dir_fDSk, 'csvfDSk', fnm_fDSk)
+
+    if os.path.isfile(path_fDSk):
+        fDSk = np.loadtxt(path_fDSk, delimiter=',').T
+        time_fDSk = fDSk[0]
+        idxs_use_fDSk = np.where((time_fDSk >= tstart_out) & (time_fDSk <= tend_out))
+        dat_Sk, err_Sk = fDSk[5:7]
+        dat_Ia, err_Ia = fDSk[11:13]
+        dat_fD, err_fD = fDSk[3:5]
+
+        if sw_BSmod == 1:
+            dir_mod = os.path.join(dirs()[1], '03-BSmod')
+            fnm_mod = f'#{sn:d}_{tstart:g}-{tend:g}s_2^{Nfft_pw:d}_{Nens:d}_{dT:s}.csv'
+            path_mod = os.path.join(dir_mod, 'csv', fnm_mod)
+            BSmod = np.loadtxt(path_mod, delimiter=',').T
+            time_mod, dat_mod = BSmod
+            idx_del = np.where(dat_mod < 0.75)[0]
+            dat_Sk[idx_del] = np.nan
+            err_Sk[idx_del] = np.nan
+            dat_Ia[idx_del] = np.nan
+            err_Ia[idx_del] = np.nan
+        elif sw_nb5mod == 1:
+            time_nb, dat_nb1, dat_nb2, dat_nb3, dat_nb4a, dat_nb5a = nb_local(sn, tstart, tend)
+            dat_nb5a_fDSk = interp1d(time_nb, dat_nb5a)(time_fDSk)
+            dat_diff_nb5a = np.diff(dat_nb5a_fDSk)
+            idx_del = np.where(dat_diff_nb5a < -0.5)[0]
+            dat_Sk[idx_del] = np.nan
+            err_Sk[idx_del] = np.nan
+            dat_Ia[idx_del] = np.nan
+            err_Ia[idx_del] = np.nan
+
+        time_fDSk = time_fDSk[idxs_use_fDSk]
+        dat_Sk = dat_Sk[idxs_use_fDSk]
+        err_Sk = err_Sk[idxs_use_fDSk]
+        dat_Ia = dat_Ia[idxs_use_fDSk]
+        err_Ia = err_Ia[idxs_use_fDSk]
+        dat_fD = dat_fD[idxs_use_fDSk]
+        err_fD = err_fD[idxs_use_fDSk]
+    else:
+        print(f'{path_fDSk} is not exist. \n')
+        exit()
+
+    return time_fDSk, dat_Sk, err_Sk, dat_Ia, err_Ia, dat_fD, err_fD
+
 
 def dat1_woerr_local(path, col, tstart_out, tend_out):
     if os.path.isfile(path):
@@ -946,3 +1025,23 @@ def dat2_local(path, cols, tstart_out, tend_out):
         dat2 = np.nan
         err2 = np.nan
     return time, dat1, err1, dat2, err2
+
+
+def fDSk_color_label(idx_dev, ch):
+
+    devices = {0: 'BS (3-O)', 1: 'DBS (3-O)', 2: 'DBS (9-O)'}
+
+    if idx_dev == 0:
+        color_fDSk = 'red'
+    elif idx_dev == 1:
+        color_fDSk = 'blue'
+    elif idx_dev == 2:
+        color_fDSk = 'green'
+    else:
+        print('Device does not exist. ')
+        exit()
+    label_Sk = f'$I_{{pow,{devices[idx_dev]},ch{ch:d}}}$\n[a.u.]'
+    label_fD_k = f'$f_{{D,{devices[idx_dev]},ch{ch:d}}}$\n[kHz]'
+    label_Ia = f'$I_{{amp,{devices[idx_dev]},ch{ch:d}}}$\n[a.u.]'
+
+    return color_fDSk, label_Sk, label_fD_k, label_Ia
