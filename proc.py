@@ -197,9 +197,21 @@ def interpolate1d(time, val, err, t_ref):
 
 def refPrevTime(time, val, err, t_ref):
 
-    ft = interp1d(time, time, kind='zero', bounds_error=False, fill_value=np.nan)
-    f = interp1d(time, val, kind='zero', bounds_error=False, fill_value=np.nan)
-    fer = interp1d(time, err, kind='zero', bounds_error=False, fill_value=np.nan)
+    ft = interp1d(time, time, kind='previous', bounds_error=False, fill_value=np.nan)
+    f = interp1d(time, val, kind='previous', bounds_error=False, fill_value=np.nan)
+    fer = interp1d(time, err, kind='previous', bounds_error=False, fill_value=np.nan)
+    tim_intp = ft(t_ref)
+    val_intp = f(t_ref)
+    err_intp = fer(t_ref)
+
+    return tim_intp, val_intp, err_intp
+
+
+def refNearestTime(time, val, err, t_ref):
+
+    ft = interp1d(time, time, kind='nearest', bounds_error=False, fill_value=np.nan)
+    f = interp1d(time, val, kind='nearest', bounds_error=False, fill_value=np.nan)
+    fer = interp1d(time, err, kind='nearest', bounds_error=False, fill_value=np.nan)
     tim_intp = ft(t_ref)
     val_intp = f(t_ref)
     err_intp = fer(t_ref)
