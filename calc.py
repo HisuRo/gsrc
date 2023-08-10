@@ -6,6 +6,102 @@ from nasu import proc, plot
 import os
 
 
+def shifted_gauss(x, a, b, x0, C):
+    return C + a * np.exp(-(x - x0) ** 2 / b ** 2)
+
+
+def fit_xyshifted_gauss_1d(x, y, y_err):
+
+    Ndat = len(y)
+
+    window_size = 20
+    y_smooth = np.convolve(y, np.ones(window_size) / window_size, mode='same')
+    top_values = np.sort(y_smooth)[-Ndat // 50:]
+    bottom_values = np.sort(y_smooth)[:Ndat // 10]
+
+    y_max = np.nanmean(top_values)
+    y_min = np.nanmean(bottom_values)
+
+    # y_1_3rd = y_min + 0.33 * (y_max - y_min)
+    # y_2_3rd = y_min + 0.66 * (y_max - y_min)
+    # idx_at_y_max = np.nanargmin(np.abs(y_smooth - y_max))
+    # idx_at_y_min = np.nanargmin(np.abs(y_smooth - y_min))
+    # idx_at_y_1_3rd = np.nanargmin(np.abs(y_smooth - y_1_3rd))
+    # idx_at_y_2_3rd = np.nanargmin(np.abs(y_smooth - y_2_3rd))
+    # x_at_ymin = x[idx_at_y_min]
+    # x_at_ymax = x[idx_at_y_max]
+    # x_at_y_1_3rd = x[idx_at_y_1_3rd]
+    # x_at_y_2_3rd = x[idx_at_y_2_3rd]
+
+    iniC = y_min
+    weight_power = 10
+    inix0 = np.average(x, weights= np.abs(y_smooth) ** weight_power)
+
+    inia = y_max - iniC
+    n = 1
+    idx = np.nanargmin(np.abs(y_smooth - (iniC + inia / (np.e ** (n ** 2)))))
+    inib = np.abs(x[idx] - inix0) / n
+
+    # ini_ys = np.array([y_max, y_1_3rd, y_2_3rd])
+    # ini_xs = np.array([x_at_ymax, x_at_y_1_3rd, x_at_y_2_3rd])
+    # ini_lnys = np.log(ini_ys - iniC)
+    # coefs = np.polyfit(ini_xs, ini_lnys, 2)
+    # alpha, beta, gamma = coefs
+    # iniA = gamma - 0.25 * beta**2 / alpha
+    # inia = np.exp(iniA)
+    # inib = np.sqrt(-1. / alpha)
+    # inix0 = - beta / (2. * alpha)
+
+    iniP1 = [inia, inib]
+    print(iniP1)
+    bounds1 = ([1e-16, 1e-16], [np.inf, np.inf])
+    popt1, pcov1 = optimize.curve_fit(lambda x_tmp, a, b: shifted_gauss(x_tmp, a, b, inix0, iniC),
+                                      x, y, p0=iniP1, sigma=y_err, bounds=bounds1)
+
+    iniP2 = [popt1[0], popt1[1], inix0, iniC]
+    print(iniP2)
+    bounds2 = ([1e-16, 1e-16, -np.inf, 0], [np.inf, np.inf, np.inf, np.inf])
+    popt2, pcov2 = optimize.curve_fit(shifted_gauss, x, y, p0=iniP2, sigma=y_err, bounds=bounds2)
+
+    perr = np.sqrt(np.diagonal(pcov2))
+    y_hut = shifted_gauss(x, popt2[0], popt2[1], popt2[2], popt2[3])
+    sigma_y = np.sqrt(np.average((y - y_hut) ** 2) + np.average(y_err ** 2))
+    print(popt2)
+
+    print('\n')
+
+    return popt2, perr, sigma_y, y_hut
+
+
+def average_dat_withinRhoRange(rho, list_dat, rho_in, rho_out, list_err=False):
+    idxs, list_dat = proc.getXIdxsAndYs(rho, rho_in, rho_out, list_dat)
+    array_dat = np.array(list_dat)
+
+    if list_err:
+        idxs, list_err = proc.getXIdxsAndYs(rho, rho_in, rho_out, list_err)
+        array_err = np.array(list_err)
+        array_avg, array_std = weightedAverage_alongLastAxis(array_dat, array_err)
+    else:
+        array_avg = np.average(array_dat, axis=-1)
+        array_std = np.std(array_dat, axis=-1, ddof=1)
+
+    return array_avg, array_std
+
+
+
+
+
+def IQsignal(Idat, Qdat, idx_dev, chDiag):
+    if idx_dev == 1 and chDiag in ['33.4G', '34.8G', '36.9G', '38.3G']:
+        signal = Idat + 1.j * Qdat
+    elif idx_dev == 0:
+        signal = Idat + 1.j * Qdat
+    else:
+        signal = Idat - 1.j * Qdat
+
+    return signal
+
+
 def MakeLLSMFitProfilesFromTS(sn, startTime, endTime, Nfit, poly):
 
     info = getShotInfo.info(sn)
@@ -313,7 +409,8 @@ def timeSeriesRegGradAtRhoOfInterest1d(reff1d, rho1d, dat, err, rhoOfInterest, N
     return reffOfInterest, RegDat, RegDatEr, DatGrad, DatGradEr
 
 
-def timeSeriesRegGradAtRhoOfInterest(reff2d, rho2d, dat, err, rhoOfInterest, NFit, polyGrad, fname_base=None, dir_name=None):
+def timeSeriesRegGradAtRhoOfInterest(reff2d, rho2d, dat, err, rhoOfInterest, NFit, polyGrad,
+                                     fname_base=None, dir_name=None, showfig=True):
 
     reffsOfInterest, idxsForLSMAtInterest, shiftedReffsForLSMAtInterest = \
         proc.makeReffsForLSMAtRhoOfInterest2d(reff2d, rho2d, rhoOfInterest)
@@ -372,7 +469,10 @@ def timeSeriesRegGradAtRhoOfInterest(reff2d, rho2d, dat, err, rhoOfInterest, NFi
             ax.set_xlim(0, np.nanmax(reff2d))
             fnm = f'{fname_base}_{i}.png'
             plot.capsave(fig, '', fnm, os.path.join(figOutDir, fnm))
-            plot.check(0.1)
+            if showfig:
+                plot.check(0.001)
+            else:
+                plot.close(fig)
 
     return reffsOfInterest, RegDat, RegDatEr, DatGrad, DatGradEr
 
@@ -468,8 +568,8 @@ def dB(spec, spec_err):
     return spec_db, spec_err_db
 
 
-def toZeroMeanTimeSliceEnsemble(xx, NFFT, NEns, NOV):
-    xens = toTimeSliceEnsemble(xx, NFFT, NEns, NOV)
+def toZeroMeanTimeSliceEnsemble(xx, NFFT, NEns, NOV, existtime=False, time=None, tout=None):
+    xens = toTimeSliceEnsemble(xx, NFFT, NEns, NOV, existtime=False, time=None, tout=None)
     xensAvg = np.average(xens, axis=-1)
     xensAvg = repeat_and_add_lastdim(xensAvg, NFFT)
     xens -= xensAvg
@@ -477,21 +577,40 @@ def toZeroMeanTimeSliceEnsemble(xx, NFFT, NEns, NOV):
     return xens
 
 
-def toTimeSliceEnsemble(xx, NFFT, NEns, NOV):
+# def makeidxsalongtime(tdat, tout, NSamp):
+#
+#     idxs_tout = np.argmin(np.abs(np.tile(tdat, (len(tout), 1)) - np.reshape(tout, (len(tout), 1))), axis=-1)
+#     ss_base = (- int(0.5 * NSamp + 0.5), int(0.5 * NSamp + 0.5))
+#     idxs_samp = np.tile(np.arange(ss_base[0], ss_base[1]), (len(tout), 1)) + np.reshape(idxs_tout, (len(tout), 1))
+#
+#     return idxs_samp
+
+
+def toTimeSliceEnsemble(xx, NFFT, NEns, NOV, existtime=False, time=None, tout=None):  # time, tout: 1darray
 
     print(f'Overlap ratio: {NOV / NFFT * 100:.0f}%\n')
 
-    Nsamp = NEns * NFFT - (NEns - 1) * NOV
-    if len(xx) != Nsamp:
-        print('The number of samples is improper. \n')
-        exit()
-    else:
-        print(f'The number of samples: {Nsamp:d}')
+    if existtime:
+        if len(xx) != len(time):
+            print('The number of samples is improper. \n')
+            exit()
+        idxs = proc.makefftsampleidxs(time, tout, NFFT, NEns, NOV)
 
-    if NOV != 0:
-        idxs = (np.reshape(np.arange(NEns * NFFT), (NEns, NFFT)).T - np.arange(0, NEns * NOV, NOV)).T
     else:
-        idxs = np.reshape(np.arange(NEns * NFFT), (NEns, NFFT))
+
+        Nsamp = NEns * NFFT - (NEns - 1) * NOV
+
+        if len(xx) != Nsamp:
+            print('The number of samples is improper. \n')
+            exit()
+        else:
+            print(f'The number of samples: {Nsamp:d}')
+
+        if NOV != 0:
+            idxs = (np.reshape(np.arange(NEns * NFFT), (NEns, NFFT)).T - np.arange(0, NEns * NOV, NOV)).T
+        else:
+            idxs = np.reshape(np.arange(NEns * NFFT), (NEns, NFFT))
+
     xens = xx[idxs]
 
     return xens
@@ -540,17 +659,18 @@ def CVForBiSpecAna(NFFTs, NEns, NOVs):
     ND2 = fft.fft(randND2)
     ND3 = fft.fft(randND3)
 
-    ND1 = np.reshape(ND1, (NEns, NFFT1, 1))
-    ND2 = np.reshape(ND2, (NEns, 1, NFFT2))
+    ND1 = np.reshape(ND1, (NEns, 1, NFFT1))
+    ND2 = np.reshape(ND2, (NEns, NFFT2, 1))
     ND3 = ND3[:, idxMx3]
-    ND1ND2 = np.matmul(ND1, ND2)
-    ND1ND2AbsSq = np.abs(ND1ND2) ** 2
+
+    ND2ND1 = np.matmul(ND2, ND1)
+    ND2ND1AbsSq = np.abs(ND2ND1) ** 2
     ND3AbsSq = np.abs(ND3) ** 2
 
-    CV_ND1ND2 = CV(ND1ND2AbsSq)
+    CV_ND2ND1 = CV(ND2ND1AbsSq)
     CV_ND3 = CV(ND3AbsSq)
 
-    return CV_ND1ND2, CV_ND3
+    return CV_ND2ND1, CV_ND3
 
 
 def getWindowAndCoefs(NFFT, window, NEns, NOV):
@@ -559,7 +679,8 @@ def getWindowAndCoefs(NFFT, window, NEns, NOV):
     enbw = NFFT * np.sum(win ** 2) / (np.sum(win) ** 2)
     CG = np.abs(np.sum(win)) / NFFT
 
-    CV = CV_overlap(NFFT, NEns, NOV)
+    # CV = CV_overlap(NFFT, NEns, NOV)
+    CV = 1./np.sqrt(NEns)
 
     return win, enbw, CG, CV
 
@@ -591,6 +712,10 @@ def fourier_components_2s(xens, dt, NFFT, win):
 
 def NSampleForFFT(NFFT, NEns, NOV):
     return NEns * NFFT - (NEns - 1) * NOV
+
+
+def NEnsFromNSample(NFFT, NOV, Nsamp):
+    return (Nsamp - NOV) / (NFFT - NOV)
 
 
 def power_spectre_1s(xx, dt, NFFT, window, NEns, NOV):
@@ -827,7 +952,7 @@ def power_spectrogram_1s(ti, xx, dt, NFFT, window, NEns, NOV):
 
 def power_spectrogram_2s(ti, xx, dt, NFFT, window, NEns, NOV):
 
-    proc.suggestNewVer(2)
+    proc.suggestNewVer(2, 'power_spectrogram_2s')
 
     print(f'Overlap ratio: {NOV/NFFT*100:.0f}%\n')
 
@@ -907,7 +1032,8 @@ def power_spectrogram_2s_v2(ti, xx, dt, NFFT, window, NEns, NOV):
     enbw = NFFT * np.sum(win ** 2) / (np.sum(win) ** 2)
     CG = np.abs(np.sum(win)) / NFFT
 
-    CV = CV_overlap(NFFT, NEns, NOV)
+    # CV = CV_overlap(NFFT, NEns, NOV)
+    CV = 1./np.sqrt(NEns)
 
     freq = fft.fftshift(fft.fftfreq(NFFT, dt))
 
@@ -930,6 +1056,21 @@ def power_spectrogram_2s_v2(ti, xx, dt, NFFT, window, NEns, NOV):
           f'@{tisp[0]:.3f}+-{0.5 * dtisp:.3f} s')
 
     return tisp, freq, psd, psd_std, psd_err
+
+
+def calib_dbs9O(chDiag, pathCalib, Idat, Qdat):
+    dictIF = {'27.7G': 40, '29.1G': 80, '30.5G': 120, '32.0G': 160,
+              '33.4G': 200, '34.8G': 240, '36.9G': 300, '38.3G': 340}
+    frLO = dictIF[chDiag]
+    lvLO = float(input('LO Power [dBm] >>> '))
+    vgaLO = float(input('LO VGA [V] >>> '))
+    vgaRF = float(input('RF VGA [V] >>> '))
+    calibPrms_df = read.calibPrms_df(pathCalib)
+    VAR, VOS_I, VOS_Q, phDif = calibPrms_df.loc[(frLO, lvLO, vgaLO, vgaRF)]
+
+    Idat, Qdat = calibIQComp2(Idat, Qdat, VAR, VOS_I, VOS_Q, phDif)
+
+    return Idat, Qdat
 
 
 def cross_cor(sig, ref, dt):
@@ -970,6 +1111,8 @@ def corrcoef_series(time, sig1, sig2, Nsamp):
 
 def cross_spectre_2s(x, y, Fs, NEns, NFFT, window, NOV):
 
+    proc.suggestNewVer(2, 'cross_spectre_2s')
+
     dT = 1. / Fs
 
     x_arr = toZeroMeanTimeSliceEnsemble(x, NFFT, NEns, NOV)
@@ -979,7 +1122,8 @@ def cross_spectre_2s(x, y, Fs, NEns, NFFT, window, NOV):
     enbw = NFFT * np.sum(win ** 2) / (np.sum(win) ** 2)
     CG = np.abs(np.sum(win)) / NFFT
 
-    CV = CV_overlap(NFFT, NEns, NOV)
+    # CV = CV_overlap(NFFT, NEns, NOV)
+    CV = 1./sqrt(NEns)
 
     freq = fft.fftshift(fft.fftfreq(NFFT, dT))
 
@@ -1032,6 +1176,93 @@ def cross_spectre_2s(x, y, Fs, NEns, NFFT, window, NOV):
     return freq, CSDxy, CSDxy_err, cohxy, cohxy_err, phsxy, phsxy_err
 
 
+def crossspectrum(XX, YY):
+
+    YXconj = YY * XX.conj()
+    CrossSpec = np.average(YXconj, axis=0)
+    CrossSpecStd = np.std(YXconj, axis=0, ddof=1)
+    CrossSpecReStd = np.std(np.real(YXconj), axis=0, ddof=1)
+    CrossSpecImStd = np.std(np.imag(YXconj), axis=0, ddof=1)
+
+    return CrossSpec, CrossSpecStd, CrossSpecReStd, CrossSpecImStd
+
+
+def coherenceSq(CrossSpec, CrossSpecStd, XX, YY, CV):
+    XAbsSq = np.real(XX * XX.conj())
+    YAbsSq = np.real(YY * YY.conj())
+
+    XAbsSqAvg = np.average(XAbsSq, axis=0)
+    XAbsSqStd = np.std(XAbsSq, axis=0, ddof=1)
+    XAbsSqRer = XAbsSqStd / XAbsSqAvg * CV
+    YAbsSqAvg = np.average(YAbsSq, axis=0)
+    YAbsSqStd = np.std(YAbsSq, axis=0, ddof=1)
+    YAbsSqRer = YAbsSqStd / YAbsSqAvg * CV
+
+    CrossSpecAbsSq = np.real(CrossSpec * CrossSpec.conj())
+    CrossSpecAbsSqStd = 2 * np.abs(CrossSpec) * CrossSpecStd
+    CrossSpecAbsSqRer = CrossSpecAbsSqStd / CrossSpecAbsSq * CV
+
+    cohSq = CrossSpecAbsSq / (XAbsSqAvg * YAbsSqAvg)
+    cohSqRer = np.sqrt(CrossSpecAbsSqRer ** 2 + XAbsSqRer ** 2 + YAbsSqRer ** 2)
+    cohSqErr = cohSq * cohSqRer
+
+    return cohSq, cohSqErr
+
+
+def crossPhase(CrossSpec, CrossSpecReStd, CrossSpecImStd, CV):
+
+    CrossSpecRe = np.real(CrossSpec)
+    CrossSpecIm = np.imag(CrossSpec)
+
+    CrossSpecReRer = CrossSpecReStd / CrossSpecRe * CV
+    CrossSpecImRer = CrossSpecImStd / CrossSpecIm * CV
+
+    CrossSpecImRe = CrossSpecIm / CrossSpecRe
+    CrossSpecImReRer = np.sqrt(CrossSpecImRer ** 2 + CrossSpecReRer ** 2)
+    CrossSpecImReErr = np.abs(CrossSpecImRe * CrossSpecImReRer)
+    crossPhs = np.arctan2(CrossSpecIm, CrossSpecRe)
+    crossPhsErr = 1. / (1. + CrossSpecImRe ** 2) * CrossSpecImReErr
+    crossPhs = np.degrees(crossPhs)
+    crossPhsErr = np.degrees(crossPhsErr)
+
+    return crossPhs, crossPhsErr
+
+
+def crossSpectralAnalysis_2s_v2(xx, yy, dts, NFFTs, NEns, window, NOVs):
+
+    dtx, dty = dts
+    NFFTx, NFFTy = NFFTs
+    NOVx, NOVy = NOVs
+
+    xens = toZeroMeanTimeSliceEnsemble(xx, NFFTx, NEns, NOVx)
+    winx, enbwx, CGx, CV = getWindowAndCoefs(NFFTx, window, NEns, NOVx)
+    freqx, XX = fourier_components_2s(xens, dtx, NFFTx, winx)
+
+    yens = toZeroMeanTimeSliceEnsemble(yy, NFFTy, NEns, NOVy)
+    winy, enbwy, CGy, CV = getWindowAndCoefs(NFFTy, window, NEns, NOVy)
+    freqy, YY = fourier_components_2s(yens, dty, NFFTy, winy)
+
+    freqs = (freqx, freqy)
+
+    # https://watlab-blog.com/2020/07/24/coherence-function/
+
+    if NFFTx > NFFTy:
+        freq = freqy
+        XX = XX[:, (NFFTx - NFFTy)//2:(NFFTx + NFFTy)//2]
+    elif NFFTy > NFFTx:
+        freq = freqx
+        YY = YY[:, (NFFTy - NFFTx) // 2:(NFFTy + NFFTx) // 2]
+    else:
+        freq = freqx
+
+    CrossSpec, CrossSpecStd, CrossSpecReStd, CrossSpecImStd = crossspectrum(XX, YY)
+
+    cohSq, cohSqErr = coherenceSq(CrossSpec, CrossSpecStd, XX, YY, CV)
+    phs, phsErr = crossPhase(CrossSpec, CrossSpecReStd, CrossSpecImStd, CV)
+
+    return freq, cohSq, cohSqErr, phs, phsErr
+
+
 def biSpectrum(X1, X2, X3):
 
     X2X1 = np.matmul(X2, X1)
@@ -1046,6 +1277,8 @@ def biSpectrum(X1, X2, X3):
 
 
 def biCoherenceSq(BSpec, BSpecStd, X1, X2, X3, NFFTs, NEns, NOVs):
+
+    proc.suggestNewVer(2, 'biCoherenceSq')
 
     CV_X2X1, CV_X3 = CVForBiSpecAna(NFFTs, NEns, NOVs)
 
@@ -1071,13 +1304,62 @@ def biCoherenceSq(BSpec, BSpecStd, X1, X2, X3, NFFTs, NEns, NOVs):
     return biCohSq, biCohSqErr
 
 
+def biCoherenceSq_v2(BSpec, BSpecStd, X1, X2, X3, NEns):
+
+    CV = 1. / np.sqrt(NEns)
+
+    X2X1 = np.matmul(X2, X1)
+    X2X1AbsSq = np.abs(X2X1) ** 2
+    X2X1AbsSqAvg = np.average(X2X1AbsSq, axis=0)
+    X2X1AbsSqStd = np.std(X2X1AbsSq, axis=0, ddof=1)
+    X2X1AbsSqRer = X2X1AbsSqStd / X2X1AbsSqAvg * CV
+
+    X3AbsSq = np.abs(X3) ** 2
+    X3AbsSqAvg = np.average(X3AbsSq, axis=0)
+    X3AbsSqStd = np.std(X3AbsSq, axis=0, ddof=1)
+    X3AbsSqRer = X3AbsSqStd / X3AbsSqAvg * CV
+
+    BSpecAbsSq = np.abs(BSpec) ** 2
+    BSpecAbsSqStd = 2 * np.abs(BSpec) * BSpecStd
+    BSpecAbsSqRer = BSpecAbsSqStd / BSpecAbsSq * CV
+
+    biCohSq = BSpecAbsSq / (X2X1AbsSqAvg * X3AbsSqAvg)
+    biCohSqRer = np.sqrt(BSpecAbsSqRer ** 2 + X2X1AbsSqRer ** 2 + X3AbsSqRer ** 2)
+    biCohSqErr = biCohSq * biCohSqRer
+
+    return biCohSq, biCohSqErr
+
+
 def biPhase(BSpec, BSpecReStd, BSpecImStd):
+
+    proc.suggestNewVer(2, 'biPhase')
 
     BSpecRe = np.real(BSpec)
     BSpecIm = np.imag(BSpec)
 
     BSpecReRer = BSpecReStd / BSpecRe
     BSpecImRer = BSpecImStd / BSpecIm
+
+    BSpecImRe = BSpecIm / BSpecRe
+    BSpecImReRer = np.sqrt(BSpecImRer ** 2 + BSpecReRer ** 2)
+    BSpecImReErr = np.abs(BSpecImRe * BSpecImReRer)
+    biPhs = np.arctan2(BSpecIm, BSpecRe)
+    biPhsErr = 1. / (1. + BSpecImRe ** 2) * BSpecImReErr
+    biPhs = np.degrees(biPhs)
+    biPhsErr = np.degrees(biPhsErr)
+
+    return biPhs, biPhsErr
+
+
+def biPhase_v2(BSpec, BSpecReStd, BSpecImStd, NEns):
+
+    CV = 1./np.sqrt(NEns)
+
+    BSpecRe = np.real(BSpec)
+    BSpecIm = np.imag(BSpec)
+
+    BSpecReRer = BSpecReStd / BSpecRe * CV
+    BSpecImRer = BSpecImStd / BSpecIm * CV
 
     BSpecImRe = BSpecIm / BSpecRe
     BSpecImReRer = np.sqrt(BSpecImRer ** 2 + BSpecReRer ** 2)
@@ -1108,9 +1390,9 @@ def makeIdxsForAutoBiSpectrum(NFFT):
 def makeIdxsForCrossBiSpectrum(NFFTs):
     NFFTx, NFFTy, NFFTz = NFFTs
 
-    idxf0x = int(NFFTx / 2 + 0.5)
-    idxf0y = int(NFFTy / 2 + 0.5)
-    idxf0z = int(NFFTz / 2 + 0.5)
+    idxf0x = NFFTx // 2
+    idxf0y = NFFTy // 2
+    idxf0z = NFFTz // 2
 
     idxMx1 = np.tile(np.arange(NFFTx), (NFFTy, 1))
     idxMx2 = np.tile(np.arange(NFFTy), (NFFTx, 1)).T
@@ -1157,6 +1439,9 @@ def autoBiSpectralAnalysis(freq, XX, NFFT, NEns, NOV):
 
 
 def crossBiSpecAna(freqs, XX, YY, ZZ, NFFTs, NEns, NOVs):
+
+    proc.suggestNewVer(2, 'crossBiSpecAna')
+
     freqx, freqy, freqz = freqs
 
     NFFTx, NFFTy, NFFTz = NFFTs
@@ -1169,8 +1454,8 @@ def crossBiSpecAna(freqs, XX, YY, ZZ, NFFTs, NEns, NOVs):
 
     BSpec, BSpecStd, BSpecReStd, BSpecImStd = biSpectrum(XX, YY, ZZ)
 
-    biCohSq, biCohSqErr = biCoherenceSq(BSpec, BSpecStd, XX, YY, ZZ, NFFTs, NEns, NOVs)
-    biPhs, biPhsErr = biPhase(BSpec, BSpecReStd, BSpecImStd)
+    biCohSq, biCohSqErr = biCoherenceSq_v2(BSpec, BSpecStd, XX, YY, ZZ, NEns)
+    biPhs, biPhsErr = biPhase_v2(BSpec, BSpecReStd, BSpecImStd, NEns)
 
     # symmetry
     freq1 = np.tile(freqx, (NFFTy, 1))
@@ -1186,6 +1471,42 @@ def crossBiSpecAna(freqs, XX, YY, ZZ, NFFTs, NEns, NOVs):
     biCohSqErr[idxNan2] = np.nan
     biPhs[idxNan2] = np.nan
     biPhsErr[idxNan2] = np.nan
+
+    return biCohSq, biCohSqErr, biPhs, biPhsErr
+
+
+def crossBiSpecAna_v2(freqs, XX, YY, ZZ, NFFTs, NEns, NOVs):
+    freqx, freqy, freqz = freqs
+
+    NFFTx, NFFTy, NFFTz = NFFTs
+    NOVx, NOVy, NOVz = NOVs
+    idxMxz, idxNan = makeIdxsForCrossBiSpectrum(NFFTs)
+
+    XX = np.reshape(XX, (NEns, 1, NFFTx))
+    YY = np.reshape(YY, (NEns, NFFTy, 1))
+    ZZ = ZZ[:, idxMxz]
+
+    BSpec, BSpecStd, BSpecReStd, BSpecImStd = biSpectrum(XX, YY, ZZ)
+
+    biCohSq, biCohSqErr = biCoherenceSq_v2(BSpec, BSpecStd, XX, YY, ZZ, NEns)
+    biPhs, biPhsErr = biPhase_v2(BSpec, BSpecReStd, BSpecImStd, NEns)
+
+    if (XX == YY).all():
+        # symmetry
+        freq1 = np.tile(freqx, (NFFTy, 1))
+        freq2 = np.tile(freqy, (NFFTx, 1)).T
+        # idxNan2 = np.where((freq2 >= freq1) | (freq2 < - 0.5 * freq1))
+        idxNan2 = np.where(freq2 >= freq1)
+
+        biCohSq[idxNan2] = np.nan
+        biCohSqErr[idxNan2] = np.nan
+        biPhs[idxNan2] = np.nan
+        biPhsErr[idxNan2] = np.nan
+
+    biCohSq[idxNan] = np.nan
+    biCohSqErr[idxNan] = np.nan
+    biPhs[idxNan] = np.nan
+    biPhsErr[idxNan] = np.nan
 
     return biCohSq, biCohSqErr, biPhs, biPhsErr
 
@@ -1433,6 +1754,8 @@ def turnLastColumnVectorToDim(array):
 
 def gauss_LS(x, y, y_err):
 
+    proc.suggestNewVer(2, 'gauss_LS')
+
     Nt, Nx = y.shape
 
     print('Y and weight\n')
@@ -1492,6 +1815,34 @@ def gauss_LS(x, y, y_err):
     perr = np.array([a_err, b_err, x0_err])
 
     return popt, perr
+
+
+def gauss_LS_v2(x, y, y_err):
+
+    Y = np.log(y)
+    Y_err = y_err / np.abs(y)
+
+    prms, errs, sigma_Y, YHut, YHutErr = polyN_LSM_v2(x, Y, 2, Y_err)
+
+    alpha, beta, gamma = prms
+    alpha_err, beta_err, gamma_err = errs
+    tmp = 0.5 * beta / alpha
+    b_fit = np.sqrt(-1. / alpha)
+    A_fit = gamma - tmp ** 2 * alpha
+    x0_fit = - tmp
+    a_fit = np.exp(A_fit)
+    A_err = np.sqrt(gamma_err ** 2 + (tmp * beta_err) ** 2 + (tmp ** 2 * alpha_err) ** 2)
+    a_err = a_fit * A_err
+    b_err = np.abs(0.5 * b_fit ** 1.5 * alpha_err)
+    x0_err = np.abs(tmp) * np.sqrt((beta_err / beta) ** 2 + (alpha_err / alpha) ** 2)
+
+    popt = np.array([a_fit, b_fit, x0_fit])
+    perr = np.array([a_err, b_err, x0_err])
+
+    y_hut = np.exp(YHut)
+    y_hut_err = y_hut * YHutErr
+
+    return popt, perr, y_hut, y_hut_err
 
 
 def gradient(R, reff, rho, dat, err, Nfit):

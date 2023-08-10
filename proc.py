@@ -8,6 +8,37 @@ from nasu import calc
 import copy
 
 
+def makefftsampleidxs(tdat, tout, NFFT, NEns, NOV):
+    # idxs_tout = ((tout - 10 * (subsn - 1)) / dT + 0.5).astype(int)
+    idxs_tout = np.argmin(np.abs(np.tile(tdat, (len(tout), 1)) - np.reshape(tout, (len(tout), 1))), axis=-1)
+    # ss_base = (- int(0.5 * NSamp + 0.5), int(0.5 * NSamp + 0.5))
+    # idxs_samp = np.tile(np.arange(ss_base[0], ss_base[1]), (len(tout), 1)) + np.reshape(idxs_tout, (len(tout), 1))
+    NSamp = NEns * NFFT - (NEns - 1) * NOV
+
+    if NOV != 0:
+        tmp = (np.reshape(np.arange(NEns * NFFT), (NEns, NFFT)).T - np.arange(0, NEns * NOV, NOV)).T
+    else:
+        tmp = np.reshape(np.arange(NEns * NFFT), (NEns, NFFT))
+    idxs = np.transpose(np.tile(tmp, (len(tout), 1, 1)).T + idxs_tout - NSamp // 2)
+
+    return idxs
+
+
+def skip_comments(file):
+    for line in file:
+        if not line.startswith('#'):
+            yield line
+
+
+def mkdir(dirnm, abovedir=False):
+    if abovedir:
+        newdir = os.path.join(abovedir, dirnm)
+    else:
+        newdir = dirnm
+    ifNotMake(newdir)
+    return newdir
+
+
 def deepCopy_list_multiply(list_ref, N_list):
     return [copy.deepcopy(list_ref) for i in range(N_list)]
 
@@ -29,7 +60,7 @@ def check_shapes(arr_list):
     return True
 
 
-def notNanInDat2d(dat2dList, axis):
+def notNanInDat2d(dat2dList, axis, isany=True):
     isNanList = [0] * len(dat2dList)
 
     if not check_shapes(dat2dList):
@@ -37,7 +68,10 @@ def notNanInDat2d(dat2dList, axis):
         exit()
 
     for ii, dat2d in enumerate(dat2dList):
-        isNan = np.isnan(dat2d).any(axis=axis)
+        if isany:
+            isNan = np.isnan(dat2d).any(axis=axis)
+        else:
+            isNan = np.isnan(dat2d).all(axis=axis)
         isNanList[ii] = isNan
     isNotNan = np.logical_not(np.logical_or.reduce(isNanList))
     dat2dOutList = [0] * len(dat2dList)
@@ -118,15 +152,49 @@ def getTimeIdxsAndDats(time, startTime, endTime, datList):
     return idxs, datList
 
 
-def getXIdxsAndYs(xx, x_start, x_end, Ys_list):
+def getXIdxsAndYs(xx, x_start, x_end, Ys_list, include_outerside=True):
+    idxs = np.argwhere((xx >= x_start) & (xx <= x_end)).T[0]
+    if include_outerside:
+        if idxs[0] > 0:
+            idxs = np.insert(idxs, 0, idxs[0] - 1)
+        if idxs[-1] < len(xx) - 1:
+            idxs = np.append(idxs, idxs[-1] + 1)
+    for ii, dat in enumerate(Ys_list):
+        Ys_list[ii] = dat[idxs]
+    return idxs, Ys_list
+
+
+def getXIdxsAndYs_2dalongLastAxis(xx, x_start, x_end, Ys_list):
     idxs = np.argwhere((xx >= x_start) & (xx <= x_end)).T[0]
     if idxs[0] > 0:
         idxs = np.insert(idxs, 0, idxs[0] - 1)
     if idxs[-1] < len(xx) - 1:
         idxs = np.append(idxs, idxs[-1] + 1)
     for ii, dat in enumerate(Ys_list):
-        Ys_list[ii] = dat[idxs]
+        Ys_list[ii] = dat[:, idxs]
     return idxs, Ys_list
+
+
+def getXIdxsAndYs_3dalongLastAxis(xx, x_start, x_end, Ys_list, include_outerside=False):
+    idxs = np.argwhere((xx >= x_start) & (xx <= x_end)).T[0]
+    if include_outerside:
+        if idxs[0] > 0:
+            idxs = np.insert(idxs, 0, idxs[0] - 1)
+        if idxs[-1] < len(xx) - 1:
+            idxs = np.append(idxs, idxs[-1] + 1)
+    for ii, dat in enumerate(Ys_list):
+        Ys_list[ii] = dat[:, :, idxs]
+    return idxs, Ys_list
+
+
+def makeXidxs(xx, x_start, x_end, include_outerside=False):
+    idxs = np.argwhere((xx >= x_start) & (xx <= x_end)).T[0]
+    if include_outerside:
+        if idxs[0] > 0:
+            idxs = np.insert(idxs, 0, idxs[0] - 1)
+        if idxs[-1] < len(xx) - 1:
+            idxs = np.append(idxs, idxs[-1] + 1)
+    return idxs
 
 
 def findIndex(point, array1d):

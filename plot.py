@@ -4,9 +4,40 @@ import seaborn as sns
 from itertools import chain
 
 
+def dat2dim(dim1, dim2, dat, dimnm_dim1, unit_dim1, dimnm_dim2, unit_dim2, valnm, unit_val,
+            lim_dim1=False, lim_dim2=False, datlim=False, cmap='jet'):
+    ddim1 = dim1[1] - dim1[0]
+    ddim2 = dim2[1] - dim2[0]
+
+    label = f'{valnm} [{unit_val}]'
+
+    if datlim:
+        bottom, top = datlim
+    else:
+        top, bottom = maxAndMin(dat)
+    fig, ax = plt.subplots()
+    pcf = ax.pcolorfast((dim1.min() - 0.5 * ddim1, dim1.max() + 0.5 * ddim1),
+                        (dim2.min() - 0.5 * ddim2, dim2.max() + 0.5 * ddim2),
+                        dat.T, cmap=cmap, vmin=bottom, vmax=top)
+    fig.colorbar(pcf, ax=ax, label=label)
+    if lim_dim1:
+        ax.set_xlim(lim_dim1)
+    else:
+        ax.set_xlim(dim1.min() - 0.5 * ddim1, dim1.max() + 0.5 * ddim1)
+    if lim_dim2:
+        ax.set_ylim(lim_dim2)
+    else:
+        ax.set_ylim(dim2.min() - 0.5 * ddim2, dim2.max() + 0.5 * ddim2)
+
+    ax.set_xlabel(f'{dimnm_dim1} [{unit_dim1}]')
+    ax.set_ylabel(f'{dimnm_dim2} [{unit_dim2}]')
+
+    return fig, ax
+
+
 def maxAndMin(dat):
-    max = np.max([np.max(dat) * 1.2, 0])
-    min = np.min([np.min(dat) * 1.2, 0])
+    max = np.max([np.nanmax(dat) * 1.2, 0])
+    min = np.min([np.nanmin(dat) * 1.2, 0])
     return max, min
 
 
@@ -26,6 +57,11 @@ def check(duration):
 
     return
 
+
+def close(fig):
+    plt.clf()
+    plt.close(fig)
+    return
 
 def caption(fig, fig_title, hspace=0.1, wspace=0.1):
     fig.suptitle(fig_title)
@@ -59,10 +95,17 @@ def errorbar_single(x, y, yerr, xlabel, ylabel, xlim=False, ylim=False,
     else:
         xmax, xmin = maxAndMin(x)
         ax.set_xlim((xmin, xmax))
+
     if ylim:
         ax.set_ylim(ylim)
     else:
-        ymax, ymin = maxAndMin(y)
+        if xlim:
+            xmin, xmax = xlim
+            idxs = np.where(~((x >= xmin) & (x <= xmax)))
+            y[idxs] = np.nan
+            ymax, ymin = maxAndMin(y)
+        else:
+            ymax, ymin = maxAndMin(y)
         ax.set_ylim((ymin, ymax))
     ax.set_ylabel(ylabel)
     ax.set_xlabel(xlabel)
@@ -355,17 +398,29 @@ def any_t(time, dat, datLabel, ylim=False, fmt='-'):
     return fig, ax
 
 
-def any(x, y, xLabel, yLabel, ylim=False, fmt='-'):
+def any(x, y, xLabel, yLabel, xlim=False, ylim=False, fmt='.'):
 
     fig, ax = plt.subplots()
     ax.plot(x, y, fmt)
     ax.set_ylabel(yLabel)
     ax.set_xlabel(xLabel)
 
+    if xlim:
+        ax.set_xlim(xlim)
+    else:
+        xmax, xmin = maxAndMin(x)
+        ax.set_xlim((xmin, xmax))
+
     if ylim:
         ax.set_ylim(ylim)
     else:
-        ymax, ymin = maxAndMin(y)
+        if xlim:
+            xmin, xmax = xlim
+            idxs = np.where(~((x >= xmin) & (x <= xmax)))
+            y[idxs] = np.nan
+            ymax, ymin = maxAndMin(y)
+        else:
+            ymax, ymin = maxAndMin(y)
         ax.set_ylim((ymin, ymax))
 
     return fig, ax

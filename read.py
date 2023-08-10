@@ -5,7 +5,7 @@ import os
 from parse import parse
 from nasu.myEgdb import LoadEG
 import nasu.LHDRetrieve as LHDR
-from nasu import getShotInfo, proc
+from nasu import getShotInfo, proc, myEgdb
 import inspect
 
 
@@ -449,6 +449,87 @@ def cxsmap9(EG):
            dat_Ti, err_Ti
 
 
+def cxs7_Er(egEr):
+    proc.suggestNewVer(2, 'cxs7_Er')
+
+    time = egEr.dims(0)
+    RR = egEr.dims(1)
+    cols = ['reff', 'reff/a99', 'Erdia', 'Erdiaerr', 'Ervt', 'Ervterr', 'Ervp', 'Ervperr', 'Ervperp', 'Ervperperr',
+            'Er', 'Ererr',
+            '<Er>', '<Er>err', 'Inc', 'Incerr', 'Tip', 'Tiperr', 'Vt', 'Vterr', 'Vp', 'Vperr', 'Br', 'Bz', 'Bphi']
+    list_dat = [0] * len(cols)
+    for ii in range(len(list_dat)):
+        dat = egEr.trace_of_2d(cols[ii], [0, 1])
+        dat = np.reshape(dat, (len(time), len(RR)))
+        list_dat[ii] = dat
+
+    return time, RR, list_dat, cols
+
+
+def cxs7_Er_v2(egEr):
+    proc.suggestNewVer(3, 'cxs7_Er')
+
+    time = egEr.dims(0)
+    RR = egEr.dims(1)
+    cols = ['reff', 'reff/a99', 'Erdia', 'Erdiaerr', 'Ervt', 'Ervterr', 'Ervp', 'Ervperr', 'Ervperp', 'Ervperperr',
+            'Er', 'Ererr',
+            '<Er>', '<Er>err', 'Inc', 'Incerr', 'Tip', 'Tiperr', 'Vt', 'Vterr', 'Vp', 'Vperr', 'Br', 'Bz', 'Bphi']
+    list_dat = [0] * len(cols)
+    for ii in range(len(list_dat)):
+        dat = egEr.trace_of_2d(cols[ii], [0, 1])
+        dat = np.reshape(dat, (len(time), len(RR)))
+        dat[dat == 0.] = np.nan
+        list_dat[ii] = dat
+
+    return time, RR, list_dat, cols
+
+
+def cxs7_Er_v3(diagnm, sn):
+
+    time, RR, list_dat, list_dimnms, list_valnms, list_dimunits, list_valunits = eg2d(diagnm, sn)
+    for ii, dat in enumerate(list_dat):
+        dat[dat == 0.] = np.nan
+        list_dat[ii] = dat
+
+    return time, RR, list_dat, list_dimnms, list_valnms, list_dimunits, list_valunits
+
+
+def eg2d(diagnm, sn):
+
+    eg = myEgdb.LoadEG(diagnm, sn)
+    dim0 = eg.dims(0)
+    dim1 = eg.dims(1)
+    list_dimnms = eg.dimnames
+    list_valnms = eg.valnames
+    list_dimunits = eg.dimunits
+    list_valunits = eg.valunits
+    list_dat = [0]*len(list_valnms)
+    for ii, valnm in enumerate(list_valnms):
+        dat = eg.trace_of_2d(valnm, [0, 1])
+        dat = np.reshape(dat, eg.dimsize)
+        list_dat[ii] = dat
+
+    return dim0, dim1, list_dat, list_dimnms, list_valnms, list_dimunits, list_valunits
+
+
+def eg3d(diagnm, sn):
+    eg = myEgdb.LoadEG(diagnm, sn)
+    dim0 = eg.dims(0)
+    dim1 = eg.dims(1)
+    dim2 = eg.dims(2)
+    list_dimnms = eg.dimnames
+    list_valnms = eg.valnames
+    list_dimunits = eg.dimunits
+    list_valunits = eg.valunits
+    list_dat3d = [0] * len(list_valnms)
+    for ii, valnm in enumerate(list_valnms):
+        dat = eg.trace_of_3d(valnm, [0, 1, 2])
+        dat = np.reshape(dat, eg.dimsize)
+        list_dat3d[ii] = dat
+
+    return dim0, dim1, dim2, list_dat3d, list_dimnms, list_valnms, list_dimunits, list_valunits
+
+
 def choose_ch(sn):
 
     # information
@@ -782,6 +863,12 @@ def LHD_IQsignal_atTime(sn, subsn, diag, chIQ, tat, NFFT, NEns, NOV):
     dt = dtI
 
     return vI, vQ, dt
+
+
+def getIdxsFromLongTime(tdat, tat, NSamp):
+    idx_tat = np.argmin(np.abs(tdat - tat))
+    ss = (idx_tat - int(0.5 * NSamp + 0.5), idx_tat + int(0.5 * NSamp + 0.5) - 1)
+    return ss
 
 
 def call_crossspec(dirin, sn, tstart, tend, diag1, chIQ1, diag2, chIQ2,
