@@ -4,6 +4,11 @@ import gc
 import matplotlib.pyplot as plt
 from nasu import proc, plot
 import os
+import sys
+
+
+class struct:
+    pass
 
 
 def shifted_gauss(x, a, b, x0, C):
@@ -114,7 +119,7 @@ def MakeLLSMFitProfilesFromTS(sn, startTime, endTime, Nfit, poly):
 
     if egts == None:
         print('egts == None')
-        exit()
+        sys.exit()
 
     timeref, Rref, reffref, \
     B, Br, Bz, Bphi = read.field_from_tsmap_reff(egtsreff, sn)
@@ -182,7 +187,7 @@ def MakeLLSMFitProfilesFromCXS7(sn, startTime, endTime, Nfit, poly):
 
     if egcx7 == None:
         print('egcx7 == None')
-        exit()
+        sys.exit()
 
     time, R_pol, R_tor, \
     reff_pol, reff_tor, rho_pol, rho_tor, a99, \
@@ -326,6 +331,47 @@ def avgByWeightHavingError(xxs, weights, weights_err):
     xWAvgErrs = np.sqrt(np.sum((xxs - xWAvgs_ex) ** 2 * weights_err ** 2, axis=-1)) / Sws
 
     return xWAvgs, xWAvgErrs
+
+
+# def center_of_gravity_of_complex_spectrum(freq, psd, psd_err, power=2):
+    
+#     idx_fD = np.where(np.abs(freq) > 1000)[0]
+#     freq_fD = freq[idx_fD]
+#     psd_fD = psd[:, idx_fD]
+#     psd_err_fD = psd_err[:, idx_fD]
+    
+#     freq_ex2d = np.full(psd_fD.shape, freq_fD)
+#     weight = psd_fD**power
+#     weight_err = power * (psd_fD**(power - 1)) * psd_err_fD
+#     cog, cog_err = avgByWeightHavingError(freq_ex2d, weight, weight_err)
+    
+#     return cog, cog_err
+
+
+def center_of_gravity(t, x, NFFT=2**6, OVR=0.5, window="hann"):
+
+    NOV = int(NFFT * OVR)
+    Nsp = NEnsFromNSample(NFFT, NOV, len(t))
+    Ndat = NSampleForFFT(NFFT, Nsp, NOV)
+    
+    t = t[:Ndat]
+    x = x[:Ndat]
+
+    idxs = make_idxs_for_spectrogram_wo_EnsembleAVG(NFFT, NOV, Nsp)
+    tisp = time_for_spectrogram_wo_ensembleAVG(t, idxs)
+    xens = x[idxs]
+    
+    dt = t[1] - t[0]
+    win, enbw, CG = get_window(NFFT, window)
+    freq, fft_x = fourier_components_2s(xens, dt, NFFT, win)
+    fft_x /=  np.sqrt(NFFT / 2)
+    
+    ind=np.where(np.abs(freq)>1000)[0]
+    S = fft_x[:, ind] * np.conj(fft_x[:, ind])
+    SF = np.real(S * np.conj(S))
+    cog = np.sum(SF*freq[ind], axis=-1)/np.sum(SF, axis=-1)
+    
+    return tisp, cog
 
 
 def gradRegAtInterestRhoWithErr(ReffAvg, RhoAvg, Dat, DatEr, InterestingRho, NFit, polyGrad):
@@ -593,7 +639,7 @@ def toTimeSliceEnsemble(xx, NFFT, NEns, NOV, existtime=False, time=None, tout=No
     if existtime:
         if len(xx) != len(time):
             print('The number of samples is improper. \n')
-            exit()
+            sys.exit()
         idxs = proc.makefftsampleidxs(time, tout, NFFT, NEns, NOV)
 
     else:
@@ -602,7 +648,7 @@ def toTimeSliceEnsemble(xx, NFFT, NEns, NOV, existtime=False, time=None, tout=No
 
         if len(xx) != Nsamp:
             print('The number of samples is improper. \n')
-            exit()
+            sys.exit()
         else:
             print(f'The number of samples: {Nsamp:d}')
 
@@ -674,15 +720,28 @@ def CVForBiSpecAna(NFFTs, NEns, NOVs):
 
 
 def getWindowAndCoefs(NFFT, window, NEns, NOV):
+    
+    win, enbw, CG = get_window(NFFT, window)
+    CV = get_CV(NEns)
+
+    return win, enbw, CG, CV
+
+
+def get_window(NFFT, window):
 
     win = signal.get_window(window, NFFT)
     enbw = NFFT * np.sum(win ** 2) / (np.sum(win) ** 2)
     CG = np.abs(np.sum(win)) / NFFT
+    
+    return win, enbw, CG
 
+
+def get_CV(NEns):
+    
     # CV = CV_overlap(NFFT, NEns, NOV)
     CV = 1./np.sqrt(NEns)
-
-    return win, enbw, CG, CV
+    
+    return CV
 
 
 def powerTodB(power, powerErr):
@@ -703,9 +762,9 @@ def fourier_components_1s(xens, dt, NFFT, win):
 def fourier_components_2s(xens, dt, NFFT, win):
 
     freq = fft.fftfreq(NFFT, dt)
-    fft_x = fft.fft(xens * win)
     freq = fft.fftshift(freq)
-    fft_x = fft.fftshift(fft_x)
+    fft_x = fft.fft(xens * win)
+    fft_x = fft.fftshift(fft_x, axes=-1)
 
     return freq, fft_x
 
@@ -714,8 +773,20 @@ def NSampleForFFT(NFFT, NEns, NOV):
     return NEns * NFFT - (NEns - 1) * NOV
 
 
+def NdatForFFT(Nsample, Nsp, NOV):
+    return Nsp * Nsample - (Nsp - 1) * NOV
+
+
 def NEnsFromNSample(NFFT, NOV, Nsamp):
-    return (Nsamp - NOV) / (NFFT - NOV)
+    return (Nsamp - NOV) // (NFFT - NOV)
+
+
+def NspFromNdat(Nsample, NOV, Ndat):
+    return (Ndat - NOV) // (Nsample - NOV)
+
+
+def bestNfftFromNdat(Nens, OVR, Ndat):
+    return 2**int(np.log2(Ndat / (Nens - (Nens - 1) * OVR)))
 
 
 def power_spectre_1s(xx, dt, NFFT, window, NEns, NOV):
@@ -748,7 +819,7 @@ def power_spectre_2s(xx, dt, NFFT, window, NEns, NOV):
     Nsamp = NEns * NFFT - (NEns - 1) * NOV
     if len(xx) != Nsamp:
         print('The number of samples is improper. \n')
-        exit()
+        sys.exit()
     else:
         print(f'The number of samples: {Nsamp:d}')
 
@@ -784,6 +855,29 @@ def power_spectre_2s(xx, dt, NFFT, window, NEns, NOV):
     return freq, psd, psd_err
 
 
+def get_intermediate(xx, Nsample):
+    
+    Nremain = len(xx) - Nsample
+    idx_s = Nremain // 2
+    
+    return xx[idx_s: idx_s + Nsample]
+
+
+def power_spectre_2s_v2(tt, xx, NFFT, window, OVR):
+    
+    NOV = int(NFFT * OVR)
+    NEns = NEnsFromNSample(NFFT, NOV, len(tt))
+    Nsample = NSampleForFFT(NFFT, NEns, NOV)
+    
+    tt = get_intermediate(tt, Nsample)
+    xx = get_intermediate(xx, Nsample)
+    dt = tt[1] - tt[0]
+    
+    tisp, freq, psd, psd_std, psd_err = power_spectrogram_2s_v4(tt, xx, dt, NFFT, window, NEns, NOV)
+    
+    return tisp[0], freq, psd[0], psd_std[0], psd_err[0]
+    
+
 def lowpass(x, samplerate, fp, fs, gpass, gstop):
     fn = samplerate / 2                           #ナイキスト周波数
     wp = fp / fn                                  #ナイキスト周波数で通過域端周波数を正規化
@@ -794,7 +888,7 @@ def lowpass(x, samplerate, fp, fs, gpass, gstop):
     return y                                      #フィルタ後の信号を返す
 
 
-def bandPass(xx, sampleRate, fp, fs, gpass, gstop, cut=False):
+def bandPass(xx, sampleRate, fp, fs, gpass=3, gstop=16, cut=False):
     fn = sampleRate / 2                           # ナイキスト周波数
     wp = fp / fn                                  # ナイキスト周波数で通過域端周波数を正規化
     ws = fs / fn                                  # ナイキスト周波数で阻止域端周波数を正規化
@@ -807,7 +901,19 @@ def bandPass(xx, sampleRate, fp, fs, gpass, gstop, cut=False):
     return yy
 
 
-def highpass(x, samplerate, fp, fs, gpass, gstop):
+def filter_butterworth(xx, samplingFreq, cutoffFreq, filtertype, order):
+    # filtertype: "low", "high", "band", "bandstop"
+    # cutoffFreq should be list [fl, fh] in the case of "band" or "bandstop"
+    
+    fnyq = samplingFreq / 2
+    Wn = cutoffFreq / fnyq
+    b, a = signal.butter(order, Wn, filtertype)
+    yy = signal.filtfilt(b, a, xx)
+    
+    return yy
+
+
+def highpass(x, samplerate, fp, fs, gpass=3, gstop=16):
     fn = samplerate / 2  # ナイキスト周波数
     wp = fp / fn  # ナイキスト周波数で通過域端周波数を正規化
     ws = fs / fn  # ナイキスト周波数で阻止域端周波数を正規化
@@ -907,7 +1013,7 @@ def power_spectrogram_1s(ti, xx, dt, NFFT, window, NEns, NOV):
 
     if len(xx) % Nsamp != 0 or len(ti) % Nsamp != 0 or len(xx) != len(ti):
         print('The number of data points is improper. \n')
-        exit()
+        sys.exit()
     else:
         print(f'The number of samples a spectrum: {Nsamp:d}')
         print(f'The number of spectra: {Nsp:d}\n')
@@ -961,7 +1067,7 @@ def power_spectrogram_2s(ti, xx, dt, NFFT, window, NEns, NOV):
 
     if len(xx) % Nsamp != 0 or len(ti) % Nsamp != 0 or len(xx) != len(ti):
         print('The number of data points is improper. \n')
-        exit()
+        sys.exit()
     else:
         print(f'The number of samples a spectrum: {Nsamp:d}')
         print(f'The number of spectra: {Nsp:d}\n')
@@ -1004,16 +1110,41 @@ def power_spectrogram_2s(ti, xx, dt, NFFT, window, NEns, NOV):
     return tisp, freq, psd, psd_err
 
 
+def Nspectra(time, NFFT, NEns, NOV):
+    
+    Nsample = NEns * NFFT - (NEns - 1) * NOV
+    Nspectra = len(time) // Nsample
+    Ndat = Nsample * Nspectra
+    
+    print(f'The number of samples per a spectrum: {Nsample:d}')
+    print(f'The number of spectra: {Nspectra:d}\n')
+    
+    return Nspectra, Nsample, Ndat
+
+
+def Nspectra_v2(time, NFFT, NEns, NOV):
+    
+    Nsample = NSampleForFFT(NFFT, NEns, NOV)
+    Nsp = NspFromNdat(Nsample, NOV, len(time))
+    Ndat = NdatForFFT(Nsample, Nsp, NOV)
+    
+    print(f'The number of samples per a spectrum: {Nsample:d}')
+    print(f'The number of spectra: {Nsp:d}\n')
+    
+    return Nsp, Nsample, Ndat
+
+
 def power_spectrogram_2s_v2(ti, xx, dt, NFFT, window, NEns, NOV):
+    
+    proc.suggestNewVer(3, 'power_spectrogram_2s')
 
     print(f'Overlap ratio: {NOV / NFFT * 100:.0f}%\n')
 
-    Nsamp = NEns * NFFT - (NEns - 1) * NOV
-    Nsp = int(len(ti) / Nsamp + 0.5)
+    Nsp, Nsamp, Ndat = Nspectra(ti, NFFT, NEns, NOV)
 
     if len(xx) % Nsamp != 0 or len(ti) % Nsamp != 0 or len(xx) != len(ti):
         print('The number of data points is improper. \n')
-        exit()
+        sys.exit()
     else:
         print(f'The number of samples a spectrum: {Nsamp:d}')
         print(f'The number of spectra: {Nsp:d}\n')
@@ -1058,6 +1189,171 @@ def power_spectrogram_2s_v2(ti, xx, dt, NFFT, window, NEns, NOV):
     return tisp, freq, psd, psd_std, psd_err
 
 
+def make_idxs_for_spectrogram(NFFT, NEns, NOV, Nsp):
+    
+    if NOV != 0:
+        tmp = (np.reshape(np.arange(NEns * NFFT), (NEns, NFFT)).T - np.arange(0, NEns * NOV, NOV)).T
+    else:
+        tmp = np.reshape(np.arange(NEns * NFFT), (NEns, NFFT))
+    Nsamp = NSampleForFFT(NFFT, NEns, NOV)
+    idxs = np.transpose(np.tile(tmp, (Nsp, 1, 1)).T + np.arange(0, Nsp * Nsamp, Nsamp))
+    
+    return idxs
+
+
+def make_idxs_for_spectrogram_v2(Nfft, Nens, Nov, Nsp):
+        
+    tmp1 = np.reshape(np.arange(Nsp*Nens*Nfft), (Nsp, Nens, Nfft))
+    tmp2 = np.reshape(repeat_and_add_lastdim(Nov * np.arange(Nens * Nsp), Nfft), (Nsp, Nens, Nfft))
+    idxs = tmp1 - tmp2
+    
+    return idxs
+
+
+def make_idxs_for_spectrogram_wo_EnsembleAVG(NFFT, NOV, Nsp):
+    
+    if NOV != 0:
+        tmp = (np.reshape(np.arange(Nsp * NFFT), (Nsp, NFFT)).T - np.arange(0, Nsp * NOV, NOV)).T
+    else:
+        tmp = np.reshape(np.arange(Nsp * NFFT), (Nsp, NFFT))
+    Ndat = NSampleForFFT(NFFT, Nsp, NOV)
+    idxs = np.transpose(np.tile(tmp, (1, 1)).T + np.arange(0, Ndat, Ndat))
+    
+    return idxs
+
+
+def time_for_spectrogram(time, idxs_for_spectrogram):
+    
+    tisp = np.average(np.array([time[idxs_for_spectrogram][:, 0, 0], time[idxs_for_spectrogram][:, -1, -1]]), axis=0)
+    
+    return tisp
+
+
+def time_for_spectrogram_wo_ensembleAVG(time, idxs_for_spectrogram):
+    
+    tisp = np.average(time[idxs_for_spectrogram], axis=-1)
+    
+    return tisp
+
+
+def get_Sxx(fft_x, CV):
+
+    Sxx = np.real(fft_x * fft_x.conj())
+    Sxx_avg = np.mean(Sxx, axis=-2)
+    Sxx_std = np.std(Sxx, axis=-2, ddof=1)
+    Sxx_err = Sxx_std * CV
+    
+    return Sxx_avg, Sxx_std, Sxx_err
+
+def get_psd(fft_x, CV, dt, NFFT, enbw, CG):
+    
+    Sxx_ave, Sxx_std, Sxx_err = get_Sxx(fft_x, CV)
+    Sxx_rerr = Sxx_err / np.abs(Sxx_ave)
+
+    Fs = 1. / dt
+    psd = Sxx_ave / (Fs * NFFT * enbw * (CG ** 2))
+    psd_std = Sxx_std / (Fs * NFFT * enbw * (CG ** 2))
+    psd_err = np.abs(psd) * Sxx_rerr
+    
+    return psd, psd_std, psd_err
+
+
+def check_power(NFFT, dt, xx, Nsamp, tisp, dtisp, psd):
+    
+    dfreq = 1. / (NFFT * dt)
+    print(f'Power: Time average of x(t)^2 = {np.sum(np.abs(xx[0:Nsamp]) ** 2) / Nsamp:.6f} V^2 '
+          f'@{tisp[0]:.3f}+-{0.5 * dtisp:.3f} s')
+    print(f'Power: Integral of P(f)       = {np.sum(psd[0] * dfreq):.6f} V^2 '
+          f'@{tisp[0]:.3f}+-{0.5 * dtisp:.3f} s')
+    
+    return
+
+
+def power_spectrogram_2s_v3(ti, xx, dt, NFFT, window, NEns, NOV):
+
+    print(f'Overlap ratio: {NOV / NFFT * 100:.0f}%\n')
+
+    Nsp, Nsamp, Ndat = Nspectra(ti, NFFT, NEns, NOV)
+    ti = ti[:Ndat]
+    xx = xx[:Ndat]
+
+    idxs = make_idxs_for_spectrogram(NFFT, NEns, NOV, Nsp)
+    tisp = time_for_spectrogram(ti, idxs)
+    xens = xx[idxs]
+    
+    win, enbw, CG, CV = getWindowAndCoefs(NFFT, window, NEns, NOV)
+
+    freq, fft_x = fourier_components_2s(xens, dt, NFFT, win)
+    psd, psd_std, psd_err = get_psd(fft_x, CV, dt, NFFT, enbw, CG)
+    
+    dtisp = Nsamp * dt
+    check_power(NFFT, dt, xx, Nsamp, tisp, dtisp, psd)
+
+    return tisp, freq, psd, psd_std, psd_err
+
+
+def power_spectrogram_2s_v4(ti, xx, dt, NFFT=2**10, window="hann", NEns=20, NOV=2**9):
+
+    print(f'Overlap ratio: {NOV / NFFT * 100:.0f}%\n')
+
+    Nsp, Nsamp, Ndat = Nspectra_v2(ti, NFFT, NEns, NOV)
+    ti = ti[:Ndat]
+    xx = xx[:Ndat]
+
+    idxs = make_idxs_for_spectrogram_v2(NFFT, NEns, NOV, Nsp)
+    tisp = time_for_spectrogram(ti, idxs)
+    xens = xx[idxs]
+    
+    xavg = repeat_and_add_lastdim(np.average(xens, axis=-1), NFFT)
+    xens -= xavg
+    
+    win, enbw, CG, CV = getWindowAndCoefs(NFFT, window, NEns, NOV)
+
+    freq, fft_x = fourier_components_2s(xens, dt, NFFT, win)
+    psd, psd_std, psd_err = get_psd(fft_x, CV, dt, NFFT, enbw, CG)
+    
+    dtisp = Nsamp * dt
+    check_power(NFFT, dt, xx, Nsamp, tisp, dtisp, psd)
+
+    return tisp, freq, psd, psd_std, psd_err
+
+
+def power_spectrogram_2s_v5(ti, xx, NFFT=2**10, ovr=0.5, window="hann", NEns=20):
+
+    NOV = int(NFFT * ovr)
+    dt = ti[1] - ti[0]
+    
+    print(f'Overlap ratio: {NOV / NFFT * 100:.0f}%\n')
+
+    Nsp, Nsamp, Ndat = Nspectra_v2(ti, NFFT, NEns, NOV)
+    ti = ti[:Ndat]
+    xx = xx[:Ndat]
+
+    idxs = make_idxs_for_spectrogram_v2(NFFT, NEns, NOV, Nsp)
+    tisp = time_for_spectrogram(ti, idxs)
+    xens = xx[idxs]
+    
+    xavg = repeat_and_add_lastdim(np.average(xens, axis=-1), NFFT)
+    xens -= xavg
+    
+    win, enbw, CG, CV = getWindowAndCoefs(NFFT, window, NEns, NOV)
+
+    freq, fft_x = fourier_components_2s(xens, dt, NFFT, win)
+    psd, psd_std, psd_err = get_psd(fft_x, CV, dt, NFFT, enbw, CG)
+    
+    dtisp = Nsamp * dt
+    check_power(NFFT, dt, xx, Nsamp, tisp, dtisp, psd)
+    
+    o = struct()
+    o.t = tisp
+    o.f = freq
+    o.sp = psd
+    o.spstd = psd_std
+    o.sperr = psd_err
+
+    return o
+
+
 def calib_dbs9O(chDiag, pathCalib, Idat, Qdat):
     dictIF = {'27.7G': 40, '29.1G': 80, '30.5G': 120, '32.0G': 160,
               '33.4G': 200, '34.8G': 240, '36.9G': 300, '38.3G': 340}
@@ -1073,18 +1369,173 @@ def calib_dbs9O(chDiag, pathCalib, Idat, Qdat):
     return Idat, Qdat
 
 
-def cross_cor(sig, ref, dt):
-
+def cross_cor(sig, ref, tsig, tref, mode="full"):
+    # ref moves along sig when calculating correlation
+    # ref should be smaller than or equal to sig
+    
+    if len(ref) > len(sig):
+        print("ref should be smaller than or equal to sig")
+        sys.exit()
+    
+    dt = tref[1] - tref[0]
+    
     # CCF
-    CCF = signal.correlate(sig, ref, mode='full') / len(sig)
-    lags = signal.correlation_lags(len(sig), len(ref), mode='full') * dt
+    length = len(ref)
+    CCF = signal.correlate(sig, ref, mode=mode) / length
+    idxs_lags = signal.correlation_lags(len(sig), len(ref), mode=mode)
+    lags = idxs_lags * dt
+    
+    dt_tsig0_tref0 = tref[0] - tsig[0]
+    lags = lags - dt_tsig0_tref0
 
     # CCC
-    Csig0 = np.sum(sig**2)/len(sig)
-    Cref0 = np.sum(ref**2)/len(ref)
+    Cref0 = np.sum(ref**2) / length
+    Csig0 = np.zeros(len(lags))
+    for j ,i in enumerate(idxs_lags):
+        idxs_tmp = np.arange(i, i+length)
+        idxs_tmp = np.delete(idxs_tmp, np.where((idxs_tmp < 0) | (idxs_tmp > len(sig) - 1)))
+        Csig0[j] = np.sum(sig[idxs_tmp]**2) / length
     CCC = CCF / np.sqrt(Csig0 * Cref0)
 
     return lags, CCF, CCC
+
+
+def cross_cor_v2(sig, ref, dt):
+        
+    sig_norm = (sig - sig.mean()) / sig.std(ddof=1)
+    ref_norm = (ref - ref.mean()) / ref.std(ddof=1)
+    
+    length = len(ref_norm)
+    CCF = signal.correlate(sig_norm, ref_norm, mode="full", method="fft") / length
+    idxs_lags = signal.correlation_lags(len(sig_norm), len(ref_norm), mode="full")
+    lags = idxs_lags * dt
+    
+    o = struct()
+    o.sig = sig
+    o.ref = ref
+    o.dt = dt
+    o.sig_norm = sig_norm
+    o.ref_norm = ref_norm
+    o.lags = lags
+    o.ccf = CCF
+    
+    return o
+
+
+def delay_by_CCC(lags, CCC):
+    return lags[np.nanargmax(CCC)], 
+
+
+def delay_by_ccf(lags, ccf):
+    corrmax = np.nanmax(ccf)
+    delay = lags[np.nanargmax(ccf)]
+    return delay, corrmax
+
+
+def get_dat_for_cross_correlation_around_tat(tt, sig, ref, tat, Nsample=10000):
+    
+    idx_at = np.argmin(np.abs(tt - tat))
+    sig_tlim = sig[idx_at - Nsample: idx_at + Nsample]
+    tsig_tlim = tt[idx_at - Nsample: idx_at + Nsample]
+    ref_tlim = ref[idx_at - Nsample // 2: idx_at + Nsample // 2]
+    tref_tlim = tt[idx_at - Nsample // 2: idx_at + Nsample // 2]
+
+    return tsig_tlim, sig_tlim, tref_tlim, ref_tlim
+    
+
+def cross_correlation_analysis(sig, ref, tsig, tref, mode="full", delay_by_ccc_amp=False):
+    
+    lags, ccf, ccc = cross_cor(sig, ref, tsig, tref, mode=mode)
+    if np.iscomplexobj(ccc):
+        ccc_amp = np.abs(ccc)
+    else:
+        ccc_amp = envelope(ccc)
+        
+    if delay_by_ccc_amp:    
+        delay = delay_by_CCC(lags, ccc_amp)
+    else:
+        delay = delay_by_CCC(lags, ccc)
+    
+        
+    return lags, ccf, ccc, ccc_amp, delay
+
+
+def cross_correlation_analysis_v2(sig, ref, dt):
+    
+    cc = cross_cor_v2(sig, ref, dt)
+    if np.iscomplexobj(cc.ccf):
+        ccf_amp = np.abs(cc.ccf)
+    else:
+        ccf_amp = envelope(cc.ccf)
+     
+    delay, corrmax = delay_by_ccf(cc.lags, ccf_amp)
+    
+    
+    # try:
+    #     lags_inc = np.mean(np.diff(cc.lags))
+    #     _ik = signal.argrelextrema(ccf_amp, np.less)[0]
+    #     # _ik = np.argmax(ccf_amp)
+    #     if len(_ik) >= 2:
+    #         _iu1 = _ik[np.min(np.where(cc.lags[_ik] > 0))]
+    #         _il1 = _ik[np.min(np.where(cc.lags[_ik] > 0))-1]
+    #         if cc.lags[_iu1]-cc.lags[_il1] < 7.5:
+    #             _il1 = int(_il1 - 15/lags_inc)
+    #             _iu1 = int(_iu1 + 15/lags_inc)
+    #     else:
+    #         _iu1 = len(cc.lags)
+    #         _il1 = 0
+    #     walag = np.average(cc.lags, weights=ccf_amp)
+    #     inip = [np.max(ccf_amp), walag, walag, 0.]
+    #     popt, pcov = optimize.curve_fit(CCFfit, cc.lags[_il1:_iu1],
+    #                                     cc.ccf[_il1:_iu1], p0=inip)
+    #     sigma = popt[-1]
+    # except RuntimeError:
+    #     peakcorr, delay, sigma, bg = [np.nan]*4
+    #     print('error in curve fit ... skipping this set')
+    
+    o = struct()
+    o.sig = sig
+    o.ref = ref
+    o.dt = dt
+    o.sig_norm = cc.sig_norm
+    o.ref_norm = cc.ref_norm
+    o.lags = cc.lags
+    o.ccf = cc.ccf
+    o.ccf_amp = ccf_amp
+    o.delay = delay
+    o.corrmax = corrmax
+    
+    return o
+    
+
+def cross_correlation_analysis_temporal(sig, ref, tt, Nsample=10000, mode="full", delay_by_ccc_amp=False):
+    
+    if len(ref) != len(sig):
+        print("ref and sig size should be identical")
+        sys.exit()
+    
+    Ndat = len(tt)
+    Nout = (Ndat - 1) // Nsample - 1
+    
+    ccf_list = [0]*Nout
+    ccc_list = [0]*Nout
+    ccc_amp_list = [0] * Nout
+    tout = [0]*Nout
+    lag_list = [0]*Nout
+    
+    for i in range(Nout):
+        tat = tt[1 + Nsample // 2 + i * Nsample: 1 + Nsample // 2 + (i + 1) * Nsample].mean()
+        
+        tsig_tlim, sig_tlim, tref_tlim, ref_tlim = get_dat_for_cross_correlation_around_tat(tt, sig, ref, tat, Nsample=Nsample)
+        lags, ccf, ccc, ccc_amp, delay = cross_correlation_analysis(sig_tlim, ref_tlim, tsig_tlim, tref_tlim, mode=mode, delay_by_ccc_amp=delay_by_ccc_amp)
+        
+        ccf_list[i] = ccf
+        ccc_list[i] = ccc
+        ccc_amp_list[i] = ccc_amp
+        tout[i] = tat
+        lag_list[i] = delay
+    
+    return np.array(tout), lags, np.array(ccf_list), np.array(ccc_list), np.array(ccc_amp_list), np.array(lag_list)
 
 
 def corrcoef_series(time, sig1, sig2, Nsamp):
@@ -1111,7 +1562,7 @@ def corrcoef_series(time, sig1, sig2, Nsamp):
 
 def cross_spectre_2s(x, y, Fs, NEns, NFFT, window, NOV):
 
-    proc.suggestNewVer(2, 'cross_spectre_2s')
+    # proc.suggestNewVer(2, 'cross_spectre_2s')
 
     dT = 1. / Fs
 
@@ -1123,7 +1574,7 @@ def cross_spectre_2s(x, y, Fs, NEns, NFFT, window, NOV):
     CG = np.abs(np.sum(win)) / NFFT
 
     # CV = CV_overlap(NFFT, NEns, NOV)
-    CV = 1./sqrt(NEns)
+    CV = 1./np.sqrt(NEns)
 
     freq = fft.fftshift(fft.fftfreq(NFFT, dT))
 
@@ -1176,27 +1627,38 @@ def cross_spectre_2s(x, y, Fs, NEns, NFFT, window, NOV):
     return freq, CSDxy, CSDxy_err, cohxy, cohxy_err, phsxy, phsxy_err
 
 
-def crossspectrum(XX, YY):
+def get_crossspectra(XX, YY):
 
     YXconj = YY * XX.conj()
-    CrossSpec = np.average(YXconj, axis=0)
-    CrossSpecStd = np.std(YXconj, axis=0, ddof=1)
-    CrossSpecReStd = np.std(np.real(YXconj), axis=0, ddof=1)
-    CrossSpecImStd = np.std(np.imag(YXconj), axis=0, ddof=1)
+    CrossSpec = np.average(YXconj, axis=-2)
+    CrossSpecStd = np.std(YXconj, axis=-2, ddof=1)
+    CrossSpecReStd = np.std(np.real(YXconj), axis=-2, ddof=1)
+    CrossSpecImStd = np.std(np.imag(YXconj), axis=-2, ddof=1)
 
     return CrossSpec, CrossSpecStd, CrossSpecReStd, CrossSpecImStd
 
 
-def coherenceSq(CrossSpec, CrossSpecStd, XX, YY, CV):
-    XAbsSq = np.real(XX * XX.conj())
-    YAbsSq = np.real(YY * YY.conj())
+def get_Sxy(XX, YY, CV):
 
-    XAbsSqAvg = np.average(XAbsSq, axis=0)
-    XAbsSqStd = np.std(XAbsSq, axis=0, ddof=1)
-    XAbsSqRer = XAbsSqStd / XAbsSqAvg * CV
-    YAbsSqAvg = np.average(YAbsSq, axis=0)
-    YAbsSqStd = np.std(YAbsSq, axis=0, ddof=1)
-    YAbsSqRer = YAbsSqStd / YAbsSqAvg * CV
+    Sxy = YY * XX.conj()
+    Sxy_avg = np.average(Sxy, axis=-2)
+    Sxy_std = np.std(Sxy, axis=-2, ddof=1)
+    Sxy_Re_std = np.std(np.real(Sxy), axis=-2, ddof=1)
+    Sxy_Im_std = np.std(np.imag(Sxy), axis=-2, ddof=1)
+    
+    Sxy_err = Sxy_std * CV
+    Sxy_Re_err = Sxy_Re_std * CV
+    Sxy_Im_err = Sxy_Im_std * CV
+
+    return Sxy_avg, Sxy_std, Sxy_err, Sxy_Re_std, Sxy_Re_err, Sxy_Im_std, Sxy_Im_err
+
+
+def get_coherenceSq(CrossSpec, CrossSpecStd, XX, YY, CV):
+    
+    XAbsSq, XAbsSqAvg, XAbsSqStd, XAbsSqErr = get_Sxx(XX, CV)
+    YAbsSq, YAbsSqAvg, YAbsSqStd, YAbsSqErr = get_Sxx(XX, CV)    
+    XAbsSqRer = XAbsSqErr / XAbsSqAvg
+    YAbsSqRer = YAbsSqErr / YAbsSqAvg
 
     CrossSpecAbsSq = np.real(CrossSpec * CrossSpec.conj())
     CrossSpecAbsSqStd = 2 * np.abs(CrossSpec) * CrossSpecStd
@@ -1209,7 +1671,23 @@ def coherenceSq(CrossSpec, CrossSpecStd, XX, YY, CV):
     return cohSq, cohSqErr
 
 
-def crossPhase(CrossSpec, CrossSpecReStd, CrossSpecImStd, CV):
+def get_coherenceSq_v2(Sxy_avg, Sxy_err, Sxx_avg, Sxx_err, Syy_avg, Syy_err):
+    
+    Sxy_avg_sq = np.real(Sxy_avg * Sxy_avg.conj())
+    Sxy_avg_sq_err = 2 * np.abs(Sxy_avg) * Sxy_err
+    
+    Sxy_avg_sq_rer = Sxy_avg_sq_err / Sxy_avg_sq
+    Sxx_rer = Sxx_err / Sxx_avg
+    Syy_rer = Syy_err / Syy_avg
+    
+    coh_sq = Sxy_avg_sq / (Sxx_avg * Syy_avg)
+    coh_sq_rer = np.sqrt(Sxy_avg_sq_rer ** 2 + Sxx_rer ** 2 + Syy_rer ** 2)
+    coh_sq_err = coh_sq * coh_sq_rer
+    
+    return coh_sq, coh_sq_err
+
+
+def get_crossPhase(CrossSpec, CrossSpecReStd, CrossSpecImStd, CV):
 
     CrossSpecRe = np.real(CrossSpec)
     CrossSpecIm = np.imag(CrossSpec)
@@ -1220,11 +1698,29 @@ def crossPhase(CrossSpec, CrossSpecReStd, CrossSpecImStd, CV):
     CrossSpecImRe = CrossSpecIm / CrossSpecRe
     CrossSpecImReRer = np.sqrt(CrossSpecImRer ** 2 + CrossSpecReRer ** 2)
     CrossSpecImReErr = np.abs(CrossSpecImRe * CrossSpecImReRer)
-    crossPhs = np.arctan2(CrossSpecIm, CrossSpecRe)
+    crossPhs = np.unwrap(np.arctan2(CrossSpecIm, CrossSpecRe))
     crossPhsErr = 1. / (1. + CrossSpecImRe ** 2) * CrossSpecImReErr
-    crossPhs = np.degrees(crossPhs)
-    crossPhsErr = np.degrees(crossPhsErr)
 
+    return crossPhs, crossPhsErr
+
+
+def get_crossphase_v2(Sxy_avg, Sxy_Re_err, Sxy_Im_err):
+    
+    Sxy_avg_Re = np.real(Sxy_avg)
+    Sxy_avg_Im = np.imag(Sxy_avg)
+    
+    Sxy_Re_rer = Sxy_Re_err / Sxy_avg_Re
+    Sxy_Im_rer = Sxy_Im_err / Sxy_avg_Im
+    
+    tmp = Sxy_avg_Im / Sxy_avg_Re
+    tmp_rer = np.sqrt(Sxy_Im_rer ** 2 + Sxy_Re_rer ** 2)
+    tmp_err = np.abs(tmp * tmp_rer)
+    if Sxy_avg.size == 1:
+        crossPhs = np.arctan2(Sxy_avg_Im, Sxy_avg_Re)
+    else:
+        crossPhs = np.unwrap(np.arctan2(Sxy_avg_Im, Sxy_avg_Re))
+    crossPhsErr = 1. / (1. + tmp ** 2) * tmp_err
+    
     return crossPhs, crossPhsErr
 
 
@@ -1242,8 +1738,6 @@ def crossSpectralAnalysis_2s_v2(xx, yy, dts, NFFTs, NEns, window, NOVs):
     winy, enbwy, CGy, CV = getWindowAndCoefs(NFFTy, window, NEns, NOVy)
     freqy, YY = fourier_components_2s(yens, dty, NFFTy, winy)
 
-    freqs = (freqx, freqy)
-
     # https://watlab-blog.com/2020/07/24/coherence-function/
 
     if NFFTx > NFFTy:
@@ -1255,19 +1749,274 @@ def crossSpectralAnalysis_2s_v2(xx, yy, dts, NFFTs, NEns, window, NOVs):
     else:
         freq = freqx
 
-    CrossSpec, CrossSpecStd, CrossSpecReStd, CrossSpecImStd = crossspectrum(XX, YY)
+    CrossSpec, CrossSpecStd, CrossSpecReStd, CrossSpecImStd = get_crossspectra(XX, YY)
 
-    cohSq, cohSqErr = coherenceSq(CrossSpec, CrossSpecStd, XX, YY, CV)
-    phs, phsErr = crossPhase(CrossSpec, CrossSpecReStd, CrossSpecImStd, CV)
+    cohSq, cohSqErr = get_coherenceSq(CrossSpec, CrossSpecStd, XX, YY, CV)
+    phs, phsErr = get_crossPhase(CrossSpec, CrossSpecReStd, CrossSpecImStd, CV)
 
     return freq, cohSq, cohSqErr, phs, phsErr
 
 
-def biSpectrum(X1, X2, X3):
+def get_freq_for_spectrum(NFFT, dt):
+    
+    freq = fft.fftfreq(NFFT, dt)
+    freq = fft.fftshift(freq)
+    
+    return freq
 
+
+def FFT(xens, win):
+    
+    fft_x = fft.fft(xens * win)
+    fft_x = fft.fftshift(fft_x, axes=-1)
+    
+    return fft_x
+
+
+def cross_spectrogram_2s(tt, xx, yy, NFFT=2**10, NEns=20, window='hann', OVR=0.5): 
+    # NOTE: xx and yy must have same dts
+    
+    NOV = int(NFFT * OVR)
+    
+    Nsp, Nsamp, Ndat = Nspectra_v2(tt, NFFT, NEns, NOV)
+    tt = get_intermediate(tt, Ndat)
+    xx = get_intermediate(xx, Ndat)
+    yy = get_intermediate(yy, Ndat)
+    
+    idxs = make_idxs_for_spectrogram_v2(NFFT, NEns, NOV, Nsp)
+    tsp = time_for_spectrogram(tt, idxs)
+    xens = xx[idxs]
+    yens = yy[idxs]
+    
+    win, enbw, CG, CV = getWindowAndCoefs(NFFT, window, NEns, NOV)
+    
+    dt = tt[1] - tt[0]
+    freq = get_freq_for_spectrum(NFFT, dt)
+    fft_x = FFT(xens, win)
+    fft_y = FFT(yens, win)
+    
+    Sxx_avg, Sxx_std, Sxx_err = get_Sxx(fft_x, CV)
+    Syy_avg, Syy_std, Syy_err = get_Sxx(fft_y, CV)
+    
+    Sxy_avg, Sxy_std, Sxy_err, Sxy_Re_std, Sxy_Re_err, Sxy_Im_std, Sxy_Im_err = get_Sxy(fft_x, fft_y, CV)
+    
+    coh_sq, coh_sq_err = get_coherenceSq_v2(Sxy_avg, Sxy_err, Sxx_avg, Sxx_err, Syy_avg, Syy_err)
+    phase, phase_err = get_crossphase_v2(Sxy_avg, Sxy_Re_err, Sxy_Im_err)
+    
+    o = struct()
+    o.tdat = tt
+    o.xdat = xx
+    o.ydat = yy
+    o.NFFT = NFFT
+    o.NEns = NEns
+    o.window = window
+    o.OVR = OVR
+    o.NOV = NOV
+    o.win = win
+    o.CV = CV
+    o.dt = dt
+    o.tsp = tsp
+    o.freq = freq
+    o.Sxx_avg = Sxx_avg
+    o.Sxx_std = Sxx_std
+    o.Sxx_err = Sxx_err
+    o.Syy_avg = Syy_avg
+    o.Syy_std = Syy_std
+    o.Syy_err = Syy_err
+    o.Sxy_avg = Sxy_avg
+    o.Sxy_std = Sxy_std
+    o.Sxy_err = Sxy_err
+    o.Sxy_Re_std = Sxy_Re_std
+    o.Sxy_Re_err = Sxy_Re_err
+    o.Sxy_Im_std = Sxy_Im_std
+    o.Sxy_Im_err = Sxy_Im_err
+    o.coh_sq = coh_sq
+    o.coh_sq_err = coh_sq_err
+    o.phase = phase
+    o.phase_err = phase_err
+    
+    return o
+    
+
+def cross_spectre_2s_v2(tt, xx, yy, NFFT=2**10, window="hann", OVR=0.5):
+    
+    NOV = int(NFFT * OVR)
+    NEns = NEnsFromNSample(NFFT, NOV, len(tt))
+    
+    csg = cross_spectrogram_2s(tt, xx, yy, NFFT=NFFT, NEns=NEns, window=window, OVR=OVR)
+    
+    o = struct()
+    o.tdat = csg.tdat
+    o.xdat = csg.xdat
+    o.ydat = csg.ydat
+    o.NFFT = csg.NFFT
+    o.NEns = csg.NEns
+    o.window = csg.window
+    o.NOV = csg.NOV
+    o.win = csg.win
+    o.CV = csg.CV
+    o.dt = csg.dt
+    o.tsp = csg.tsp[0]
+    o.freq = csg.freq
+    o.Sxx_avg = csg.Sxx_avg[0]
+    o.Sxx_std = csg.Sxx_std[0]
+    o.Sxx_err = csg.Sxx_err[0]
+    o.Syy_avg = csg.Syy_avg[0]
+    o.Syy_std = csg.Syy_std[0]
+    o.Syy_err = csg.Syy_err[0]
+    o.Sxy_avg = csg.Sxy_avg[0]
+    o.Sxy_std = csg.Sxy_std[0]
+    o.Sxy_err = csg.Sxy_err[0]
+    o.Sxy_Re_std = csg.Sxy_Re_std[0]
+    o.Sxy_Re_err = csg.Sxy_Re_err[0]
+    o.Sxy_Im_std = csg.Sxy_Im_std[0]
+    o.Sxy_Im_err = csg.Sxy_Im_err[0]
+    o.coh_sq = csg.coh_sq[0]
+    o.coh_sq_err = csg.coh_sq_err[0]
+    o.phase = csg.phase[0]
+    o.phase_err = csg.phase_err[0]
+    
+    return o
+
+
+def ACFfit(x, a, sigma, bck):
+    return a*np.exp(-np.log(2)*(x/sigma)**2) + bck
+
+
+def CCFfit(x, a, delay, sigma, bck):
+    return a*np.exp(-np.log(2)*((x-delay)/sigma)**2) + bck
+
+
+def TauCalc(popt, ccfx, tlags):
+
+    if ccfx > popt[2]:
+        afit = ACFfit(tlags, popt[0], popt[1], popt[2])
+        xc = np.where(np.diff(np.signbit(afit-ccfx)))
+        tau = np.mean(np.abs(tlags[xc]))
+    else:
+        tau = 0
+
+    return tau
+
+
+
+def Nens_from_dtout(dtout, dt, Nfft=2**10, OVR=0.5):
+    
+    Nov = int(Nfft * OVR)
+    sampledatlen = int(np.round(dtout / dt))
+    Nens = NEnsFromNSample(Nfft, Nov, sampledatlen)
+    
+    return Nens
+
+
+def power_spectrogram_2s_by_dtout(tt, xx, dt, dtout=1e-3, Nfft=2**10, OVR=0.5, window="hann"):
+
+    Nens = Nens_from_dtout(dtout=dtout, dt=dt, Nfft=Nfft, OVR=OVR)
+    print(f"Nens: {Nens}")
+    Nov = int(Nfft * OVR)
+    tisp, freq, psd, psd_std, psd_err = power_spectrogram_2s_v4(tt, xx, dt, NFFT=Nfft, window=window, NEns=Nens, NOV=Nov)
+    
+    return tisp, freq, psd, psd_std, psd_err
+
+
+# def matrix_for_1stDerivative_by_5pointsStencil_finiteDiff(Ndat, h):
+    
+#     Mstencil = np.zeros((Ndat, Ndat))
+#     np.fill_diagonal(Mstencil[1:], -8)
+#     np.fill_diagonal(Mstencil[2:], 1)
+#     np.fill_diagonal(Mstencil[:, 1:], 8)
+#     np.fill_diagonal(Mstencil[:, 2:], -1)
+    
+#     Mstencil[0, :] = 0
+#     Mstencil[1, :] = 0
+#     Mstencil[-1, :] = 0
+#     Mstencil[-2, :] = 0
+    
+#     Mstencil /= 12 * h
+    
+#     return Mstencil
+
+
+# def function_of_1stDerivative_by_5pointsStencil_finiteDiff(x1d, h):
+#     return (1 * x1d[0] - 8 * x1d[1] + 8 * x1d[3] - 1 * x1d[4]) / (12 * h)
+    
+    
+def firstDerivative_by_5pointsStencil_finiteDiff(tt, xx):
+    
+    dt = tt[1] - tt[0]
+        
+    xdot = (np.roll(xx, 2, axis=-1) - 8 * np.roll(xx, 1, axis=-1) + 8 * np.roll(xx, -1, axis=-1) - np.roll(xx, -2, axis=-1)) / (12 * dt)
+    xdot = xdot[2: -2]
+    t_short = tt[2: -2]
+    
+    return t_short, xdot
+
+
+def lagtime_from_crossphase(freq, crossphase, crossphase_err, Nfit):
+    
+    idxs = make_idxs_for_rolling(crossphase.shape[-1], Nfit)
+    freq_ext = np.tile(freq, np.append(crossphase.shape[:-1], 1))
+    freq_roll = rearange_dat_for_rolling(freq, idxs)
+    freq_ext_roll = rearange_dat_for_rolling(freq_ext, idxs)
+    freq_avg = np.average(freq_roll, axis=-1)
+    crossphase_roll = rearange_dat_for_rolling(crossphase, idxs)
+    crossphase_err_roll = rearange_dat_for_rolling(crossphase_err, idxs)
+    
+    prms, errs, sigma_y, yHut, yHutErr = polyN_LSM_v2(freq_ext_roll, crossphase_roll, 1, crossphase_err_roll)
+    grad = prms[0]
+    grad_err = errs[0]
+    
+    lagtime = grad / (2*np.pi)
+    lagtime_err = grad_err / (2*np.pi)
+    
+    return freq_avg, lagtime, lagtime_err
+
+
+def phasederivative(phase, dt):
+    return firstDerivative_by_5pointsStencil_finiteDiff(phase, dt)
+
+
+def pulsepair(t, iq, Nsample=100, ovr=0.5):
+    
+    dt = t[1] - t[0]
+    Nov = int(Nsample*ovr)
+    Ndat = len(t)
+    Nout = NspFromNdat(Nsample, Nov, Ndat)
+    idxs = make_idxs_for_spectrogram_wo_EnsembleAVG(Nsample, Nov, Nout)
+    
+    tout = time_for_spectrogram_wo_ensembleAVG(t, idxs)
+    iqtmp = iq[idxs]
+    re = np.real(iqtmp)
+    im = np.imag(iqtmp)
+    
+    reacf = np.sum(np.delete(re * np.roll(re, -1, axis=-1) + im * np.roll(im, -1, axis=-1), -1, axis=-1), axis=-1)
+    imacf = np.sum(np.delete(re * np.roll(im, -1, axis=-1) - np.roll(re, -1, axis=-1) * im, -1, axis=-1), axis=-1)
+    iqacf = reacf + 1.j * imacf
+    acf0 = np.average(np.real(iqtmp*np.conjugate(iqtmp)), axis=-1)
+    
+    fd = 1 / (2*np.pi*dt) * np.angle(iqacf)
+    fdstd = 1 / (np.sqrt(2) * np.pi * dt) * np.sqrt(1-(np.abs(iqacf))/acf0)
+    
+    o = struct()
+    o.t = tout
+    o.fd = fd
+    o.fdstd = fdstd
+    
+    return o
+
+def nonaveragedBiSpectrum(X1, X2, X3):
+    
     X2X1 = np.matmul(X2, X1)
     X3Conj = np.conjugate(X3)
     X2X1X3Conj = X2X1 * X3Conj
+    
+    return X2X1X3Conj
+
+
+def biSpectrum(X1, X2, X3):
+
+    X2X1X3Conj = nonaveragedBiSpectrum(X1, X2, X3)
+    
     BSpec = np.average(X2X1X3Conj, axis=0)
     BSpecStd = np.std(X2X1X3Conj, axis=0, ddof=1)
     BSpecReStd = np.std(np.real(X2X1X3Conj), axis=0, ddof=1)
@@ -1345,8 +2094,6 @@ def biPhase(BSpec, BSpecReStd, BSpecImStd):
     BSpecImReErr = np.abs(BSpecImRe * BSpecImReRer)
     biPhs = np.arctan2(BSpecIm, BSpecRe)
     biPhsErr = 1. / (1. + BSpecImRe ** 2) * BSpecImReErr
-    biPhs = np.degrees(biPhs)
-    biPhsErr = np.degrees(biPhsErr)
 
     return biPhs, biPhsErr
 
@@ -1366,8 +2113,6 @@ def biPhase_v2(BSpec, BSpecReStd, BSpecImStd, NEns):
     BSpecImReErr = np.abs(BSpecImRe * BSpecImReRer)
     biPhs = np.arctan2(BSpecIm, BSpecRe)
     biPhsErr = 1. / (1. + BSpecImRe ** 2) * BSpecImReErr
-    biPhs = np.degrees(biPhs)
-    biPhsErr = np.degrees(biPhsErr)
 
     return biPhs, biPhsErr
 
@@ -1402,6 +2147,13 @@ def makeIdxsForCrossBiSpectrum(NFFTs):
     idxMx3 = coefMx3 + idxf0z
     idxNan = np.where(((idxMx3 < 0) | (idxMx3 >= NFFTz)))
     idxMx3[idxNan] = False
+    
+    del idxMx1
+    del idxMx2
+    del coefMx1
+    del coefMx2
+    del coefMx3
+    gc.collect()
 
     return idxMx3, idxNan
 
@@ -1475,40 +2227,168 @@ def crossBiSpecAna(freqs, XX, YY, ZZ, NFFTs, NEns, NOVs):
     return biCohSq, biCohSqErr, biPhs, biPhsErr
 
 
-def crossBiSpecAna_v2(freqs, XX, YY, ZZ, NFFTs, NEns, NOVs):
-    freqx, freqy, freqz = freqs
+def crossBiSpecAna_v2(freqs, XX0, YY0, ZZ0, NFFTs, NEns, NOVs, iscomplex=False):
 
+    freqx, freqy, freqz = freqs
     NFFTx, NFFTy, NFFTz = NFFTs
     NOVx, NOVy, NOVz = NOVs
     idxMxz, idxNan = makeIdxsForCrossBiSpectrum(NFFTs)
 
-    XX = np.reshape(XX, (NEns, 1, NFFTx))
-    YY = np.reshape(YY, (NEns, NFFTy, 1))
-    ZZ = ZZ[:, idxMxz]
+    XX = np.reshape(XX0, (NEns, 1, NFFTx))
+    YY = np.reshape(YY0, (NEns, NFFTy, 1))
+    ZZ = ZZ0[:, idxMxz]
+
+    BSpec, BSpecStd, BSpecReStd, BSpecImStd = biSpectrum(XX, YY, ZZ)
+
+    biCohSq, biCohSqErr = biCoherenceSq_v2(BSpec, BSpecStd, XX, YY, ZZ, NEns)
+    biPhs, biPhsErr = biPhase_v2(BSpec, BSpecReStd, BSpecImStd, NEns)
+    
+    biCohSq[idxNan] = np.nan
+    biCohSqErr[idxNan] = np.nan
+    biPhs[idxNan] = np.nan
+    biPhsErr[idxNan] = np.nan
+
+    # symmetry
+    freq1 = np.tile(freqx, (NFFTy, 1))
+    freq2 = np.tile(freqy, (NFFTx, 1)).T
+        
+    if (XX0 == YY0).all():
+        if iscomplex:
+            idxNan2 = np.where(freq2 > freq1)
+        else:
+            idxNan2 = np.where((freq2 > freq1) | (freq1 < 0) | (freq2 < - freq1))
+    else:
+        if iscomplex:
+            idxNan2 = []
+        else:
+            idxNan2 = np.where((freq1 < 0) | (freq2 < 0))
+    
+    biCohSq[idxNan2] = np.nan
+    biCohSqErr[idxNan2] = np.nan
+    biPhs[idxNan2] = np.nan
+    biPhsErr[idxNan2] = np.nan
+
+
+    return biCohSq, biCohSqErr, biPhs, biPhsErr
+
+
+def crossBiSpecAna_v3(times, dats, Nffts=[2**10, 2**10, 2**10], ovr=0.5, window="hann", Nens=20, iscomplex=False):  # not completed
+
+    tx, ty, tz = times
+    x, y, z = dats
+    NFFTx, NFFTy, NFFTz = Nffts
+    NOVx, NOVy, NOVz = int(Nffts * ovr)
+    
+    Nspx, Nsampx, Ndatx = Nspectra_v2(tx, NFFTx, Nens, NOVx)
+    Nspy, Nsampy, Ndaty = Nspectra_v2(ty, NFFTy, Nens, NOVy)
+    Nspz, Nsampz, Ndatz = Nspectra_v2(tz, NFFTz, Nens, NOVz)
+    tx = tx[:Ndat]
+    ty = ty[:Ndat]
+    tz = tz[:Ndat]
+    x = x[:Ndat]
+    y = y[:Ndat]
+    z = z[:Ndat]
+
+    idxs = make_idxs_for_spectrogram_v2(NFFT, NEns, NOV, Nsp)
+    tisp = time_for_spectrogram(ti, idxs)
+    xens = xx[idxs]
+    
+    freq, fft_x = fourier_components_2s(xens, dt, NFFT, win)
+    
+
+    idxMxz, idxNan = makeIdxsForCrossBiSpectrum(NFFTs)
+
+    XX = np.reshape(XX0, (NEns, 1, NFFTx))
+    YY = np.reshape(YY0, (NEns, NFFTy, 1))
+    ZZ = ZZ0[:, idxMxz]
+
+    BSpec, BSpecStd, BSpecReStd, BSpecImStd = biSpectrum(XX, YY, ZZ)
+
+    biCohSq, biCohSqErr = biCoherenceSq_v2(BSpec, BSpecStd, XX, YY, ZZ, NEns)
+    biPhs, biPhsErr = biPhase_v2(BSpec, BSpecReStd, BSpecImStd, NEns)
+    
+    biCohSq[idxNan] = np.nan
+    biCohSqErr[idxNan] = np.nan
+    biPhs[idxNan] = np.nan
+    biPhsErr[idxNan] = np.nan
+
+    # symmetry
+    freq1 = np.tile(freqx, (NFFTy, 1))
+    freq2 = np.tile(freqy, (NFFTx, 1)).T
+        
+    if (XX0 == YY0).all():
+        if iscomplex:
+            idxNan2 = np.where(freq2 > freq1)
+        else:
+            idxNan2 = np.where((freq2 > freq1) | (freq1 < 0) | (freq2 < - freq1))
+    else:
+        if iscomplex:
+            idxNan2 = []
+        else:
+            idxNan2 = np.where((freq1 < 0) | (freq2 < 0))
+    
+    biCohSq[idxNan2] = np.nan
+    biCohSqErr[idxNan2] = np.nan
+    biPhs[idxNan2] = np.nan
+    biPhsErr[idxNan2] = np.nan
+
+
+    return biCohSq, biCohSqErr, biPhs, biPhsErr
+
+
+def autoBiSpecAna_v2(freq, X0, NFFT, NEns, NOV, iscomplex=False):
+    
+    idxMxz, idxNan = makeIdxsForCrossBiSpectrum((NFFT, NFFT, NFFT))
+
+    XX = np.reshape(X0, (NEns, 1, NFFT))
+    YY = np.reshape(X0, (NEns, NFFT, 1))
+    ZZ = X0[:, idxMxz]
 
     BSpec, BSpecStd, BSpecReStd, BSpecImStd = biSpectrum(XX, YY, ZZ)
 
     biCohSq, biCohSqErr = biCoherenceSq_v2(BSpec, BSpecStd, XX, YY, ZZ, NEns)
     biPhs, biPhsErr = biPhase_v2(BSpec, BSpecReStd, BSpecImStd, NEns)
 
-    if (XX == YY).all():
-        # symmetry
-        freq1 = np.tile(freqx, (NFFTy, 1))
-        freq2 = np.tile(freqy, (NFFTx, 1)).T
-        # idxNan2 = np.where((freq2 >= freq1) | (freq2 < - 0.5 * freq1))
-        idxNan2 = np.where(freq2 >= freq1)
-
-        biCohSq[idxNan2] = np.nan
-        biCohSqErr[idxNan2] = np.nan
-        biPhs[idxNan2] = np.nan
-        biPhsErr[idxNan2] = np.nan
-
     biCohSq[idxNan] = np.nan
     biCohSqErr[idxNan] = np.nan
     biPhs[idxNan] = np.nan
     biPhsErr[idxNan] = np.nan
+    
+    # symmetry
+    freq1 = np.tile(freq, (NFFT, 1))
+    freq2 = np.tile(freq, (NFFT, 1)).T
+    if iscomplex:
+        idxNan2 = np.where(freq2 > freq1)
+    else:
+        idxNan2 = np.where((freq2 > freq1) | (freq1 < 0) | (freq2 < - freq1))
+
+    biCohSq[idxNan2] = np.nan
+    biCohSqErr[idxNan2] = np.nan
+    biPhs[idxNan2] = np.nan
+    biPhsErr[idxNan2] = np.nan
 
     return biCohSq, biCohSqErr, biPhs, biPhsErr
+
+
+def average_bicoherence_at_f3(freq1, freq2, bicoherence):
+    N1 = len(freq1)
+    N2 = len(freq2)
+    dfreq = freq1[1] - freq1[0]
+    idxs = np.arange((N1 + N2) - 1) - (N1 - 1)
+    freq3 = dfreq * idxs
+    bicoh_f3 = np.array([np.nanmean(np.diagonal(bicoherence, offset=i)) for i in idxs])
+    return freq3, bicoh_f3
+
+def average_bicoherence_at_f3_withErr(freq1, freq2, bicoherence, bicoherence_Err):
+    N1 = len(freq1)
+    N2 = len(freq2)
+    dfreq = freq1[1] - freq1[0]
+    idxs = np.arange((N1 + N2) - 1) - (N1 - 1)
+    freq3 = dfreq * idxs
+    bicoh_f3 = np.array([np.nanmean(np.diagonal(bicoherence, offset=i)) for i in idxs])
+    bicoh_f3_err = np.array([np.sqrt(np.nanvar(np.diagonal(bicoherence, offset=i)) + 
+                                     np.nanmean(np.diagonal(bicoherence_Err**2, offset=i))) for i in idxs])
+    return freq3, bicoh_f3, bicoh_f3_err
 
 
 def LSM1(x, y, y_err):
@@ -1546,7 +2426,7 @@ def poly1_LSM(x, y, y_err):
 
     if x.shape != y.shape:
         print('Improper data shape')
-        exit()
+        sys.exit()
 
     Nfit = x.shape[-1]
     otherNs_array = np.array(x.shape[:-1])
@@ -1585,7 +2465,7 @@ def poly2_LSM(x, y, y_err):
 
     if x.shape != y.shape:
         print('Improper data shape')
-        exit()
+        sys.exit()
 
     Nfit = x.shape[-1]
     otherNs_array = np.array(x.shape[:-1])
@@ -1635,7 +2515,7 @@ def polyN_LSM(x, y, y_err, polyN):
 
     if x.shape != y.shape:
         print('Improper data shape')
-        exit()
+        sys.exit()
 
     Nfit = x.shape[-1]
     otherNs_array = np.array(x.shape[:-1]).astype(int)
@@ -1678,7 +2558,7 @@ def polyN_LSM_v2(xx, yy, polyN, yErr=np.array([False])):
 
     if xx.shape != yy.shape:
         print('Improper data shape')
-        exit()
+        sys.exit()
 
     Nfit = xx.shape[-1]
     otherNs_array = np.array(xx.shape[:-1]).astype(int)
@@ -1724,6 +2604,135 @@ def polyN_LSM_v2(xx, yy, polyN, yErr=np.array([False])):
     errs = np.transpose(errs, axes=tuple(np.concatenate([others_ndim, np.arange(others_ndim)], axis=None)))
 
     return prms, errs, sigma_y, yHut, yHutErr
+
+
+# def datMatrix_for_movingLLSM_from_dat1d(dat1d, Nfit):
+    
+#     Ndat = len(dat1d)
+#     datMat = np.zeros((Ndat, Ndat))
+#     for i in np.arange(Nfit):
+#         np.fill_diagonal(datMat[i:], dat1d[i:])
+#     for i in np.arange(Nfit - 1):
+#         datMat[:, -i-1] = 0.
+    
+#     return datMat
+
+
+# def datMatrix_for_movingLLSM_from_dat2d(dat2d, Nfit):
+    
+#     ax0size = dat2d.shape[0]
+#     ax1size = dat2d.shape[1]
+#     datMat = np.zeros(ax0size, ax1size, ax1size))
+    
+#     for j in np.arange(ax0size):
+#         for i in np.arange(Nfit):
+#             np.fill_diagonal(datMat[j, i:], dat2d[j, i:])
+#         for i in np.arange(Nfit - 1):
+#             datMat[j, :, -i-1] = 0.
+    
+#     return datMat
+
+
+# def datMatrix_for_movingLLSM_from_dat3d(dat3d, Nfit):
+    
+#     ax0size = dat3d.shape[0]
+#     ax1size = dat3d.shape[1]
+#     ax2size = dat3d.shape[2]
+#     datMat = np.zeros((ax0size, ax1size, ax2size, ax2size))
+    
+#     for k in np.arange(ax0size):
+#         for j in np.arange(ax1size):
+#             for i in np.arange(Nfit):
+#                 np.fill_diagonal(datMat[k, j, i:], dat3d[k, j, i:])
+#             for i in np.arange(Nfit - 1):
+#                 datMat[k, j, :, -i-1] = 0.
+    
+#     return datMat
+
+
+# def get_unitmatrix_for_movingLLSM(Ndat, Nfit):
+    
+#     unitMat = np.zeros((Ndat, Ndat))
+    
+#     for i in np.arange(Nfit):
+#         np.fill_diagonal(unitMat[i:], 1)
+#     for i in np.arange(Nfit - 1):
+#         unitMat[:, -i-1] = 0.
+    
+#     return unitMat
+
+
+# def datMatrix_for_movingLLSM(dat, Nfit):
+    
+#     Ndat = dat.shape[-1]
+#     dat_ext = repeat_and_add_lastdim(dat, Ndat)
+#     unitMat = get_unitmatrix_for_movingLLSM(Ndat, Nfit)
+    
+#     datMat = unitMat * dat_ext
+    
+#     return datMat
+
+
+def get_Xmatrix_forLLSM(xx, deg):
+    
+    tmp = np.array([xx ** i for i in np.flip(np.arange(deg + 1))])
+    Xmat = np.transpose(tmp, np.append(np.arange(len(xx.shape)) + 1, 0))
+    
+    return Xmat
+
+
+def get_Xpsinv(WW, XX):
+    
+    WX = np.matmul(WW, XX)
+    WXt = transposeLast2Dims(WX)
+    Xt = transposeLast2Dims(XX)
+    XtWX = np.matmul(Xt, WX)
+    XtWXinv = np.linalg.inv(XtWX)
+    Xpsinv = np.matmul(XtWXinv, WXt)
+    
+    return Xpsinv
+
+
+# def NthPolyfit_by_movingLLSM(xx, yy, Nfit, deg, y_err=np.array([False])):
+    
+    # Ndat = xx.shape[-1]
+    
+    # if y_err.any():
+    #     weights = 1./(y_err**2)
+    #     WW = np.matmul(np.identity(Ndat), turnLastDimToColumnVector(weights))
+    # else:
+    #     WW = np.identity(Ndat)
+    
+    # xmat = datMatrix_for_movingLLSM(xx, Nfit)
+    # xnew = np.sum(xmat, axis=-2) / Nfit
+    # ymat = datMatrix_for_movingLLSM(yy, Nfit)
+    
+    # XX = get_Xmatrix_forLLSM(xx, deg)
+    # WX = np.matmul(WW, XX)
+    # WXt = transposeLast2Dims(WX)
+    # WXty = np.matmul(WXt, ymat)
+    
+    # Xt = transposeLast2Dims(XX)
+    # XtWX = np.matmul(Xt, WX)
+    # XtWXinv = np.linalg.inv(XtWX)
+    
+    # Xpsinv = np.matmul(XtWXinv, WXt)
+    # Xpsinvt = transposeLast2Dims(Xpsinv)
+    # XpsinvXpsinvt = np.matmul(Xpsinv, Xpsinvt)
+    
+    # theta_mat = np.matmul(XtWXinv, WXty)
+    # tmp = np.matmul(XX, theta_mat)
+    # yHut = np.where(ymat == 0., 0., tmp)
+    
+    # if y_err.any():
+    #     y_err_mat = datMatrix_for_movingLLSM(y_err, Nfit)
+    #     var_fit = (np.sum(y_err_mat**2, axis=-2) + np.sum((ymat - yHut)**2, axis=-2)) / Nfit
+    # else:
+    #     var_fit = np.sum((ymat - yHut)**2, axis=-2) / (Nfit - 1)
+    # var_fit_mat = repeat_and_add_lastdim(repeat_and_add_lastdim(var_fit, deg), deg)
+    # theta_std_mat = np.sqrt(np.diagonal(XpsinvXpsinvt * var_fit_mat, axis1=-2, axis2=-1))
+    
+    # return xnew, theta_mat, theta_std_mat, var_fit
 
 
 def transposeLast2Dims(ndarray):
@@ -1872,11 +2881,76 @@ def gradient(R, reff, rho, dat, err, Nfit):
 
 
 def make_idxs_for_MovingLSM(data_len, window_len):
+    
     output_len = data_len - window_len + 1
     output_idxs = np.full((output_len, window_len), np.arange(window_len)).T
     output_idxs = output_idxs + np.arange(output_len)
     output_idxs = output_idxs.T
+    
     return output_idxs
+
+
+def make_idxs_for_rolling(data_len, window_len):
+    
+    output_len = data_len - window_len + 1
+    output_idxs = np.full((output_len, window_len), np.arange(window_len)).T
+    output_idxs = output_idxs + np.arange(output_len)
+    output_idxs = output_idxs.T
+    
+    
+    return output_idxs
+
+
+def rearange_dat_for_rolling(xx, idxs):
+    
+    if xx.ndim == 1:
+        x_roll = xx[idxs]
+    elif xx.ndim == 2:
+        x_roll = xx[:, idxs]
+    elif xx.ndim == 3:
+        x_roll = xx[:, :, idxs]
+    else:
+        print('please fix function rearange_dat_for_rolling')
+        sys.exit()
+    
+    return x_roll
+
+
+def rolling_average(xx, yy, Nwin, y_err=np.array([False])):
+    
+    idxs = make_idxs_for_rolling(xx.shape[-1], Nwin)
+    x_roll = rearange_dat_for_rolling(xx, idxs)
+    y_roll = rearange_dat_for_rolling(yy, idxs)
+    
+    x_avg = np.average(x_roll, axis=-1)
+    if y_err.any():
+        y_err_roll = rearange_dat_for_rolling(y_err, idxs)
+        weight_roll = 1./y_err_roll**2
+        y_avg = np.average(y_roll, axis=-1, weights=weight_roll)
+        y_std = np.sqrt(np.average(y_err_roll**2, axis=-1) + np.var(y_roll, axis=-1))
+        sum_weight = np.sum(weight_roll, axis=-1)
+        norm_weight = weight_roll / repeat_and_add_lastdim(sum_weight, Nwin)
+        y_err = np.sqrt(np.sum(norm_weight**2 * (y_err_roll**2 + (y_roll - repeat_and_add_lastdim(y_avg, Nwin))**2), axis=-1))
+    else:
+        y_avg = np.average(y_roll, axis=-1)
+        y_std = np.std(y_roll, axis=-1, ddof=1)
+        y_err = y_std / np.sqrt(Nwin)
+    
+    return x_avg, y_avg, y_std, y_err
+
+
+def gradient_by_roll_avg(xx, yy, Nwin, y_err=np.array([False])):
+    
+    if y_err.any():
+        x_avg, y_avg, y_std, y_err = rolling_average(xx, yy, Nwin, y_err)
+    else:
+        x_avg, y_avg, y_std, y_err = rolling_average(xx, yy, Nwin)
+    
+    dx = x_avg[1] - x_avg[0]
+    grad_y, grad_y_err = firstDerivative_by_5pointsStencil_finiteDiff(y_avg, y_err, dx)
+    
+    return x_avg, y_avg, y_std, y_err, grad_y, grad_y_err
+    
 
 
 def gradient_reg_reff(reff, dat, err, Nfit):
@@ -1918,7 +2992,7 @@ def make_fitted_profiles_with_MovingPolyLSM(reff, raw_profiles, profiles_errs, w
 
     if reff.shape != raw_profiles.shape:
         print('Improper data shape')
-        exit()
+        sys.exit()
     idxs_for_Moving = make_idxs_for_MovingLSM(reff.shape[-1], window_len)
     output_profiles_count = idxs_for_Moving.shape[0]
 
@@ -1957,7 +3031,7 @@ def make_fitted_profiles_with_MovingPolyLSM(reff, raw_profiles, profiles_errs, w
 
     else:
         print('It has not developed yet...\n')
-        exit()
+        sys.exit()
 
     return reff_avgs, fitted_profiles, fitted_profiles_errs, fitted_profs_gradients, fitted_profs_grads_errs
 
@@ -1966,7 +3040,7 @@ def make_fitted_profiles_with_MovingPolyLSM_v2(reff, raw_profiles, profiles_errs
 
     if reff.shape != raw_profiles.shape:
         print('Improper data shape')
-        exit()
+        sys.exit()
     idxs_for_Moving = make_idxs_for_MovingLSM(reff.shape[-1], window_len)
     output_profiles_count = idxs_for_Moving.shape[0]
 
@@ -2002,7 +3076,7 @@ def make_fitted_profiles_with_MovingPolyLSM_1d(reff, raw_profiles, profiles_errs
 
     if reff.shape != raw_profiles.shape:
         print('Improper data shape')
-        exit()
+        sys.exit()
     # profiles_count, profile_len = reff.shape
     idxs_for_Moving = make_idxs_for_MovingLSM(reff.shape[-1], window_len)
     output_profiles_count = idxs_for_Moving.shape[0]
@@ -2042,7 +3116,7 @@ def make_fitted_profiles_with_MovingPolyLSM_1d(reff, raw_profiles, profiles_errs
 
     else:
         print('It has not developed yet...\n')
-        exit()
+        sys.exit()
 
     return reff_avgs, fitted_profiles, fitted_profiles_errs, fitted_profs_gradients, fitted_profs_grads_errs
 
@@ -2053,7 +3127,7 @@ def linInterp1dOf2dDat(x2d, y1d, x2d_ref):
     Nt_ref, Ny_ref = x2d_ref.shape
     if Nt != Nt_ref:
         print('Error: Nt != Ntf')
-        exit()
+        sys.exit()
 
     x2d_ext = np.repeat(np.reshape(x2d, (Nt, 1, Ny)), Ny_ref, axis=1)  # (Nt, Ny_ref, Ny)
     x2d_ref_ext = np.repeat(np.reshape(x2d_ref, (Nt, Ny_ref, 1)), Ny, axis=2)  # (Nt, Ny_ref, Ny)
@@ -2243,3 +3317,10 @@ def Tratio(Te, Ti, Te_err, Ti_err):
 #     xmerr = np.sqrt(Um)
 #
 #     return xm, xerr, xmerr
+
+
+def envelope(sig):
+    analytic_signal = signal.hilbert(sig)
+    amplitude_envelope = np.abs(analytic_signal)
+    return amplitude_envelope
+
