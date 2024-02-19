@@ -93,9 +93,6 @@ def average_dat_withinRhoRange(rho, list_dat, rho_in, rho_out, list_err=False):
     return array_avg, array_std
 
 
-
-
-
 def IQsignal(Idat, Qdat, idx_dev, chDiag):
     if idx_dev == 1 and chDiag in ['33.4G', '34.8G', '36.9G', '38.3G']:
         signal = Idat + 1.j * Qdat
