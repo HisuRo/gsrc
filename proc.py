@@ -131,6 +131,7 @@ def repeat_and_add_lastdim(Array, Nrepeat):
 def ifNotMake(dirPath):
     if not os.path.exists(dirPath):
         os.mkdir(dirPath)
+    return dirPath
 
 
 def getTimeIdxAndDats(time, time_at, datList):
