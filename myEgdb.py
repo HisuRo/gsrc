@@ -96,9 +96,12 @@ def CloseFile(zf, fp):
 
 def LoadEG(diagname, sn, sub=1, flg_remove=True):
     filepath = LoadEGFile(diagname, sn, sub=1)
-    eg = EG(filepath)
-    if flg_remove:
-        os.unlink(filepath)
+    if filepath == None:
+        eg = None
+    else:
+        eg = EG(filepath)
+        if flg_remove:
+            os.unlink(filepath)
     return eg
 
 
