@@ -133,19 +133,19 @@ def MakeLLSMFitProfilesFromTS(sn, startTime, endTime, Nfit, poly):
     R = R[isNotNan]
 
     R_f, reff_f, rho_f, dat_Te_grad, err_Te_grad, \
-    dat_Te_reg, err_Te_reg = calc.gradient_reg_v2(R, reff, a99, dat_Te, err_Te, Nfit, poly)
+    dat_Te_reg, err_Te_reg = gradient_reg_v2(R, reff, a99, dat_Te, err_Te, Nfit, poly)
     R_f, reff_f, rho_f, dat_ne_grad, err_ne_grad, \
-    dat_ne_reg, err_ne_reg = calc.gradient_reg_v2(R, reff, a99, dat_ne, err_ne, Nfit, poly)
+    dat_ne_reg, err_ne_reg = gradient_reg_v2(R, reff, a99, dat_ne, err_ne, Nfit, poly)
 
-    dat_Lne, err_Lne, dat_RpLne, err_RpLne = calc.Lscale(dat_ne_reg, err_ne_reg,
+    dat_Lne, err_Lne, dat_RpLne, err_RpLne = Lscale(dat_ne_reg, err_ne_reg,
                                                          dat_ne_grad, err_ne_grad, Rax)
-    dat_LTe, err_LTe, dat_RpLTe, err_RpLTe = calc.Lscale(dat_Te_reg, err_Te_reg,
+    dat_LTe, err_LTe, dat_RpLTe, err_RpLTe = Lscale(dat_Te_reg, err_Te_reg,
                                                          dat_Te_grad, err_Te_grad, Rax)
-    dat_etae, err_etae = calc.eta(dat_LTe, err_LTe, dat_Lne, err_Lne)
+    dat_etae, err_etae = eta(dat_LTe, err_LTe, dat_Lne, err_Lne)
 
     omega_ce = ee * B / me
     tmp = 1e19 * ee ** 2 / (eps0 * me)
-    omega_pe, omega_pe_err = calc.sqrt_AndErr(dat_ne * tmp, err_ne * tmp)
+    omega_pe, omega_pe_err = sqrt_AndErr(dat_ne * tmp, err_ne * tmp)
     omega_L = 0.5 * (-omega_ce + np.sqrt(omega_ce ** 2 + 4 * omega_pe ** 2))
     omega_L_err = np.abs(0.5 * 0.5 * 1 / np.sqrt(omega_ce ** 2 + 4 * omega_pe ** 2) * 4 * 2 * omega_pe * omega_pe_err)
     omega_R = omega_L + omega_ce
@@ -220,22 +220,22 @@ def MakeLLSMFitProfilesFromCXS7(sn, startTime, endTime, Nfit, poly):
     R_tor = R_tor[isNotNan]
 
     R_pol_f, reff_pol_f, rho_pol_f, dat_Tipol_grad, err_Tipol_grad, \
-    dat_Tipol_reg, err_Tipol_reg = calc.gradient_reg_v2(R_pol, reff_pol, a99, dat_Tipol, err_Tipol, Nfit, poly)
+    dat_Tipol_reg, err_Tipol_reg = gradient_reg_v2(R_pol, reff_pol, a99, dat_Tipol, err_Tipol, Nfit, poly)
     R_tor_f, reff_tor_f, rho_tor_f, dat_Titor_grad, err_Titor_grad, \
-    dat_Titor_reg, err_Titor_reg = calc.gradient_reg_v2(R_tor, reff_tor, a99, dat_Titor, err_Titor, Nfit, poly)
+    dat_Titor_reg, err_Titor_reg = gradient_reg_v2(R_tor, reff_tor, a99, dat_Titor, err_Titor, Nfit, poly)
     R_pol_f, reff_pol_f, rho_pol_f, dat_Vcpol_grad, err_Vcpol_grad, \
-    dat_Vcpol_reg, err_Vcpol_reg = calc.gradient_reg_v2(R_pol, reff_pol, a99, dat_Vcpol, err_Vcpol, Nfit, poly)
+    dat_Vcpol_reg, err_Vcpol_reg = gradient_reg_v2(R_pol, reff_pol, a99, dat_Vcpol, err_Vcpol, Nfit, poly)
     R_tor_f, reff_tor_f, rho_tor_f, dat_Vctor_grad, err_Vctor_grad, \
-    dat_Vctor_reg, err_Vctor_reg = calc.gradient_reg_v2(R_tor, reff_tor, a99, dat_Vctor, err_Vctor, Nfit, poly)
+    dat_Vctor_reg, err_Vctor_reg = gradient_reg_v2(R_tor, reff_tor, a99, dat_Vctor, err_Vctor, Nfit, poly)
 
     dat_LTipol, err_LTipol, dat_RpLTipol, err_RpLTipol = \
-        calc.Lscale(dat_Tipol_reg, err_Tipol_reg, dat_Tipol_grad, err_Tipol_grad, Rax)
+        Lscale(dat_Tipol_reg, err_Tipol_reg, dat_Tipol_grad, err_Tipol_grad, Rax)
     dat_LTitor, err_LTitor, dat_RpLTitor, err_RpLTitor = \
-        calc.Lscale(dat_Titor_reg, err_Titor_reg, dat_Titor_grad, err_Titor_grad, Rax)
+        Lscale(dat_Titor_reg, err_Titor_reg, dat_Titor_grad, err_Titor_grad, Rax)
     dat_LVcpol, err_LVcpol, dat_RpLVcpol, err_RpLVcpol = \
-        calc.Lscale(dat_Vcpol_reg, err_Vcpol_reg, dat_Vcpol_grad, err_Vcpol_grad, Rax)
+        Lscale(dat_Vcpol_reg, err_Vcpol_reg, dat_Vcpol_grad, err_Vcpol_grad, Rax)
     dat_LVctor, err_LVctor, dat_RpLVctor, err_RpLVctor = \
-        calc.Lscale(dat_Vctor_reg, err_Vctor_reg, dat_Vctor_grad, err_Vctor_grad, Rax)
+        Lscale(dat_Vctor_reg, err_Vctor_reg, dat_Vctor_grad, err_Vctor_grad, Rax)
 
     raw_list = [R_pol, R_tor, reff_pol, reff_tor, rho_pol, rho_tor, a99,
                 dat_Tipol, err_Tipol, dat_Titor, err_Titor, dat_Vcpol, err_Vcpol, dat_Vctor, err_Vctor]
@@ -329,7 +329,7 @@ def avgByWeightHavingError(xxs, weights, weights_err):
 
 
 def gradRegAtInterestRhoWithErr(ReffAvg, RhoAvg, Dat, DatEr, InterestingRho, NFit, polyGrad):
-    print('Newest ver. -> calc.timeSeriesRegGradAtRhoOfInterest')
+    print('Newest ver. -> timeSeriesRegGradAtRhoOfInterest')
     reffIdxsForLSMAtInterest, shiftedReffsForLSMAtInterest = proc.makeReffArraysForLSMAtInterestRho(ReffAvg, RhoAvg, InterestingRho)
 
     reffsForLSMAtInterest = np.tile(shiftedReffsForLSMAtInterest[:NFit], (Dat.shape[0], 1))
@@ -1852,7 +1852,7 @@ def gradient(R, reff, rho, dat, err, Nfit):
 
     idxs_calc = np.full((NRf, Nfit), np.arange(Nfit)).T  # (Nfit, NRf)
     idxs_calc = idxs_calc + np.arange(NRf)  # (Nfit, NRf)
-    idxs_calc = idxs_calc.T  # (NRf, Nfit)
+    idxs_calc = idxs_T  # (NRf, Nfit)
     Rcal = R[idxs_calc]
     reffcal = reff[:, idxs_calc]
     rhocal = rho[:, idxs_calc]
@@ -2243,3 +2243,71 @@ def Tratio(Te, Ti, Te_err, Ti_err):
 #     xmerr = np.sqrt(Um)
 #
 #     return xm, xerr, xmerr
+
+
+def turnLastDimToDiagMat(array):
+    rawdatshape = array.shape
+    last_dim_size = rawdatshape[-1]
+    result_array = np.zeros(rawdatshape + (last_dim_size,), dtype=array.dtype)
+    for i in range(last_dim_size):
+        result_array[..., i, i] = array[..., i]
+    return result_array
+
+
+def polyN_LSM_der(xx, yy, polyN, yErr=np.array([False])):
+    if xx.shape != yy.shape:
+        print('Improper data shape')
+        exit()
+
+    rawdatshape = xx.shape
+    Nfit = rawdatshape[-1]
+    otherNs_array = np.array(xx.shape[:-1]).astype(int)
+    others_ndim = otherNs_array.size
+
+    if not yErr.all():
+        WW = np.identity(Nfit)
+    else:
+        WW = 1. / yErr ** 2
+        WW = turnLastDimToDiagMat(WW)  # !!array shape has changed!!
+
+    xN0 = np.array([xx ** (polyN - ii) for ii in range(polyN + 1)])
+    XT = np.transpose(xN0, axes=tuple(np.append((np.arange(others_ndim) + 1), [0, others_ndim + 1])))
+    XX = transposeLast2Dims(XT)
+
+    WX = np.matmul(WW, XX)
+    XTWX = np.matmul(XT, WX)
+    XTWXinv = np.linalg.inv(XTWX)
+    WXT = transposeLast2Dims(WX)
+    Xplus = np.matmul(XTWXinv, WXT)  # pseudo inverse matrix
+    XplusT = transposeLast2Dims(Xplus)
+    XpXpT = np.matmul(Xplus, XplusT)
+    XXp = np.matmul(XX, Xplus)
+    XXpT = transposeLast2Dims(XXp)
+    XXpXXpT = np.matmul(XXp, XXpT)
+
+    y_vec = turnLastDimToColumnVector(yy)
+    popt_vec = np.matmul(Xplus, y_vec)
+    yHut_vec = np.matmul(XX, popt_vec)
+    yHut = turnLastColumnVectorToDim(yHut_vec)
+    if not yErr.all():
+        sigma_y = np.sqrt(np.sum((yy - yHut) ** 2, axis=-1) / (Nfit - (polyN + 1)))
+    else:
+        sigma_y = np.sqrt(np.sum(yErr ** 2 + (yy - yHut) ** 2, axis=-1) / Nfit)
+    perr = np.sqrt(np.diagonal(XpXpT, axis1=-2, axis2=-1)) * repeat_and_add_lastdim(sigma_y, polyN + 1)
+    yHutErr = np.sqrt(np.diagonal(XXpXXpT, axis1=-2, axis2=-1)) * repeat_and_add_lastdim(sigma_y, Nfit)
+
+    MM = np.diagflat(np.flip(np.arange(1, polyN + 1, 1)), k=-1)
+    XM = np.matmul(XX, MM)
+    XMXp = np.matmul(XM, Xplus)
+    XMXpT = transposeLast2Dims(XMXp)
+    XMXpXMXpT = np.matmul(XMXp, XMXpT)
+
+    yHutDer_vec = np.matmul(XM, popt_vec)
+    yHutDer = turnLastColumnVectorToDim(yHutDer_vec)
+    yHutDerErr = np.sqrt(np.diagonal(XMXpXMXpT, axis1=-2, axis2=-1)) * repeat_and_add_lastdim(sigma_y, Nfit)
+
+    popt = turnLastColumnVectorToDim(popt_vec)
+    popt = np.transpose(popt, axes=tuple(np.concatenate([others_ndim, np.arange(others_ndim)], axis=None)))
+    perr = np.transpose(perr, axes=tuple(np.concatenate([others_ndim, np.arange(others_ndim)], axis=None)))
+
+    return popt, perr, sigma_y, yHut, yHutErr, yHutDer, yHutDerErr
