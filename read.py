@@ -494,6 +494,22 @@ def cxs7_Er_v3(diagnm, sn):
     return time, RR, list_dat, list_dimnms, list_valnms, list_dimunits, list_valunits
 
 
+def eg1d(diagnm, sn):
+
+    eg = myEgdb.LoadEG(diagnm, sn)
+    dim0 = eg.dims(0)
+    list_dimnms = eg.dimnames
+    list_valnms = eg.valnames
+    list_dimunits = eg.dimunits
+    list_valunits = eg.valunits
+    list_dat = [0]*len(list_valnms)
+    for ii, valnm in enumerate(list_valnms):
+        dat = eg.trace_of(valnm, 0, [0])
+        list_dat[ii] = dat
+
+    return dim0, list_dat, list_dimnms, list_valnms, list_dimunits, list_valunits
+
+
 def eg2d(diagnm, sn):
 
     eg = myEgdb.LoadEG(diagnm, sn)
@@ -867,7 +883,7 @@ def LHD_IQsignal_atTime(sn, subsn, diag, chIQ, tat, NFFT, NEns, NOV):
 
 def getIdxsFromLongTime(tdat, tat, NSamp):
     idx_tat = np.argmin(np.abs(tdat - tat))
-    ss = (idx_tat - int(0.5 * NSamp + 0.5), idx_tat + int(0.5 * NSamp + 0.5) - 1)
+    ss = (idx_tat - NSamp // 2, idx_tat + NSamp // 2 - 1)
     return ss
 
 
