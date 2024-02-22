@@ -254,6 +254,10 @@ def takeat_tlist(dat, err, reff, rho, time, tlist):
     return time_tl, reff_tl, rho_tl, dat_tl, err_tl
 
 
+def takeYatX(Yseries, Xseries, Xvalue):
+    return Yseries[np.argmin(np.abs(Xseries - Xvalue))]
+
+
 def interpolate1d(time, val, err, t_ref):
 
     f = interp1d(time, val, bounds_error=False, fill_value=np.nan)
