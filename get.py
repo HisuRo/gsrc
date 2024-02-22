@@ -9,6 +9,10 @@ from nasu.myEgdb import LoadEG
 from nasu import read, calc
 
 
+class struct:
+    pass
+
+
 def Iamp_highk(diaghk, Iamp_range, sn, tstart, tend):
 
     eghk = LoadEG(diaghk, sn)
@@ -142,6 +146,37 @@ def nb_all(egnb, valnm):
     return nbtime, valnb
 
 
+def nb_alldev(sn=174070, sub=1, tstart=3.0, tend=6.0):
+
+    o = struct()
+
+    egnb = LoadEG('nb1pwr_temporal', sn=sn, sub=sub)
+    o.time, o.nb1 = nb(egnb, 'Pport-through_nb1', tstart, tend)
+
+    egnb = LoadEG('nb2pwr_temporal', sn=sn, sub=sub)
+    _, o.nb2 = nb(egnb, 'Pport-through_nb2', tstart, tend)
+
+    egnb = LoadEG('nb3pwr_temporal', sn=sn, sub=sub)
+    _, o.nb3 = nb(egnb, 'Pport-through_nb3', tstart, tend)
+
+    egnb = LoadEG('nb4apwr_temporal', sn=sn, sub=sub)
+    _, o.nb4a = nb(egnb, 'Pport-through_nb4a', tstart, tend)
+
+    egnb = LoadEG('nb4bpwr_temporal', sn=sn, sub=sub)
+    _, o.nb4b = nb(egnb, 'Pport-through_nb4b', tstart, tend)
+
+    egnb = LoadEG('nb5apwr_temporal', sn=sn, sub=sub)
+    _, o.nb5a = nb(egnb, 'Pport-through_nb5a', tstart, tend)
+
+    egnb = LoadEG('nb5bpwr_temporal', sn=sn, sub=sub)
+    _, o.nb5b = nb(egnb, 'Pport-through_nb5b', tstart, tend)
+
+    o.tang = o.nb1 + o.nb2 + o.nb3
+    o.perp = o.nb4a + o.nb4b + o.nb5a + o.nb5b
+
+    return o
+
+
 def ech(sn, tstart, tend):
 
     diagech = 'echpw'
@@ -180,3 +215,67 @@ def ech_all(sn):
     ech_tot_pw = egech.trace_of(ech_tot, dim=0, other_idxs=[0])
 
     return echtime, ech_77G_55UOut_pw, ech_77G_2Our_pw, ech_154G_2Oll_pw, ech_154G_2Oul_pw, ech_154G_2Olr_pw, ech_tot_pw
+
+
+def ech_v2(sn, tstart, tend, decimate=10):
+
+    egech = LoadEG('echpw', sn)
+
+    o = struct()
+    tall = egech.dims(0)
+    idx_ts = np.argmin(np.abs(tall - tstart))
+    idx_te = np.argmin(np.abs(tall - tend))
+
+    o.time = tall[idx_ts: idx_te+1: decimate]
+    o.port55UOut_77G = egech.trace_of('77G_5.5Uout', dim=0, other_idxs=[0])[idx_ts: idx_te+1: decimate]
+    o.port2Out_77G = egech.trace_of('77G_2Our', dim=0, other_idxs=[0])[idx_ts: idx_te+1: decimate]
+    o.port2OLL_154G = egech.trace_of('154G_2Oll', dim=0, other_idxs=[0])[idx_ts: idx_te+1: decimate]
+    o.port2OUL_154G = egech.trace_of('154G_2Oul', dim=0, other_idxs=[0])[idx_ts: idx_te+1: decimate]
+    o.port2OLR_154G = egech.trace_of('154G_2Olr', dim=0, other_idxs=[0])[idx_ts: idx_te+1: decimate]
+    o.total = egech.trace_of('Total ECH', dim=0, other_idxs=[0])[idx_ts: idx_te+1: decimate]
+
+    return o
+
+
+def wp(sn=174070, sub=1, tstart=3.0, tend=6.0, decimate=20):
+
+    egwp = LoadEG("wp", sn=sn, sub=sub)
+    tall = egwp.dims(dim=0)
+    idx_ts = np.argmin(np.abs(tall - tstart))
+    idx_te = np.argmin(np.abs(tall - tend))
+
+    o = struct()
+    o.time = tall[idx_ts: idx_te+1: decimate]
+    o.wp = egwp.trace_of(name="Wp", dim=0, other_idxs=[0])[idx_ts: idx_te+1: decimate]
+    o.beta_dia = egwp.trace_of(name="<beta-dia>", dim=0, other_idxs=[0])[idx_ts: idx_te+1: decimate]
+    o.beta_vmec = egwp.trace_of(name="<beta-vmec>", dim=0, other_idxs=[0])[idx_ts: idx_te+1: decimate]
+
+    return o
+
+
+def nel(sn=174070, sub=1, tstart=3.0, tend=6.0, decimate=10):
+
+    egnel = LoadEG(diagname="fir_nel", sn=sn, sub=sub)
+    tall = egnel.dims(dim=0)
+    idx_ts = np.argmin(np.abs(tall - tstart))
+    idx_te = np.argmin(np.abs(tall - tend))
+
+    o = struct()
+    o.time = tall[idx_ts: idx_te + 1: decimate]
+    o.nebar = egnel.trace_of(name="ne_bar(3669)", dim=0, other_idxs=[0])[idx_ts: idx_te + 1: decimate]
+    o.peak = egnel.trace_of(name="peak", dim=0, other_idxs=[0])[idx_ts: idx_te + 1: decimate]
+    o.nl3309 = egnel.trace_of(name="nL(3309)", dim=0, other_idxs=[0])[idx_ts: idx_te + 1: decimate]
+    o.nl3399 = egnel.trace_of(name="nL(3399)", dim=0, other_idxs=[0])[idx_ts: idx_te + 1: decimate]
+    o.nl3489 = egnel.trace_of(name="nL(3489)", dim=0, other_idxs=[0])[idx_ts: idx_te + 1: decimate]
+    o.nl3579 = egnel.trace_of(name="nL(3579)", dim=0, other_idxs=[0])[idx_ts: idx_te + 1: decimate]
+    o.nl3669 = egnel.trace_of(name="nL(3669)", dim=0, other_idxs=[0])[idx_ts: idx_te + 1: decimate]
+    o.nl3759 = egnel.trace_of(name="nL(3759)", dim=0, other_idxs=[0])[idx_ts: idx_te + 1: decimate]
+    o.nl3849 = egnel.trace_of(name="nL(3849)", dim=0, other_idxs=[0])[idx_ts: idx_te + 1: decimate]
+    o.nl3939 = egnel.trace_of(name="nL(3939)", dim=0, other_idxs=[0])[idx_ts: idx_te + 1: decimate]
+    o.nl4029 = egnel.trace_of(name="nL(4029)", dim=0, other_idxs=[0])[idx_ts: idx_te + 1: decimate]
+    o.nl4119 = egnel.trace_of(name="nL(4119)", dim=0, other_idxs=[0])[idx_ts: idx_te + 1: decimate]
+    o.nl4209 = egnel.trace_of(name="nL(4209)", dim=0, other_idxs=[0])[idx_ts: idx_te + 1: decimate]
+    o.nl4299 = egnel.trace_of(name="nL(4299)", dim=0, other_idxs=[0])[idx_ts: idx_te + 1: decimate]
+    o.nl4389 = egnel.trace_of(name="nL(4389)", dim=0, other_idxs=[0])[idx_ts: idx_te + 1: decimate]
+
+    return o
