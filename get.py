@@ -262,7 +262,7 @@ def nel(sn=174070, sub=1, tstart=3.0, tend=6.0, decimate=10):
 
     o = struct()
     o.time = tall[idx_ts: idx_te + 1: decimate]
-    o.nebar = egnel.trace_of(name="ne_bar(3669)", dim=0, other_idxs=[0])[idx_ts: idx_te + 1: decimate]
+    o.nebar = egnel.trace_of(name="ne_bar(.*)", dim=0, other_idxs=[0], including_wildcard=True)[idx_ts: idx_te + 1: decimate]
     o.peak = egnel.trace_of(name="peak", dim=0, other_idxs=[0])[idx_ts: idx_te + 1: decimate]
     o.nl3309 = egnel.trace_of(name="nL(3309)", dim=0, other_idxs=[0])[idx_ts: idx_te + 1: decimate]
     o.nl3399 = egnel.trace_of(name="nL(3399)", dim=0, other_idxs=[0])[idx_ts: idx_te + 1: decimate]
