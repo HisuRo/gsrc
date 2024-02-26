@@ -335,8 +335,10 @@ class comb_U:
         self.ch6 = struct()
         self.ch7 = struct()
         self.ch8 = struct()
-        self.freqs = [43.0, 45.0, 47.0, 49.0, 51.0, 53.0, 55.0, 57.0]
-        self.chs = [self.ch1, self.ch2, self.ch3, self.ch4, self.ch5, self.ch6, self.ch7, self.ch8]
+        # self.freqs = [43.0, 45.0, 47.0, 49.0, 51.0, 53.0, 55.0, 57.0]
+        # self.chs = [self.ch1, self.ch2, self.ch3, self.ch4, self.ch5, self.ch6, self.ch7, self.ch8]
+        self.freqs = [45.0, 47.0, 51.0, 57.0]
+        self.chs = [self.ch1, self.ch2, self.ch3, self.ch4]
 
         for i in range(len(self.chs)):
             self.chs[i].freq = self.freqs[i]
@@ -613,5 +615,4 @@ class comb_U:
                          "[cm-1]")
         ax[5].set_ylabel("reff/a99")
         ax[5].set_ylim(0.3, 1.2)
-
 
