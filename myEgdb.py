@@ -8,6 +8,7 @@ import struct
 import numpy
 import zipfile
 from functools import *
+import re
 
 
 def SetEnv(iget_path='', lib_path=''):
@@ -348,19 +349,26 @@ class EG(object):
         return self.data[vidxs]
         #return self.get_line(indices)[self.dimno+idx_v]
 
-    def vidx(self, name):
+    def vidx(self, name, including_wildcard=False):
         #print name, self.valnames
-        if name in self.valnames:
-            return self.valnames.index(name)
+        if including_wildcard:
+            for valnm in self.valnames:
+                if re.search(name, valnm):
+                    return self.valnames.index(valnm)
+            else:
+                return -1
         else:
-            return -1
+            if name in self.valnames:
+                return self.valnames.index(name)
+            else:
+                return -1
 
     def trace_of_by_vidx(self, vidx, dim, other_idxs):
         seq_indices = self.dim_indices_at(dim, other_idxs)
         return self.data_values(seq_indices, vidx)
 
-    def trace_of(self, name, dim, other_idxs):
-        vidx = self.vidx(name)
+    def trace_of(self, name, dim, other_idxs, including_wildcard=False):
+        vidx = self.vidx(name, including_wildcard=including_wildcard)
         if vidx == -1:
             return []
         #print "TRACE_OF", other_idxs
