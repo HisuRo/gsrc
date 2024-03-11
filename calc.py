@@ -2,7 +2,7 @@ import numpy as np
 from scipy import signal, fft, interpolate, optimize
 import gc
 import matplotlib.pyplot as plt
-from nasu import proc, plot
+from nasu import proc, plot, getShotInfo, myEgdb
 import os
 import sys
 
@@ -3389,3 +3389,27 @@ def polyN_LSM_der(xx, yy, polyN, yErr=np.array([False])):
     perr = np.transpose(perr, axes=tuple(np.concatenate([others_ndim, np.arange(others_ndim)], axis=None)))
 
     return popt, perr, sigma_y, yHut, yHutErr, yHutDer, yHutDerErr
+
+
+def EMwaveInPlasma(freqin, ne, B):
+
+    e = 1.602176634e-19
+    me = 9.1093837e-31
+    eps0 = 8.85418782e-12
+
+    o = struct()
+
+    o.omgp = np.sqrt(ne * e ** 2 / (eps0 * me))
+    o.omgc = e * B / me
+    o.omguh = np.sqrt(o.omgp ** 2 + o.omgc ** 2)
+    o.omgL = 0.5 * (-o.omgc + np.sqrt(o.omgc ** 2 + 4 * o.omgp ** 2))
+    o.omgR = 0.5 * (o.omgc + np.sqrt(o.omgc ** 2 + 4 * o.omgp ** 2))
+
+    omgin = 2 * np.pi * freqin
+
+    o.NO = np.sqrt(1 - (o.omgp ** 2) / (omgin ** 2))
+    o.NX = np.sqrt((omgin ** 2 - o.omgL ** 2) *
+                   (omgin ** 2 - o.omgR ** 2) /
+                   (omgin ** 2 * (omgin ** 2 - o.omguh ** 2)))
+
+    return o
