@@ -325,6 +325,14 @@ class EG(object):
         gridxi, gridyi, gridzi = numpy.meshgrid(dxidx, dyidx, dzidx, indexing='ij')
         return numpy.stack([numpy.ravel(gridxi), numpy.ravel(gridyi), numpy.ravel(gridzi)]).T
 
+    def dims_indices_4d(self, dimxyzw):
+        dxidx = [i for i in range(self.dimsize[dimxyzw[0]])]
+        dyidx = [i for i in range(self.dimsize[dimxyzw[1]])]
+        dzidx = [i for i in range(self.dimsize[dimxyzw[2]])]
+        dwidx = [i for i in range(self.dimsize[dimxyzw[3]])]
+        gridxi, gridyi, gridzi, gridwi = numpy.meshgrid(dxidx, dyidx, dzidx, dwidx, indexing='ij')
+        return numpy.stack([numpy.ravel(gridxi), numpy.ravel(gridyi), numpy.ravel(gridzi), numpy.ravel(gridwi)]).T
+
     def dims(self, dim):
         seq_indices = self.dim_indices(dim)
         lidxs = numpy.array([self.get_line_index(idxs) for idxs in seq_indices])
@@ -390,6 +398,14 @@ class EG(object):
             return []
         seq_indices = self.dims_indices_3d(dimxyz)
         return self.data_values(seq_indices, vidx)   # 1d array which size = Ndimx * Ndimy * Ndimz
+
+
+    def trace_of_4d(self, name, dimxyzw):
+        vidx = self.vidx(name)
+        if vidx == -1:
+            return []
+        seq_indices = self.dims_indices_4d(dimxyzw)
+        return self.data_values(seq_indices, vidx)   # 1d array which size = Ndimx * Ndimy * Ndimz * Ndimw
 
 
 class EG_Writer(object):
