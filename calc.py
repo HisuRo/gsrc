@@ -3398,6 +3398,9 @@ def EMwaveInPlasma(freqin, ne, B):
     eps0 = 8.85418782e-12
 
     o = struct()
+    o.fin = freqin
+    o.ne = ne
+    o.B = B
 
     o.omgp = np.sqrt(ne * e ** 2 / (eps0 * me))
     o.omgc = e * B / me
@@ -3405,11 +3408,11 @@ def EMwaveInPlasma(freqin, ne, B):
     o.omgL = 0.5 * (-o.omgc + np.sqrt(o.omgc ** 2 + 4 * o.omgp ** 2))
     o.omgR = 0.5 * (o.omgc + np.sqrt(o.omgc ** 2 + 4 * o.omgp ** 2))
 
-    omgin = 2 * np.pi * freqin
+    o.omgin = 2 * np.pi * o.fin
 
-    o.NO = np.sqrt(1 - (o.omgp ** 2) / (omgin ** 2))
-    o.NX = np.sqrt((omgin ** 2 - o.omgL ** 2) *
-                   (omgin ** 2 - o.omgR ** 2) /
-                   (omgin ** 2 * (omgin ** 2 - o.omguh ** 2)))
+    o.NO = np.sqrt(1 - (o.omgp ** 2) / (o.omgin ** 2))
+    o.NX = np.sqrt((o.omgin ** 2 - o.omgL ** 2) *
+                   (o.omgin ** 2 - o.omgR ** 2) /
+                   (o.omgin ** 2 * (o.omgin ** 2 - o.omguh ** 2)))
 
     return o
