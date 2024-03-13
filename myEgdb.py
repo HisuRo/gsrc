@@ -114,9 +114,12 @@ def LoadEGFile(diagname, sn, sub=1):
     return filepath
 
 
-def LoadEGSimple(diagname, sn, sub=1):
+def LoadEGSimple(diagname, sn, sub=1, type="txt"):
     os.chdir(os.path.join('C:', os.sep, 'eg', 'GUIclient2'))
-    filepath = f'{diagname:s}@{sn:06d}_{sub:03d}.txt'
+    if type=="txt":
+        filepath = f'{diagname:s}@{sn:06d}_{sub:03d}.txt'
+    elif type=="dat":
+        filepath = f'{diagname:s}@{sn:06d}.dat'
     eg = EG(filepath)
     return eg
 
