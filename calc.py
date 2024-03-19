@@ -2,7 +2,7 @@ import numpy as np
 from scipy import signal, fft, interpolate, optimize
 import gc
 import matplotlib.pyplot as plt
-from nasu import proc, plot, getShotInfo, myEgdb
+from nasu import proc, plot, getShotInfo, myEgdb, read
 import os
 import sys
 
@@ -1317,36 +1317,40 @@ def power_spectrogram_2s_v4(ti, xx, dt, NFFT=2**10, window="hann", NEns=20, NOV=
 
 def power_spectrogram_2s_v5(ti, xx, NFFT=2**10, ovr=0.5, window="hann", NEns=20):
 
-    NOV = int(NFFT * ovr)
-    dt = ti[1] - ti[0]
+    o = struct()
 
-    print(f'Overlap ratio: {NOV / NFFT * 100:.0f}%\n')
+    o.NFFT = NFFT
+    o.ovr = ovr
+    o.window = window
+    o.NEns = NEns
 
-    Nsp, Nsamp, Ndat = Nspectra_v2(ti, NFFT, NEns, NOV)
-    ti = ti[:Ndat]
-    xx = xx[:Ndat]
+    o.NOV = int(NFFT * ovr)
+    o.dt = ti[1] - ti[0]
 
-    idxs = make_idxs_for_spectrogram_v2(NFFT, NEns, NOV, Nsp)
-    tisp = time_for_spectrogram(ti, idxs)
+    print(f'Overlap ratio: {o.NOV / NFFT * 100:.0f}%\n')
+
+    o.Nsp, o.Nsamp, o.Ndat = Nspectra_v2(ti, NFFT, NEns, o.NOV)
+    ti = ti[:o.Ndat]
+    xx = xx[:o.Ndat]
+
+    o.ti = ti
+    o.xx = xx
+
+    idxs = make_idxs_for_spectrogram_v2(NFFT, NEns, o.NOV, o.Nsp)
+    o.tsp = time_for_spectrogram(ti, idxs)
     xens = xx[idxs]
 
     xavg = repeat_and_add_lastdim(np.average(xens, axis=-1), NFFT)
     xens -= xavg
 
-    win, enbw, CG, CV = getWindowAndCoefs(NFFT, window, NEns, NOV)
+    o.win, o.enbw, o.CG, o.CV = getWindowAndCoefs(NFFT, window, NEns, o.NOV)
 
-    freq, fft_x = fourier_components_2s(xens, dt, NFFT, win)
-    psd, psd_std, psd_err = get_psd(fft_x, CV, dt, NFFT, enbw, CG)
+    o.freq, o.fft_x = fourier_components_2s(xens, o.dt, NFFT, o.win)
+    o.psd, o.psd_std, o.psd_err = get_psd(o.fft_x, o.CV, o.dt, NFFT, o.enbw, o.CG)
 
-    dtisp = Nsamp * dt
-    check_power(NFFT, dt, xx, Nsamp, tisp, dtisp, psd)
-
-    o = struct()
-    o.t = tisp
-    o.f = freq
-    o.sp = psd
-    o.spstd = psd_std
-    o.sperr = psd_err
+    o.dtsp = o.tsp[1] - o.tsp[0]
+    o.dfreq = 1. / (o.Nsamp * o.dt)
+    check_power(NFFT, o.dt, xx, o.Nsamp, o.tsp, o.dtsp, o.psd)
 
     return o
 

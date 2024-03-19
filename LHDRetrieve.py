@@ -91,7 +91,7 @@ def RetrieveData_only_et(diagname, sn, subsn, ch, et, flg_remove=True):
     return data
 
 def RetrieveTime(diagname, sn, subsn, ch, flg_remove=True):
-    print(type(ch))
+    # print(type(ch))
     Retrieve_t(diagname, sn, subsn, ch, True)
     tprmfile = Parameterfile(diagname, sn, subsn, ch, '.tprm')
     tprms = ReadParameterfile(tprmfile, start=0)

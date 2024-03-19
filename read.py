@@ -791,6 +791,22 @@ def LHD_IQ_et(sn, subsn, diagname, chs, et):
     return tdat, Idat, Qdat, dT, Fs, tsize
 
 
+def LHD_IQ_et_v2(sn, subsn, diagname, chs, et):
+
+    Idat, Iprms = LHDR.RetrieveData_et(diagname, sn, subsn, chs[0], et)
+    Qdat, Qprms = LHDR.RetrieveData_et(diagname, sn, subsn, chs[1], et)
+    tdat, tprms = LHDR.RetrieveTime(diagname, sn, subsn, chs[0])
+    tdat = tdat[(tdat >= et[0]) & (tdat <= et[1])]
+
+    dT = parse('{:f}{:S}', tprms['ClockCycle'][0])[0]
+    tsize = len(tdat)
+    Fs = int(Iprms['SamplingClock'][0])
+
+    print('\n')
+
+    return tdat, Idat, Qdat, dT, Fs, tsize, tprms, Iprms, Qprms
+
+
 def LHD_IQ_ss(sn, subsn, diagname, chs, ss):
 
     Idat, Iprms = LHDR.RetrieveData_ss(diagname, sn, subsn, chs[0], ss)
@@ -823,6 +839,20 @@ def LHD_et(sn, subsn, diagname, ch, et):
     print('\n')
 
     return tdat, dat, dT, Fs, tsize
+
+
+def LHD_et_v2(sn, subsn, diagname, ch, et):
+    dat, prms = LHDR.RetrieveData_et(diagname, sn, subsn, ch, et)
+    tdat, tprms = LHDR.RetrieveTime(diagname, sn, subsn, ch)
+    tdat = tdat[(tdat >= et[0]) & (tdat <= et[1])]
+
+    tsize = len(tdat)
+    dT = parse('{:f}{:S}', tprms['ClockCycle'][0])[0]
+    Fs = int(prms['SamplingClock'][0])
+
+    print('\n')
+
+    return tdat, dat, dT, Fs, tsize, tprms, prms
 
 
 def LHD_ss(sn, subsn, diagname, ch, ss):
