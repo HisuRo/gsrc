@@ -39,9 +39,7 @@ def Retrieve_et(diagname, sn, subsn, ch, et, force=False):
         subprocess.run(cmd)
 
 def Retrieve_t(diagname, sn, subsn, ch, force=False):
-    print(type(ch))
     if force or not os.path.exists(Datafile(sn, subsn, ch, '.time')):
-        print(type(ch))
         cmd = f'retrieve_t {diagname:s} {sn:d} {subsn:d} {ch:d} -D'
         os.system(cmd)
 

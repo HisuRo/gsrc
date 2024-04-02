@@ -139,6 +139,13 @@ def calibPrms_df(path_calibPrms):
     return calibPrms_df
 
 
+def calibPrms_df_v2(path_calibPrms):
+    idxs_calibPrms = ['LO freq. (MHz)']
+    calibPrms_df = pd.read_csv(path_calibPrms, header=0, index_col=idxs_calibPrms)
+
+    return calibPrms_df
+
+
 def field_from_tsmap_calib(EG, sn):
 
     time = EG.dims(0)
@@ -805,6 +812,21 @@ def LHD_IQ_et_v2(sn, subsn, diagname, chs, et):
     print('\n')
 
     return tdat, Idat, Qdat, dT, Fs, tsize, tprms, Iprms, Qprms
+
+
+def LHD_IQ_et_v3(sn, subsn, diagname, chs, et):
+
+    Idat, Iprms = LHDR.RetrieveData_et(diagname, sn, subsn, chs[0], et)
+    Qdat, Qprms = LHDR.RetrieveData_et(diagname, sn, subsn, chs[1], et)
+    tdat, tprms = LHDR.RetrieveTime(diagname, sn, subsn, chs[0])
+    tdat = tdat[(tdat >= et[0]) & (tdat <= et[1])]
+
+    dT = parse('{:f}{:S}', tprms['ClockCycle'][0])[0]
+    tsize = len(tdat)
+
+    print('\n')
+
+    return tdat, Idat, Qdat, dT, tsize, tprms, Iprms, Qprms
 
 
 def LHD_IQ_ss(sn, subsn, diagname, chs, ss):
