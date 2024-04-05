@@ -229,20 +229,20 @@ class IQ:
 
         self.sp.t = (self.sp.tstart + self.sp.tend) / 2
         self.sp.fIQ, self.sp.psdIQ = welch(x=self.sp.IQraw, fs=self.Fs, window="hann",
-                                                       nperseg=self.sp.NFFT, noverlap=self.sp.NOV,
-                                                       detrend="constant", scaling="density",
-                                                       average="mean")
+                                           nperseg=self.sp.NFFT, noverlap=self.sp.NOV,
+                                           detrend="constant", scaling="density",
+                                           average="mean")
         self.sp.fIQ = fft.fftshift(self.sp.fIQ)
         self.sp.psdIQ = fft.fftshift(self.sp.psdIQ)
 
         self.sp.fI, self.sp.psdI = welch(x=self.sp.Iraw, fs=self.Fs, window="hann",
-                                                     nperseg=self.sp.NFFT, noverlap=self.sp.NOV,
-                                                     detrend="constant", scaling="density",
-                                                     average="mean")
+                                         nperseg=self.sp.NFFT, noverlap=self.sp.NOV,
+                                         detrend="constant", scaling="density",
+                                         average="mean")
         self.sp.fQ, self.sp.psdQ = welch(x=self.sp.Qraw, fs=self.Fs, window="hann",
-                                                     nperseg=self.sp.NFFT, noverlap=self.sp.NOV,
-                                                     detrend="constant", scaling="density",
-                                                     average="mean")
+                                         nperseg=self.sp.NFFT, noverlap=self.sp.NOV,
+                                         detrend="constant", scaling="density",
+                                         average="mean")
 
         if not display:
             matplotlib.use('Agg')
