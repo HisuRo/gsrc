@@ -364,7 +364,7 @@ class IQ:
         else:
             plot.close(fig)
 
-    def BSmod(self, threshold=-0.8, diagmod="MWRM-PXI", chmod=4):
+    def BSmod(self, threshold=-0.1, diagmod="MWRM-PXI", chmod=4):
 
         self.mod = single(sn=self.sn, subsn=self.subsn, tstart=self.tstart,
                           tend=self.tend, diagname=diagmod, ch=chmod)
