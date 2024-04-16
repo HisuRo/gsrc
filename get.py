@@ -1,12 +1,14 @@
 import numpy as np
 from scipy.interpolate import interp1d
-import matplotlib.pyplot as plt
 import seaborn as sns
 import os
 import gc
 
+import matplotlib.pyplot as plt
+from mpl_toolkits import mplot3d
+
 from nasu.myEgdb import LoadEG
-from nasu import read, calc
+from nasu import read, calc, getShotInfo, proc
 
 
 class struct:
@@ -279,3 +281,206 @@ def nel(sn=174070, sub=1, tstart=3.0, tend=6.0, decimate=10):
     o.nl4389 = egnel.trace_of(name="nL(4389)", dim=0, other_idxs=[0])[idx_ts: idx_te + 1: decimate]
 
     return o
+
+
+class lhdgauss_ray_mwrm:
+
+    def __init__(self, sn=184508, sub=1, num=7):
+
+        self.sn = sn
+        self.sub = sub
+        self.num = num
+        self.diagname = f"LHDGAUSS_RAY_MWRM{self.num:d}"
+        self.t, self.f, self.ray, self.step, list_dat4d, \
+        self.dimnms, self.valnms, self.dimunits, self.valunits = read.eg4d(diagnm=self.diagname, sn=sn, sub=sub)
+        self.x, self.y, self.z, self.kx, self.ky, self.kz, self.kperp, self.kpara, \
+        self.reff, self.a99, self.rho, self.Te, self.ne, \
+        self.B, self.Bx, self.By, self.Bz = list_dat4d
+
+        self.bx = self.Bx / self.B
+        self.by = self.By / self.B
+        self.bz = self.Bz / self.B
+
+        self.isExecuted_scattangle = False
+        self.isExecuted_scattposition = False
+        self.isExecuted_param_along_ray = False
+
+    def plot_rays(self, time=4.5, freq=90, show_b=False):
+
+        idx_t = np.nanargmin(np.abs(self.t - time))  # [s]
+        idx_f = np.nanargmin(np.abs(self.f - freq))  # [GHz]
+
+        fig = plt.figure()
+        ax = fig.add_subplot(111, projection='3d')
+
+        # プロット
+        decimate=20
+        for i, num in enumerate(self.ray):
+            ax.plot(self.x[idx_t, idx_f, i], self.y[idx_t, idx_f, i], self.z[idx_t, idx_f, i], label=num)
+            if show_b:
+                ax.quiver(self.x[idx_t, idx_f, i][::decimate], self.y[idx_t, idx_f, i][::decimate], self.z[idx_t, idx_f, i][::decimate],
+                          self.bx[idx_t, idx_f, i][::decimate], self.by[idx_t, idx_f, i][::decimate], self.bz[idx_t, idx_f, i][::decimate],
+                          length=0.1, alpha=0.5, color="black", linewidth=1)
+
+        # 軸ラベルの設定
+        ax.set_xlabel('x [m]')
+        ax.set_ylabel('y [m]')
+        ax.set_zlabel('z [m]')
+
+        ax.legend()
+
+        plt.show()
+
+    def scattangle(self, time=4.5, freq_GHz=90.):
+
+        idx_t = np.nanargmin(np.abs(self.t - time))  # [s]
+        idx_f = np.nanargmin(np.abs(self.f - freq_GHz))  # [GHz]
+        idx_ray = 0
+
+        self.disp = np.array([np.diff(self.x[idx_t, idx_f, idx_ray]),
+                              np.diff(self.y[idx_t, idx_f, idx_ray]),
+                              np.diff(self.z[idx_t, idx_f, idx_ray])]).T
+        self.b = np.array([self.bx[idx_t, idx_f, idx_ray][:-1],
+                           self.by[idx_t, idx_f, idx_ray][:-1],
+                           self.bz[idx_t, idx_f, idx_ray][:-1]]).T
+        nhor = np.array([0, 0, 1])
+
+        # self.bp = calc.repeat_and_add_lastdim(np.sum(self.b * nhor, axis=-1), 3) * nhor
+        # self.bt = self.b - self.bp
+        #
+        # self.ebt = self.bt / calc.repeat_and_add_lastdim(np.linalg.norm(self.bt, axis=-1), 3)
+        # self.disp_t = calc.repeat_and_add_lastdim(np.sum(self.disp * self.ebt, axis=-1), 3) * self.ebt
+        # self.disp_pr = self.disp - self.disp_t
+
+        self.disp_p = calc.repeat_and_add_lastdim(np.sum(self.disp * nhor, axis=-1), 3) * nhor
+        # self.disp_r = self.disp_pr - self.disp_p
+        self.disp_r = self.disp - self.disp_p
+
+        # self.theta_s = np.arccos(np.sum(- self.disp_pr / calc.repeat_and_add_lastdim(np.linalg.norm(self.disp_pr, axis=-1), 3) *
+        #                            self.disp_r / calc.repeat_and_add_lastdim(np.linalg.norm(self.disp_r, axis=-1), 3), axis=-1))
+        self.theta = np.arccos(
+            np.sum(- self.disp / calc.repeat_and_add_lastdim(np.linalg.norm(self.disp, axis=-1), 3) *
+                   self.disp_r / calc.repeat_and_add_lastdim(np.linalg.norm(self.disp_r, axis=-1), 3), axis=-1))
+
+        idx_step = np.nanargmin(np.abs(self.z[idx_t, idx_f, idx_ray] - 0.))
+        self.thetas = self.theta[idx_step]
+
+        self.isExecuted_scattangle = True
+
+    def scattposition(self, time=4.5, freq_GHz=90., idx_ray=0):
+
+        idx_t = np.nanargmin(np.abs(self.t - time))
+        idx_f = np.nanargmin(np.abs(self.f - freq_GHz))
+
+        idx_step = np.nanargmin(np.abs(self.z[idx_t, idx_f, idx_ray] - 0.))
+
+        self.xs = self.x[idx_t, idx_f, idx_ray, idx_step]
+        self.ys = self.y[idx_t, idx_f, idx_ray, idx_step]
+        self.zs = self.z[idx_t, idx_f, idx_ray, idx_step]
+        self.kxs = self.kx[idx_t, idx_f, idx_ray, idx_step]
+        self.kys = self.ky[idx_t, idx_f, idx_ray, idx_step]
+        self.kzs = self.kz[idx_t, idx_f, idx_ray, idx_step]
+        self.kperps = self.kperp[idx_t, idx_f, idx_ray, idx_step]
+        self.kparas = self.kpara[idx_t, idx_f, idx_ray, idx_step]
+        self.reffs = self.reff[idx_t, idx_f, idx_ray, idx_step]
+        self.rhos = self.rho[idx_t, idx_f, idx_ray, idx_step]
+
+        self.isExecuted_scattposition = True
+
+    def param_along_ray(self, time=4.5, freq_GHz=90., ray_num=1):
+
+        idx_t = np.nanargmin(np.abs(self.t - time))
+        idx_f = np.nanargmin(np.abs(self.f - freq_GHz))
+        idx_ray = ray_num - 1
+
+        self.xray = self.x[idx_t, idx_f, idx_ray]
+        self.yray = self.y[idx_t, idx_f, idx_ray]
+        self.kxray = self.kx[idx_t, idx_f, idx_ray]
+        self.kyray = self.ky[idx_t, idx_f, idx_ray]
+        self.kzray = self.kz[idx_t, idx_f, idx_ray]
+        self.kperpray = self.kperp[idx_t, idx_f, idx_ray]
+        self.kpararay = self.kpara[idx_t, idx_f, idx_ray]
+        self.reffray = self.reff[idx_t, idx_f, idx_ray]
+        self.rhoray = self.rho[idx_t, idx_f, idx_ray]
+        self.Teray = self.Te[idx_t, idx_f, idx_ray]
+        self.neray = self.ne[idx_t, idx_f, idx_ray]
+        self.Bray = self.B[idx_t, idx_f, idx_ray]
+        self.Bxray = self.Bx[idx_t, idx_f, idx_ray]
+        self.Byray = self.By[idx_t, idx_f, idx_ray]
+        self.Bzray = self.Bz[idx_t, idx_f, idx_ray]
+
+        self.isExecuted_param_along_ray = True
+
+
+class tsmap:
+
+    def __init__(self, sn=184508, sub=1):
+
+        self.sn = sn
+        self.sub = sub
+
+        EG = LoadEG(diagname="tsmap_calib", sn=sn, sub=sub)
+
+        self.t = EG.dims(0)
+        self.R = EG.dims(1)
+
+        self.reff = EG.trace_of_2d('reff', [0, 1])
+        self.reffa99 = EG.trace_of_2d('reff/a99', [0, 1])
+        self.Te = EG.trace_of_2d('Te', [0, 1])
+        self.dTe = EG.trace_of_2d('dTe', [0, 1])
+        self.ne_calFIR = EG.trace_of_2d('ne_calFIR', [0, 1])
+        self.dne_calFIR = EG.trace_of_2d('dne_calFIR', [0, 1])
+        self.Te_fit = EG.trace_of_2d('Te_fit', [0, 1])
+        self.Te_fit_err = EG.trace_of_2d('Te_fit_err', [0, 1])
+        self.ne_fit = EG.trace_of_2d('ne_fit', [0, 1])
+        self.ne_fit_err = EG.trace_of_2d('ne_fit_err', [0, 1])
+        self.Br = EG.trace_of_2d('Br', [0, 1])
+        self.Bz = EG.trace_of_2d('Bz', [0, 1])
+        self.Bphi = EG.trace_of_2d('Bphi', [0, 1])
+
+        self.reffa99[self.reffa99 > 1.5] = np.nan
+        self.Te[self.Te == 0.] = np.nan
+        self.dTe[self.dTe == 0.] = np.nan
+        self.ne_calFIR[self.ne_calFIR == 0.] = np.nan
+        self.dne_calFIR[self.dne_calFIR == 0.] = np.nan
+        self.Te_fit[self.Te_fit == 0.] = np.nan
+        self.Te_fit_err[self.Te_fit_err == 0.] = np.nan
+        self.ne_fit[self.ne_fit == 0.] = np.nan
+        self.ne_fit_err[self.ne_fit_err == 0.] = np.nan
+        self.Br[self.Br == 0.] = np.nan
+        self.Bz[self.Bz == 0.] = np.nan
+        self.Bphi[self.Bphi == 0.] = np.nan
+
+        self.reff = np.reshape(self.reff, EG.dimsize)
+        self.reffa99 = np.reshape(self.reffa99, EG.dimsize)
+        self.Te = np.reshape(self.Te, EG.dimsize)
+        self.dTe = np.reshape(self.dTe, EG.dimsize)
+        self.ne_calFIR = np.reshape(self.ne_calFIR, EG.dimsize)
+        self.dne_calFIR = np.reshape(self.dne_calFIR, EG.dimsize)
+        self.Te_fit = np.reshape(self.Te_fit, EG.dimsize)
+        self.Te_fit_err = np.reshape(self.Te_fit_err, EG.dimsize)
+        self.ne_fit = np.reshape(self.ne_fit, EG.dimsize)
+        self.ne_fit_err = np.reshape(self.ne_fit_err, EG.dimsize)
+        self.Br = np.reshape(self.Br, EG.dimsize)
+        self.Bz = np.reshape(self.Bz, EG.dimsize)
+        self.Bphi = np.reshape(self.Bphi, EG.dimsize)
+
+        self.Bax, self.Rax, self.Bq, self.gamma, self.datetime, self.cycle = getShotInfo.info(self.sn)
+        coef = np.abs(self.Bax / 3)
+        self.Br *= coef
+        self.Bz *= coef
+        self.Bphi *= coef
+
+        self.B = np.sqrt(self.Br ** 2 + self.Bz ** 2 + self.Bphi ** 2)
+
+    def at(self, time=4.5):
+
+        self.at = struct()
+        self.at.t = time
+        datlist = [self.t, self.reff, self.reffa99, self.Te, self.dTe, self.ne_calFIR, self.dne_calFIR,
+                   self.Te_fit, self.Te_fit_err, self.ne_fit, self.ne_fit_err, self.Br, self.Bz, self.Bphi, self.B]
+        _, datlist_at = proc.getTimeIdxAndDats(self.t, self.at.t, datlist)
+        self.at.t, self.at.reff, self.at.reffa99, \
+        self.at.Te, self.at.dTe, self.at.ne_calFIR, self.at.dne_calFIR, \
+        self.at.Te_fit, self.at.Te_fit_err, self.at.ne_fit, self.at.ne_fit_err, \
+        self.at.Br, self.at.Bz, self.at.Bphi, self.at.B = datlist_at

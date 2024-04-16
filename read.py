@@ -9,6 +9,10 @@ from nasu import getShotInfo, proc, myEgdb
 import inspect
 
 
+class struct:
+    pass
+
+
 def inputSnOnTerminal():
     snstart = int(input('Start Shot # >>> '))
     snend = int(input('End Shot (if take only one shot, enter 0) # >>> '))
@@ -517,9 +521,9 @@ def eg1d(diagnm, sn):
     return dim0, list_dat, list_dimnms, list_valnms, list_dimunits, list_valunits
 
 
-def eg2d(diagnm, sn):
+def eg2d(diagnm, sn, sub=1):
 
-    eg = myEgdb.LoadEG(diagnm, sn)
+    eg = myEgdb.LoadEG(diagname=diagnm, sn=sn, sub=sub)
     dim0 = eg.dims(0)
     dim1 = eg.dims(1)
     list_dimnms = eg.dimnames

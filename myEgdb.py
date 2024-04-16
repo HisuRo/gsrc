@@ -388,22 +388,21 @@ class EG(object):
         #return [self.get_line(indices)[self.dimno + vidx] 
         #        for indices in self.dim_indices_at(dim, other_idxs)]
 
-    def trace_of_2d(self, name, dimxy):
+    def trace_of_2d(self, name, dimxy=(0, 1)):
         vidx = self.vidx(name)
         if vidx == -1:
             return []
         seq_indices = self.dims_indices_2d(dimxy)
         return self.data_values(seq_indices, vidx)   # 1d array which size = Ndimx * Ndimy
 
-    def trace_of_3d(self, name, dimxyz):
+    def trace_of_3d(self, name, dimxyz=(0, 1, 2)):
         vidx = self.vidx(name)
         if vidx == -1:
             return []
         seq_indices = self.dims_indices_3d(dimxyz)
         return self.data_values(seq_indices, vidx)   # 1d array which size = Ndimx * Ndimy * Ndimz
 
-
-    def trace_of_4d(self, name, dimxyzw):
+    def trace_of_4d(self, name, dimxyzw=(0, 1, 2, 3)):
         vidx = self.vidx(name)
         if vidx == -1:
             return []
