@@ -25,7 +25,8 @@ class single:
         self.t, self.d, self.dT, self.Fs, self.size, self.tprms, self.dprms = \
             read.LHD_et_v2(sn=sn, subsn=subsn, diagname=diagname, ch=ch, et=(tstart, tend))
 
-    def specgram(self, NFFT=2**10, ovr=0.5, window="hann", dT=5e-3, cmap="viridis", magnify=True, pause=0.1):
+    def specgram(self, NFFT=2**10, ovr=0.5, window="hann", dT=5e-3,
+                 cmap="viridis", magnify=True, pause=0.1, display=True):
 
         self.spg = calc.struct()
         self.spg.NFFT = NFFT
@@ -64,6 +65,9 @@ class single:
         else:
             axs[0].set_ylim(float(self.dprms["RangeLow"][0]), float(self.dprms["RangeHigh"][0]))
 
+        if not display:
+            matplotlib.use('Agg')
+
         axs[1].pcolorfast(np.append(self.spg.t - 0.5 * self.spg.dT, self.spg.t[-1] + 0.5 * self.spg.dT),
                           np.append(self.spg.f - 0.5 * self.spg.dF, self.spg.f[-1] + 0.5 * self.spg.dF),
                           10*np.log10(self.spg.psd.T), cmap=self.spg.cmap)
@@ -74,7 +78,10 @@ class single:
         plot.caption(fig, title, hspace=0.1, wspace=0.1)
         plot.capsave(fig, title, fnm, path)
 
-        plot.check(pause)
+        if display:
+            plot.check(pause)
+        else:
+            plot.close(fig)
 
 
 class IQ:

@@ -473,7 +473,7 @@ class tsmap:
 
         self.B = np.sqrt(self.Br ** 2 + self.Bz ** 2 + self.Bphi ** 2)
 
-    def at(self, time=4.5):
+    def tat(self, time=4.5):
 
         self.at = struct()
         self.at.t = time
@@ -484,3 +484,166 @@ class tsmap:
         self.at.Te, self.at.dTe, self.at.ne_calFIR, self.at.dne_calFIR, \
         self.at.Te_fit, self.at.Te_fit_err, self.at.ne_fit, self.at.ne_fit_err, \
         self.at.Br, self.at.Bz, self.at.Bphi, self.at.B = datlist_at
+
+
+class cxsmap7:
+
+    def __init__(self, sn=184508, sub=1):
+
+        self.sn = sn
+        self.sub = sub
+
+        EG = LoadEG(diagname="cxsmap7", sn=sn, sub=sub)
+
+        self.t = EG.dims(0)
+
+        self.ary = EG.trace_of('ary', 1, [0])
+        idxs_pol = np.where((self.ary == 1.) | (self.ary == 3.))[0]
+        idxs_tor = np.where((self.ary == 5.) | (self.ary == 7.))[0]
+
+        self.pol = struct()
+        self.tor = struct()
+
+        self.pol.R = EG.dims(1)[idxs_pol]
+        self.tor.R = EG.dims(1)[idxs_tor]
+        idxs_sort_pol = np.argsort(self.pol.R)
+        idxs_sort_tor = np.argsort(self.tor.R)
+        self.pol.R = self.pol.R[idxs_sort_pol]
+        self.tor.R = self.tor.R[idxs_sort_tor]
+
+        self.pol.Ti = EG.trace_of_2d('Ti', [0, 1])
+        self.pol.Tier = EG.trace_of_2d('Tier', [0, 1])
+        self.pol.Vc = EG.trace_of_2d('Vc', [0, 1])
+        self.pol.Ver = EG.trace_of_2d('Ver', [0, 1])
+        self.pol.inc = EG.trace_of_2d('inc', [0, 1])
+        self.pol.icer = EG.trace_of_2d('icer', [0, 1])
+        self.pol.Vr = EG.trace_of_2d('Vr', [0, 1])
+        self.pol.reff = EG.trace_of_2d('reff', [0, 1])
+        self.pol.a99 = EG.trace_of_2d('a99', [0, 1])
+        self.pol.p0 = EG.trace_of_2d('p0', [0, 1])
+        self.pol.pf = EG.trace_of_2d('pf', [0, 1])
+        self.pol.ip = EG.trace_of_2d('ip', [0, 1])
+        self.pol.ipf = EG.trace_of_2d('ipf', [0, 1])
+        self.pol.Br = EG.trace_of_2d('Br', [0, 1])
+        self.pol.Bz = EG.trace_of_2d('Bz', [0, 1])
+        self.pol.Bphi = EG.trace_of_2d('Bphi', [0, 1])
+        self.pol.dVdreff = EG.trace_of_2d('dVdreff', [0, 1])
+        self.pol.Te = EG.trace_of_2d('Te', [0, 1])
+        self.pol.ne = EG.trace_of_2d('ne', [0, 1])
+        self.pol.t1 = EG.trace_of_2d('t1', [0, 1])
+
+        self.tor.Ti = EG.trace_of_2d('Ti', [0, 1])
+        self.tor.Tier = EG.trace_of_2d('Tier', [0, 1])
+        self.tor.Vc = EG.trace_of_2d('Vc', [0, 1])
+        self.tor.Ver = EG.trace_of_2d('Ver', [0, 1])
+        self.tor.inc = EG.trace_of_2d('inc', [0, 1])
+        self.tor.icer = EG.trace_of_2d('icer', [0, 1])
+        self.tor.Vr = EG.trace_of_2d('Vr', [0, 1])
+        self.tor.reff = EG.trace_of_2d('reff', [0, 1])
+        self.tor.a99 = EG.trace_of_2d('a99', [0, 1])
+        self.tor.p0 = EG.trace_of_2d('p0', [0, 1])
+        self.tor.pf = EG.trace_of_2d('pf', [0, 1])
+        self.tor.ip = EG.trace_of_2d('ip', [0, 1])
+        self.tor.ipf = EG.trace_of_2d('ipf', [0, 1])
+        self.tor.Br = EG.trace_of_2d('Br', [0, 1])
+        self.tor.Bz = EG.trace_of_2d('Bz', [0, 1])
+        self.tor.Bphi = EG.trace_of_2d('Bphi', [0, 1])
+        self.tor.dVdreff = EG.trace_of_2d('dVdreff', [0, 1])
+        self.tor.Te = EG.trace_of_2d('Te', [0, 1])
+        self.tor.ne = EG.trace_of_2d('ne', [0, 1])
+        self.tor.t1 = EG.trace_of_2d('t1', [0, 1])
+
+        self.pol.Ti[self.pol.Ti == 0.] = np.nan
+        self.tor.reff[np.abs(self.tor.reff) > 1.5] = np.nan
+        self.pol.reff[np.abs(self.pol.reff) > 1.5] = np.nan
+
+        varlist_pol = [self.pol.Ti, self.pol.Tier, self.pol.Vc, self.pol.Ver, self.pol.inc, self.pol.icer,
+                       self.pol.Vr, self.pol.reff, self.pol.a99,
+                       self.pol.p0, self.pol.pf, self.pol.ip, self.pol.ipf,
+                       self.pol.Br, self.pol.Bz, self.pol.Bphi, self.pol.dVdreff,
+                       self.pol.Te, self.pol.ne, self.pol.t1]
+        varlist_tor = [self.tor.Ti, self.tor.Tier, self.tor.Vc, self.tor.Ver, self.tor.inc, self.tor.icer,
+                       self.tor.Vr, self.tor.reff, self.tor.a99,
+                       self.tor.p0, self.tor.pf, self.tor.ip, self.tor.ipf,
+                       self.tor.Br, self.tor.Bz, self.tor.Bphi, self.tor.dVdreff,
+                       self.tor.Te, self.tor.ne, self.tor.t1]
+
+        for i in range(len(varlist_pol)):
+            varlist_pol[i] = varlist_pol[i].reshape(EG.dimsize)
+            varlist_pol[i] = varlist_pol[i][:, idxs_pol]
+            varlist_pol[i] = varlist_pol[i][:, idxs_sort_pol]
+
+        for i in range(len(varlist_tor)):
+            varlist_tor[i] = varlist_tor[i].reshape(EG.dimsize)
+            varlist_tor[i] = varlist_tor[i][:, idxs_tor]
+            varlist_tor[i] = varlist_tor[i][:, idxs_sort_tor]
+
+        tidxs = ~np.isnan(varlist_pol[0]).all(axis=1)
+        Rpolidxs = ~np.isnan(varlist_pol[7]).all(axis=0)
+        Rtoridxs = ~np.isnan(varlist_tor[7]).all(axis=0)
+        self.t = self.t[tidxs]
+        self.pol.R = self.pol.R[Rpolidxs]
+        self.tor.R = self.tor.R[Rtoridxs]
+
+        for i in range(len(varlist_pol)):
+            varlist_pol[i] = varlist_pol[i][tidxs]
+            varlist_pol[i] = varlist_pol[i][:, Rpolidxs]
+
+        for i in range(len(varlist_tor)):
+            varlist_tor[i] = varlist_tor[i][tidxs]
+            varlist_tor[i] = varlist_tor[i][:, Rtoridxs]
+
+        self.pol.Ti, self.pol.Tier, self.pol.Vc, self.pol.Ver, self.pol.inc, self.pol.icer, \
+        self.pol.Vr, self.pol.reff, self.pol.a99, \
+        self.pol.p0, self.pol.pf, self.pol.ip, self.pol.ipf, \
+        self.pol.Br, self.pol.Bz, self.pol.Bphi, self.pol.dVdreff, \
+        self.pol.Te, self.pol.ne, self.pol.t1 = varlist_pol
+
+        self.tor.Ti, self.tor.Tier, self.tor.Vc, self.tor.Ver, self.tor.inc, self.tor.icer, \
+        self.tor.Vr, self.tor.reff, self.tor.a99, \
+        self.tor.p0, self.tor.pf, self.tor.ip, self.tor.ipf, \
+        self.tor.Br, self.tor.Bz, self.tor.Bphi, self.tor.dVdreff, \
+        self.tor.Te, self.tor.ne, self.tor.t1 = varlist_tor
+
+        self.pol.reffa99 = self.pol.reff / self.pol.a99
+        self.tor.reffa99 = self.tor.reff / self.tor.a99
+
+        self.pol.a99 = self.pol.a99[:, 0]
+        self.tor.a99 = self.tor.a99[:, 0]
+
+        self.pol.TeTi = self.pol.Te / self.pol.Ti
+        self.tor.TeTi = self.tor.Te / self.tor.Ti
+
+    def tat(self, time=4.5):
+
+        self.at = struct()
+        self.at.pol = struct()
+        self.at.tor = struct()
+        datlist = [self.t,
+                   self.pol.Ti, self.pol.Tier, self.pol.Vc, self.pol.Ver, self.pol.inc, self.pol.icer,
+                   self.pol.Vr, self.pol.reff, self.pol.a99,
+                   self.pol.p0, self.pol.pf, self.pol.ip, self.pol.ipf,
+                   self.pol.Br, self.pol.Bz, self.pol.Bphi, self.pol.dVdreff,
+                   self.pol.Te, self.pol.ne, self.pol.t1,
+                   self.pol.reffa99, self.pol.TeTi,
+                   self.tor.Ti, self.tor.Tier, self.tor.Vc, self.tor.Ver, self.tor.inc, self.tor.icer,
+                   self.tor.Vr, self.tor.reff, self.tor.a99,
+                   self.tor.p0, self.tor.pf, self.tor.ip, self.tor.ipf,
+                   self.tor.Br, self.tor.Bz, self.tor.Bphi, self.tor.dVdreff,
+                   self.tor.Te, self.tor.ne, self.tor.t1,
+                   self.tor.reffa99, self.tor.TeTi]
+
+        _, datlist_at = proc.getTimeIdxAndDats(self.t, time, datlist)
+        self.at.t, \
+        self.at.pol.Ti, self.at.pol.Tier, self.at.pol.Vc, self.at.pol.Ver, self.at.pol.inc, self.at.pol.icer, \
+        self.at.pol.Vr, self.at.pol.reff, self.at.pol.a99, \
+        self.at.pol.p0, self.at.pol.pf, self.at.pol.ip, self.at.pol.ipf, \
+        self.at.pol.Br, self.at.pol.Bz, self.at.pol.Bphi, self.at.pol.dVdreff, \
+        self.at.pol.Te, self.at.pol.ne, self.at.pol.t1, \
+        self.at.pol.reffa99, self.at.pol.TeTi, \
+        self.at.tor.Ti, self.at.tor.Tier, self.at.tor.Vc, self.at.tor.Ver, self.at.tor.inc, self.at.tor.icer, \
+        self.at.tor.Vr, self.at.tor.reff, self.at.tor.a99, \
+        self.at.tor.p0, self.at.tor.pf, self.at.tor.ip, self.at.tor.ipf, \
+        self.at.tor.Br, self.at.tor.Bz, self.at.tor.Bphi, self.at.tor.dVdreff, \
+        self.at.tor.Te, self.at.tor.ne, self.at.tor.t1, \
+        self.at.tor.reffa99, self.at.tor.TeTi = datlist_at
