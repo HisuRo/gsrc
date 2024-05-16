@@ -7,8 +7,171 @@ import os
 import sys
 
 
+ee = 1.602176634E-19   # [C]
+me = 9.1093837E-31     # [kg]
+eps0 = 8.85418782E-12  # [m^-3 kg^-1 s^4 A^2]
+mu0 = 4*np.pi*1.E-7    # [m kg s^-2 A^-2]
+
+
 class struct:
     pass
+
+
+def expand_by1dim(array, Nexp=1, axis=-1):
+    if axis < 0:
+        axis = array.ndim + 1 + axis
+    idx_trans = [i + 1 for i in range(array.ndim)]
+    idx_trans.insert(axis, 0)
+
+    idx_tile = [1]*array.ndim
+    idx_tile.insert(0, Nexp)
+
+    return np.transpose(np.tile(array, idx_tile), idx_trans)
+
+
+def average(dat, err=None, axis=-1):
+
+    if err is None:
+        avg = np.average(dat, axis=axis)
+        std = np.std(dat, axis=axis, ddof=1)
+        ste = std / np.sqrt(dat.shape[axis])
+    else:
+        err_sq = err ** 2
+        w = 1. / err_sq
+        avg = np.average(dat, axis=axis, weights=1./err_sq)
+        std = np.sqrt(np.var(dat, axis=axis) + np.average(err_sq, axis=axis))
+        ste = np.sqrt(np.sum((dat - expand_by1dim(avg, dat.shape[axis], axis=axis))**2 * w, axis=axis) \
+        / ((dat.shape[axis] - 1) * np.sum(w, axis=axis)) + 1./np.sum(w, axis=axis))
+
+    return avg, std, ste
+
+
+def average_dat_withinRhoRange(rho, list_dat, rho_in, rho_out, list_err=None, include_outerside=False):
+    idxs, list_dat = proc.getXIdxsAndYs(rho, rho_in, rho_out, list_dat, include_outerside=include_outerside)
+    array_dat = np.array(list_dat)
+
+    if list_err is None:
+        array_avg, array_std, array_ste = average(array_dat, err=None, axis=-1)
+    else:
+        idxs, list_err = proc.getXIdxsAndYs(rho, rho_in, rho_out, list_err)
+        array_err = np.array(list_err)
+        array_avg, array_std, array_ste = average(array_dat, err=array_err, axis=-1)
+
+    return array_avg, array_std, array_ste
+
+
+def avgByWeightHavingError(xxs, weights, weights_err):
+
+    areNotNansInX = (~np.isnan(xxs)).astype(np.int8)
+    areNotNansInWgt = (~np.isnan(weights)).astype(np.int8)
+    xxs = np.nan_to_num(xxs) * areNotNansInWgt
+    weights = np.nan_to_num(weights) * areNotNansInX
+    weights_err = np.nan_to_num(weights_err) * areNotNansInX
+
+    Sws = np.sum(weights, axis=-1)
+    Swxs = np.sum(weights * xxs, axis=-1)
+    xWAvgs = Swxs / Sws
+    xWAvgs_ex = proc.repeat_and_add_lastdim(xWAvgs, weights.shape[-1])
+    xWAvgErrs = np.sqrt(np.sum((xxs - xWAvgs_ex) ** 2 * weights_err ** 2, axis=-1)) / Sws
+
+    return xWAvgs, xWAvgErrs
+
+
+def sumErr(errList):
+    err = np.sqrt(np.sum(np.array(errList)**2, axis=0))
+    return err
+
+
+def multiRer(datList, errList):
+    rerArray = np.array(errList) / np.array(datList)
+    rer = np.sqrt(np.sum(rerArray**2, axis=0))
+    return rer
+
+
+def inverseDat_andErr(dat, err):
+    inv = 1 / dat
+    rer = err / np.abs(dat)
+    inv_err = inv * rer
+    return inv, inv_err
+
+
+def sqrt_AndErr(x, x_err):
+    y = np.sqrt(x)
+    y_err = 0.5 / y * x_err
+    return y, y_err
+
+
+# def timeAverageProfiles(dat2d, err=np.array([False])):
+#     if err.all():
+#         idxs_isnanInDat2d = np.isnan(dat2d)
+#         idxs_isnanInErr = np.isnan(err)
+#         idxs_isnan = idxs_isnanInErr + idxs_isnanInDat2d
+#         dat2d[idxs_isnan] = np.nan
+#         err[idxs_isnan] = np.nan
+#
+#         avg = np.nanmean(dat2d, axis=0)
+#         std = np.sqrt(np.nanvar(dat2d, axis=0) + np.nanmean(err ** 2, axis=0))
+#     else:
+#         avg = np.nanmean(dat2d, axis=0)
+#         std = np.nanstd(dat2d, axis=0, ddof=1)
+#
+#     return avg, std
+#
+#
+# def timeAverageDatByRefs(timeDat, dat, err, timeRef):
+#     proc.suggestNewVer(2, 'timeAverageDatByRefs')
+#
+#     dtDat = timeDat[1] - timeDat[0]
+#     dtRef = timeRef[1] - timeRef[0]
+#     dNDatRef = int(dtRef / dtDat + 0.5)
+#     timeRef_ext = repeat_and_add_lastdim(timeRef, len(timeDat))
+#     idxDatAtRef = np.argsort(np.abs(timeDat - timeRef_ext))[:, :dNDatRef]
+#
+#     datAtRef = dat[idxDatAtRef]
+#     errAtRef = err[idxDatAtRef]
+#     dat_Ref = np.nanmean(datAtRef, axis=1)
+#     err_Ref = np.sqrt(np.nanvar(datAtRef, axis=1) + np.nanmean(errAtRef ** 2, axis=1))
+#
+#     return dat_Ref, err_Ref
+#
+#
+# def timeAverageDatByRefs_v2(timeDat, dat, timeRef, err=np.array([False])):
+#     dtDat = timeDat[1] - timeDat[0]
+#     dtRef = timeRef[1] - timeRef[0]
+#     dNDatRef = int(dtRef / dtDat + 0.5)
+#     timeRef_ext = repeat_and_add_lastdim(timeRef, len(timeDat))
+#     idxDatAtRef = np.argsort(np.abs(timeDat - timeRef_ext))[:, :dNDatRef]
+#
+#     datAtRef = dat[idxDatAtRef]
+#     dat_Ref = np.nanmean(datAtRef, axis=1)
+#
+#     if err.all():
+#         errAtRef = err[idxDatAtRef]
+#         err_Ref = np.sqrt(np.nanvar(datAtRef, axis=1) + np.nanmean(errAtRef ** 2, axis=1))
+#     else:
+#         err_Ref = np.nanstd(datAtRef, axis=1, ddof=1)
+#
+#     return dat_Ref, err_Ref
+#
+#
+# def timeAverageDatListByRefs(timeDat, datList, timeRef, errList=None):
+#     datRefList = [0] * len(datList)
+#     errRefList = [0] * len(datList)
+#
+#     for ii, dat in enumerate(datList):
+#         if errList is None:
+#             datRef, errRef = timeAverageDatByRefs_v2(timeDat, dat, timeRef)
+#         else:
+#             err = errList[ii]
+#             datRef, errRef = timeAverageDatByRefs_v2(timeDat, dat, timeRef, err)
+#         datRefList[ii] = datRef
+#         errRefList[ii] = errRef
+#
+#     return datRefList, errRefList
+
+
+
+
 
 
 def shifted_gauss(x, a, b, x0, C):
@@ -76,21 +239,6 @@ def fit_xyshifted_gauss_1d(x, y, y_err):
     print('\n')
 
     return popt2, perr, sigma_y, y_hut
-
-
-def average_dat_withinRhoRange(rho, list_dat, rho_in, rho_out, list_err=False):
-    idxs, list_dat = proc.getXIdxsAndYs(rho, rho_in, rho_out, list_dat)
-    array_dat = np.array(list_dat)
-
-    if list_err:
-        idxs, list_err = proc.getXIdxsAndYs(rho, rho_in, rho_out, list_err)
-        array_err = np.array(list_err)
-        array_avg, array_std = weightedAverage_alongLastAxis(array_dat, array_err)
-    else:
-        array_avg = np.average(array_dat, axis=-1)
-        array_std = np.std(array_dat, axis=-1, ddof=1)
-
-    return array_avg, array_std
 
 
 def IQsignal(Idat, Qdat, idx_dev, chDiag):
@@ -254,13 +402,6 @@ def MakeLLSMFitProfilesFromCXS7(sn, startTime, endTime, Nfit, poly):
     return time, raw_list, reg_list
 
 
-def weightedAverage_alongLastAxis(datArray, errArray):
-    errSq = errArray ** 2
-    datAvgs = np.average(datArray, axis=-1, weights= 1. / errSq )
-    datStds = np.sqrt(np.var(datArray, axis=-1) + np.average(errArray ** 2, axis=-1))
-    return datAvgs, datStds
-
-
 def Er_vExB_1ion(Ti, LTi, Lne, Vtor, Vpol, Btor, Bpol, Zi,
                  Ti_er, LTi_er, Lne_er, Vtor_er, Vpol_er, Btor_er, Bpol_er):
     # [keV, keV/m, e19m^-3, e19m^-4, km/s, km/s, T, T, -]
@@ -287,47 +428,6 @@ def Er_vExB_1ion(Ti, LTi, Lne, Vtor, Vpol, Btor, Bpol, Zi,
     vExB_err = multiRer([Er, Btor], [Er_err, Btor_er]) * np.abs(vExB)
 
     return Er, Er_err, vExB, vExB_err   # [kV/m, km/s]
-
-
-def sumErr(errList):
-    err = np.sqrt(np.sum(np.array(errList)**2, axis=0))
-    return err
-
-
-def multiRer(datList, errList):
-    rerArray = np.array(errList) / np.array(datList)
-    rer = np.sqrt(np.sum(rerArray**2, axis=0))
-    return rer
-
-
-def inverseDat_andErr(dat, err):
-    inv = 1 / dat
-    rer = err / np.abs(dat)
-    inv_err = inv * rer
-    return inv, inv_err
-
-
-def sqrt_AndErr(x, x_err):
-    y = np.sqrt(x)
-    y_err = 0.5 / y * x_err
-    return y, y_err
-
-
-def avgByWeightHavingError(xxs, weights, weights_err):
-
-    areNotNansInX = (~np.isnan(xxs)).astype(np.int8)
-    areNotNansInWgt = (~np.isnan(weights)).astype(np.int8)
-    xxs = np.nan_to_num(xxs) * areNotNansInWgt
-    weights = np.nan_to_num(weights) * areNotNansInX
-    weights_err = np.nan_to_num(weights_err) * areNotNansInX
-
-    Sws = np.sum(weights, axis=-1)
-    Swxs = np.sum(weights * xxs, axis=-1)
-    xWAvgs = Swxs / Sws
-    xWAvgs_ex = proc.repeat_and_add_lastdim(xWAvgs, weights.shape[-1])
-    xWAvgErrs = np.sqrt(np.sum((xxs - xWAvgs_ex) ** 2 * weights_err ** 2, axis=-1)) / Sws
-
-    return xWAvgs, xWAvgErrs
 
 
 # def center_of_gravity_of_complex_spectrum(freq, psd, psd_err, power=2):
@@ -532,77 +632,6 @@ def timeSeriesRegGradAtRhoOfInterest(reff2d, rho2d, dat, err, rhoOfInterest, NFi
 #     AvgErr = np.sum(Wg * err, axis=0) / np.sum(Wg, axis=0)
 #
 #     return Avg, AvgErr
-
-
-def timeAverageProfiles(dat2d, err=np.array([False])):
-    if err.all():
-        idxs_isnanInDat2d = np.isnan(dat2d)
-        idxs_isnanInErr = np.isnan(err)
-        idxs_isnan = idxs_isnanInErr + idxs_isnanInDat2d
-        dat2d[idxs_isnan] = np.nan
-        err[idxs_isnan] = np.nan
-
-        avg = np.nanmean(dat2d, axis=0)
-        std = np.sqrt(np.nanvar(dat2d, axis=0) + np.nanmean(err ** 2, axis=0))
-    else:
-        avg = np.nanmean(dat2d, axis=0)
-        std = np.nanstd(dat2d, axis=0, ddof=1)
-
-    return avg, std
-
-
-def timeAverageDatByRefs(timeDat, dat, err, timeRef):
-
-    proc.suggestNewVer(2, 'timeAverageDatByRefs')
-
-    dtDat = timeDat[1] - timeDat[0]
-    dtRef = timeRef[1] - timeRef[0]
-    dNDatRef = int(dtRef / dtDat + 0.5)
-    timeRef_ext = repeat_and_add_lastdim(timeRef, len(timeDat))
-    idxDatAtRef = np.argsort(np.abs(timeDat - timeRef_ext))[:, :dNDatRef]
-
-    datAtRef = dat[idxDatAtRef]
-    errAtRef = err[idxDatAtRef]
-    dat_Ref = np.nanmean(datAtRef, axis=1)
-    err_Ref = np.sqrt(np.nanvar(datAtRef, axis=1) + np.nanmean(errAtRef ** 2, axis=1))
-
-    return dat_Ref, err_Ref
-
-
-def timeAverageDatByRefs_v2(timeDat, dat, timeRef, err=np.array([False])):
-    dtDat = timeDat[1] - timeDat[0]
-    dtRef = timeRef[1] - timeRef[0]
-    dNDatRef = int(dtRef / dtDat + 0.5)
-    timeRef_ext = repeat_and_add_lastdim(timeRef, len(timeDat))
-    idxDatAtRef = np.argsort(np.abs(timeDat - timeRef_ext))[:, :dNDatRef]
-
-    datAtRef = dat[idxDatAtRef]
-    dat_Ref = np.nanmean(datAtRef, axis=1)
-    
-    if err.all():
-        errAtRef = err[idxDatAtRef]
-        err_Ref = np.sqrt(np.nanvar(datAtRef, axis=1) + np.nanmean(errAtRef ** 2, axis=1))
-    else:
-        err_Ref = np.nanstd(datAtRef, axis=1, ddof=1)
-
-    return dat_Ref, err_Ref
-
-
-def timeAverageDatListByRefs(timeDat, datList, timeRef, errList=None):
-
-    datRefList = [0] * len(datList)
-    errRefList = [0] * len(datList)
-
-    for ii, dat in enumerate(datList):
-        if errList is None:
-            datRef, errRef = timeAverageDatByRefs_v2(timeDat, dat, timeRef)
-        else:
-            err = errList[ii]
-            datRef, errRef = timeAverageDatByRefs_v2(timeDat, dat, timeRef, err)
-        datRefList[ii] = datRef
-        errRefList[ii] = errRef
-
-    return datRefList, errRefList
 
 
 def dB(spec, spec_err):
@@ -2953,7 +2982,6 @@ def gradient_by_roll_avg(xx, yy, Nwin, y_err=np.array([False])):
     return x_avg, y_avg, y_std, y_err, grad_y, grad_y_err
 
 
-
 def gradient_reg_reff(reff, dat, err, Nfit):
 
     Nt, NR = reff.shape
@@ -3148,6 +3176,113 @@ def linInterp1dOf2dDat(x2d, y1d, x2d_ref):
     return y2d_ref
 
 
+# 2022/3/28 define Tratio as Ti / Te ( from tau = Te / Ti )
+# 2022/6/14 redefine Tratio as Te / Ti
+def Tratio(Te, Ti, Te_err, Ti_err):
+
+    Tratio = Te / Ti
+
+    Te_rerr = Te_err / Te
+    Ti_rerr = Ti_err / Ti
+    Tratio_rerr = np.sqrt(Te_rerr ** 2 + Ti_rerr ** 2)
+    Tratio_err = Tratio * Tratio_rerr
+
+    return Tratio, Tratio_err
+
+
+# def weighted_average_1D(x1D, weight1D):
+#     Sw = np.sum(weight1D)
+#     wx = x1D * weight1D
+#     Swx = np.sum(wx)
+#     xm = Swx / Sw
+#     w2 = weight1D ** 2
+#     Sw2 = np.sum(w2)
+#     errsq = (x1D - np.full(x1D.T.shape, xm).T) ** 2
+#     werrsq = weight1D * errsq
+#     Swerrsq = np.sum(werrsq)
+#     U = Sw / (Sw ** 2 - Sw2) * Swerrsq
+#     xerr = np.sqrt(U)
+#
+#     wwerrsq = weight1D * werrsq
+#     Swwerrsq = np.sum(wwerrsq)
+#     Um = Sw / (Sw ** 2 - Sw2) * Swwerrsq / Sw
+#     xmerr = np.sqrt(Um)
+#
+#     return xm, xerr, xmerr
+#
+#
+# def weighted_average_2D(x2D, weight2D):
+#
+#     areNotNansInX = (~np.isnan(x2D)).astype(np.int8)
+#     areNotNansInWgt = (~np.isnan(weight2D)).astype(np.int8)
+#     x2D = np.nan_to_num(x2D) * areNotNansInWgt
+#     weight2D = np.nan_to_num(weight2D) * areNotNansInX
+#
+#     Sw = np.sum(weight2D, axis=1)
+#     wx = x2D * weight2D
+#     Swx = np.sum(wx, axis=1)
+#     xm = Swx / Sw
+#     w2 = weight2D ** 2
+#     Sw2 = np.sum(w2, axis=1)
+#     errsq = (x2D - np.full(x2D.T.shape, xm).T) ** 2
+#     werrsq = weight2D * errsq
+#     Swerrsq = np.sum(werrsq, axis=1)
+#     U = Sw / (Sw ** 2 - Sw2) * Swerrsq
+#     xerr = np.sqrt(U)
+#
+#     wwerrsq = weight2D * werrsq
+#     Swwerrsq = np.sum(wwerrsq, axis=1)
+#     Um = Sw / (Sw ** 2 - Sw2) * Swwerrsq / Sw
+#     xmerr = np.sqrt(Um)
+#
+#     return xm, xerr, xmerr
+
+
+def envelope(sig):
+    analytic_signal = signal.hilbert(sig)
+    amplitude_envelope = np.abs(analytic_signal)
+    return amplitude_envelope
+
+
+
+def turnLastDimToDiagMat(array):
+    rawdatshape = array.shape
+    last_dim_size = rawdatshape[-1]
+    result_array = np.zeros(rawdatshape + (last_dim_size,), dtype=array.dtype)
+    for i in range(last_dim_size):
+        result_array[..., i, i] = array[..., i]
+    return result_array
+
+
+def EMwaveInPlasma(freqin, ne, B):
+
+    e = 1.602176634e-19
+    me = 9.1093837e-31
+    eps0 = 8.85418782e-12
+
+    o = struct()
+    o.fin = freqin
+    o.ne = ne
+    o.B = B
+
+    o.omgp = np.sqrt(ne * e ** 2 / (eps0 * me))
+    o.omgc = e * B / me
+    o.omguh = np.sqrt(o.omgp ** 2 + o.omgc ** 2)
+    o.omgL = 0.5 * (-o.omgc + np.sqrt(o.omgc ** 2 + 4 * o.omgp ** 2))
+    o.omgR = 0.5 * (o.omgc + np.sqrt(o.omgc ** 2 + 4 * o.omgp ** 2))
+
+    o.omgin = 2 * np.pi * o.fin
+
+    o.NO = np.sqrt(1 - (o.omgp ** 2) / (o.omgin ** 2))
+    o.NX = np.sqrt((o.omgin ** 2 - o.omgL ** 2) *
+                   (o.omgin ** 2 - o.omgR ** 2) /
+                   (o.omgin ** 2 * (o.omgin ** 2 - o.omguh ** 2)))
+
+    return o
+
+
+
+
 def gradient_reg(R, reff, a99, dat, err, Nfit, poly):
 
     proc.suggestNewVer(2, 'gradient_reg')
@@ -3230,116 +3365,13 @@ def gradient_reg_1d(R, reff, a99, dat, err, Nfit, poly):
     return R_f, reff_f, rho_f, dat_grad, err_grad, dat_reg, err_reg
 
 
-# 2022/3/28 define R as Rax (changed from measured position)
-def Lscale(dat, err, dat_grad, err_grad, Rax):
-
-    rer = np.abs(err / dat)
-    rer_grad = np.abs(err_grad / dat_grad)
-
-    dat_L = - dat / dat_grad
-    rer_L = np.sqrt(rer ** 2 + rer_grad ** 2)
-    err_L = np.abs(dat_L * rer_L)
-
-    dat_RpL = Rax / dat_L
-    err_RpL = np.abs(dat_RpL * rer_L)
-
-    return dat_L, err_L, dat_RpL, err_RpL
-
-
-def eta(dat_LT, err_LT, dat_Ln, err_Ln):
-
-    rer_LT = np.abs(err_LT / dat_LT)
-    rer_Ln = np.abs(err_Ln / dat_Ln)
-
-    dat_eta = dat_Ln / dat_LT
-    rer_eta = np.sqrt(rer_Ln**2 + rer_LT**2)
-    err_eta = np.abs(dat_eta * rer_eta)
-
-    return dat_eta, err_eta
-
-
-# 2022/3/28 define Tratio as Ti / Te ( from tau = Te / Ti )
-# 2022/6/14 redefine Tratio as Te / Ti
-def Tratio(Te, Ti, Te_err, Ti_err):
-
-    Tratio = Te / Ti
-
-    Te_rerr = Te_err / Te
-    Ti_rerr = Ti_err / Ti
-    Tratio_rerr = np.sqrt(Te_rerr ** 2 + Ti_rerr ** 2)
-    Tratio_err = Tratio * Tratio_rerr
-
-    return Tratio, Tratio_err
-
-
-# def weighted_average_1D(x1D, weight1D):
-#     Sw = np.sum(weight1D)
-#     wx = x1D * weight1D
-#     Swx = np.sum(wx)
-#     xm = Swx / Sw
-#     w2 = weight1D ** 2
-#     Sw2 = np.sum(w2)
-#     errsq = (x1D - np.full(x1D.T.shape, xm).T) ** 2
-#     werrsq = weight1D * errsq
-#     Swerrsq = np.sum(werrsq)
-#     U = Sw / (Sw ** 2 - Sw2) * Swerrsq
-#     xerr = np.sqrt(U)
-#
-#     wwerrsq = weight1D * werrsq
-#     Swwerrsq = np.sum(wwerrsq)
-#     Um = Sw / (Sw ** 2 - Sw2) * Swwerrsq / Sw
-#     xmerr = np.sqrt(Um)
-#
-#     return xm, xerr, xmerr
-#
-#
-# def weighted_average_2D(x2D, weight2D):
-#
-#     areNotNansInX = (~np.isnan(x2D)).astype(np.int8)
-#     areNotNansInWgt = (~np.isnan(weight2D)).astype(np.int8)
-#     x2D = np.nan_to_num(x2D) * areNotNansInWgt
-#     weight2D = np.nan_to_num(weight2D) * areNotNansInX
-#
-#     Sw = np.sum(weight2D, axis=1)
-#     wx = x2D * weight2D
-#     Swx = np.sum(wx, axis=1)
-#     xm = Swx / Sw
-#     w2 = weight2D ** 2
-#     Sw2 = np.sum(w2, axis=1)
-#     errsq = (x2D - np.full(x2D.T.shape, xm).T) ** 2
-#     werrsq = weight2D * errsq
-#     Swerrsq = np.sum(werrsq, axis=1)
-#     U = Sw / (Sw ** 2 - Sw2) * Swerrsq
-#     xerr = np.sqrt(U)
-#
-#     wwerrsq = weight2D * werrsq
-#     Swwerrsq = np.sum(wwerrsq, axis=1)
-#     Um = Sw / (Sw ** 2 - Sw2) * Swwerrsq / Sw
-#     xmerr = np.sqrt(Um)
-#
-#     return xm, xerr, xmerr
-
-
-def envelope(sig):
-    analytic_signal = signal.hilbert(sig)
-    amplitude_envelope = np.abs(analytic_signal)
-    return amplitude_envelope
-
-
-
-def turnLastDimToDiagMat(array):
-    rawdatshape = array.shape
-    last_dim_size = rawdatshape[-1]
-    result_array = np.zeros(rawdatshape + (last_dim_size,), dtype=array.dtype)
-    for i in range(last_dim_size):
-        result_array[..., i, i] = array[..., i]
-    return result_array
-
-
 def polyN_LSM_der(xx, yy, polyN, yErr=np.array([False])):
     if xx.shape != yy.shape:
         print('Improper data shape')
         exit()
+
+    o = struct()
+    o.polyN = polyN
 
     rawdatshape = xx.shape
     Nfit = rawdatshape[-1]
@@ -3392,31 +3424,40 @@ def polyN_LSM_der(xx, yy, polyN, yErr=np.array([False])):
     popt = np.transpose(popt, axes=tuple(np.concatenate([others_ndim, np.arange(others_ndim)], axis=None)))
     perr = np.transpose(perr, axes=tuple(np.concatenate([others_ndim, np.arange(others_ndim)], axis=None)))
 
-    return popt, perr, sigma_y, yHut, yHutErr, yHutDer, yHutDerErr
-
-
-def EMwaveInPlasma(freqin, ne, B):
-
-    e = 1.602176634e-19
-    me = 9.1093837e-31
-    eps0 = 8.85418782e-12
-
-    o = struct()
-    o.fin = freqin
-    o.ne = ne
-    o.B = B
-
-    o.omgp = np.sqrt(ne * e ** 2 / (eps0 * me))
-    o.omgc = e * B / me
-    o.omguh = np.sqrt(o.omgp ** 2 + o.omgc ** 2)
-    o.omgL = 0.5 * (-o.omgc + np.sqrt(o.omgc ** 2 + 4 * o.omgp ** 2))
-    o.omgR = 0.5 * (o.omgc + np.sqrt(o.omgc ** 2 + 4 * o.omgp ** 2))
-
-    o.omgin = 2 * np.pi * o.fin
-
-    o.NO = np.sqrt(1 - (o.omgp ** 2) / (o.omgin ** 2))
-    o.NX = np.sqrt((o.omgin ** 2 - o.omgL ** 2) *
-                   (o.omgin ** 2 - o.omgR ** 2) /
-                   (o.omgin ** 2 * (o.omgin ** 2 - o.omguh ** 2)))
+    o.yHut = yHut
+    o.sigma_y = sigma_y
+    o.yHutErr = yHutErr
+    o.popt = popt
+    o.perr = perr
+    o.yHutDer = o.yHutDer
+    o.yHutDerErr = o.yHutDerErr
 
     return o
+
+
+# 2022/3/28 define R as Rax (changed from measured position)
+def Lscale(dat, err, dat_grad, err_grad, Rax):
+
+    rer = np.abs(err / dat)
+    rer_grad = np.abs(err_grad / dat_grad)
+
+    dat_L = - dat / dat_grad
+    rer_L = np.sqrt(rer ** 2 + rer_grad ** 2)
+    err_L = np.abs(dat_L * rer_L)
+
+    dat_RpL = Rax / dat_L
+    err_RpL = np.abs(dat_RpL * rer_L)
+
+    return dat_L, err_L, dat_RpL, err_RpL
+
+
+def eta(dat_LT, err_LT, dat_Ln, err_Ln):
+
+    rer_LT = np.abs(err_LT / dat_LT)
+    rer_Ln = np.abs(err_Ln / dat_Ln)
+
+    dat_eta = dat_Ln / dat_LT
+    rer_eta = np.sqrt(rer_Ln**2 + rer_LT**2)
+    err_eta = np.abs(dat_eta * rer_eta)
+
+    return dat_eta, err_eta

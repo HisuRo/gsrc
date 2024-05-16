@@ -11,6 +11,9 @@ from nasu.myEgdb import LoadEG
 from nasu import read, calc, getShotInfo, proc
 
 
+ee = 1.602176634  # [10^-19 C]
+
+
 class struct:
     pass
 
@@ -446,7 +449,7 @@ class tsmap:
         self.Te_fit[self.Te_fit == 0.] = np.nan
         self.Te_fit_err[self.Te_fit_err == 0.] = np.nan
         self.ne_fit[self.ne_fit == 0.] = np.nan
-        self.ne_fit_err[self.ne_fit_err == 0.] = np.nan
+        self.ne_fit_err[self.ne_fit_err == 0.] = np.nan  # 重み付き平均のときのエラーを消すため。
         self.Br[self.Br == 0.] = np.nan
         self.Bz[self.Bz == 0.] = np.nan
         self.Bphi[self.Bphi == 0.] = np.nan
@@ -473,18 +476,153 @@ class tsmap:
 
         self.B = np.sqrt(self.Br ** 2 + self.Bz ** 2 + self.Bphi ** 2)
 
+        self.pe = ee * self.Te * self.ne_calFIR  # [kPa]
+        self.pe_err = np.sqrt((self.dTe/self.Te)**2 + (self.dne_calFIR/self.ne_calFIR)**2) * self.pe
+        self.pe_fit = ee * self.Te_fit * self.ne_fit  # [kPa]
+        self.pe_fit_err = np.sqrt((self.Te_fit_err / self.Te_fit) ** 2 +
+                                  (self.ne_fit_err / self.ne_fit) ** 2) * self.pe_fit
+
     def tat(self, time=4.5):
 
         self.at = struct()
-        self.at.t = time
         datlist = [self.t, self.reff, self.reffa99, self.Te, self.dTe, self.ne_calFIR, self.dne_calFIR,
                    self.Te_fit, self.Te_fit_err, self.ne_fit, self.ne_fit_err, self.Br, self.Bz, self.Bphi, self.B]
-        _, datlist_at = proc.getTimeIdxAndDats(self.t, self.at.t, datlist)
+        _, datlist_at = proc.getTimeIdxAndDats(self.t, time, datlist)
         self.at.t, self.at.reff, self.at.reffa99, \
         self.at.Te, self.at.dTe, self.at.ne_calFIR, self.at.dne_calFIR, \
         self.at.Te_fit, self.at.Te_fit_err, self.at.ne_fit, self.at.ne_fit_err, \
         self.at.Br, self.at.Bz, self.at.Bphi, self.at.B = datlist_at
 
+    def plot_reffa99(self, tstart=3, tend=6, Rmin=3.5, Rmax=4.7, rhomin=0, rhomax=1.2, drho=0.1):
+        levels = np.arange(rhomin, rhomax+drho, drho)
+        tg, Rg = np.meshgrid(self.t, self.R)
+        fnm=f"#{self.sn}-{self.sub}_{tstart}-{tend}s_{Rmin}-{Rmax}m"
+        plt.figure(num=fnm)
+        cp = plt.contour(tg, Rg, self.reffa99.T, levels=levels)
+        plt.clabel(cp, inline=True, fontsize=10)
+        plt.title('reff/a99')
+        plt.xlabel('Time [s]')
+        plt.ylabel('R [m]')
+        plt.xlim(tstart, tend)
+        plt.ylim(Rmin, Rmax)
+        plt.show()
+
+    def time_window(self, tstart=4.4, tend=4.5):
+
+        self.twin = struct()
+        self.twin.tstart = tstart
+        self.twin.tend = tend
+        datlist = [self.t, self.reff, self.reffa99, self.Te, self.dTe, self.ne_calFIR, self.dne_calFIR,
+                   self.Te_fit, self.Te_fit_err, self.ne_fit, self.ne_fit_err, self.Br, self.Bz, self.Bphi, self.B,
+                   self.pe, self.pe_err, self.pe_fit, self.pe_fit_err]
+        _, datlist_win = proc.getTimeIdxsAndDats(time=self.t, startTime=tstart, endTime=tend, datList=datlist)
+        self.twin.t, self.twin.reff, self.twin.reffa99, \
+        self.twin.Te, self.twin.dTe, self.twin.ne_calFIR, self.twin.dne_calFIR, \
+        self.twin.Te_fit, self.twin.Te_fit_err, self.twin.ne_fit, self.twin.ne_fit_err, \
+        self.twin.Br, self.twin.Bz, self.twin.Bphi, self.twin.B, \
+        self.twin.pe, self.twin.pe_err, self.twin.pe_fit, self.twin.pe_fit_err = datlist_win
+
+        self.twin.avg = struct()
+        self.twin.std = struct()
+        self.twin.ste = struct()
+
+        self.twin.avg.reff, self.twin.std.reff, self.twin.ste.reff \
+            = calc.average(self.twin.reff, err=None, axis=0)
+        self.twin.avg.reffa99, self.twin.std.reffa99, self.twin.ste.reffa99 \
+            = calc.average(self.twin.reffa99, err=None, axis=0)
+        self.twin.avg.Te, self.twin.std.Te, self.twin.ste.Te \
+            = calc.average(self.twin.Te, err=self.twin.dTe, axis=0)
+        self.twin.avg.ne_calFIR, self.twin.std.ne_calFIR, self.twin.ste.ne_calFIR \
+            = calc.average(self.twin.ne_calFIR, err=self.twin.dne_calFIR, axis=0)
+        self.twin.avg.Te_fit, self.twin.std.Te_fit, self.twin.ste.Te_fit \
+            = calc.average(self.twin.Te_fit, err=self.twin.Te_fit_err, axis=0)
+        self.twin.avg.ne_fit, self.twin.std.ne_fit, self.twin.ste.ne_fit \
+            = calc.average(self.twin.ne_fit, err=self.twin.ne_fit_err, axis=0)
+        self.twin.avg.Br, self.twin.std.Br, self.twin.ste.Br \
+            = calc.average(self.twin.Br, err=None, axis=0)
+        self.twin.avg.Bz, self.twin.std.Bz, self.twin.ste.Bz \
+            = calc.average(self.twin.Bz, err=None, axis=0)
+        self.twin.avg.Bphi, self.twin.std.Bphi, self.twin.ste.Bphi \
+            = calc.average(self.twin.Bphi, err=None, axis=0)
+        self.twin.avg.B, self.twin.std.B, self.twin.ste.B \
+            = calc.average(self.twin.B, err=None, axis=0)
+        self.twin.avg.pe, self.twin.std.pe, self.twin.ste.pe \
+            = calc.average(self.twin.pe, err=self.twin.pe_err, axis=0)
+        self.twin.avg.pe_fit, self.twin.std.pe_fit, self.twin.ste.pe_fit \
+            = calc.average(self.twin.pe_fit, err=self.twin.pe_fit_err, axis=0)
+
+    def R_window(self, Rat=4.1, dR=0.106, include_outerside=False, include_grad=False):
+        # R平均の処理
+        # tsmapで取得したデータの指定したR区間内での平均。
+        # 勾配も平均処理するかどうかはオプションとする。（勾配も平均する場合は、先に勾配を計算しておく。）
+        # reff/a99とRの対応関係を別で確認してからRの範囲を決める。
+
+        self.Rwin = struct()
+        self.Rwin.Rat = Rat
+        self.Rwin.dR = dR
+        self.Rwin.Rin = Rat - 0.5 * dR
+        self.Rwin.Rout = Rat + 0.5 * dR
+
+        datlist = [self.reff, self.reffa99, self.Te, self.dTe, self.ne_calFIR, self.dne_calFIR,
+                   self.Te_fit, self.Te_fit_err, self.ne_fit, self.ne_fit_err, self.Br, self.Bz, self.Bphi, self.B,
+                   self.pe, self.pe_err, self.pe_fit, self.pe_fit_err]
+        _idxs, datlist_win = proc.getXIdxsAndYs_2dalongLastAxis(xx=self.R, x_start=self.Rwin.Rin, x_end=self.Rwin.Rout,
+                                                                Ys_list=datlist, include_outerside=include_outerside)
+        self.Rwin.R = self.R[_idxs]
+        self.Rwin.reff, self.Rwin.reffa99, \
+        self.Rwin.Te, self.Rwin.dTe, self.Rwin.ne_calFIR, self.Rwin.dne_calFIR, \
+        self.Rwin.Te_fit, self.Rwin.Te_fit_err, self.Rwin.ne_fit, self.Rwin.ne_fit_err, \
+        self.Rwin.Br, self.Rwin.Bz, self.Rwin.Bphi, self.Rwin.B, \
+        self.Rwin.pe, self.Rwin.pe_err, self.Rwin.pe_fit, self.Rwin.pe_fit_err = datlist_win
+
+        self.Rwin.reffin = np.ravel(self.Rwin.reff[:, 0])
+        self.Rwin.reffout = np.ravel(self.Rwin.reff[:, -1])
+        self.Rwin.reffa99in = np.ravel(self.Rwin.reffa99[:, 0])
+        self.Rwin.reffa99out = np.ravel(self.Rwin.reffa99[:, -1])
+
+        self.Rwin.avg = struct()
+        self.Rwin.std = struct()
+        self.Rwin.ste = struct()
+
+        self.Rwin.avg.reff, self.Rwin.std.reff, self.Rwin.ste.reff \
+            = calc.average(self.Rwin.reff, err=None, axis=1)
+        self.Rwin.avg.reffa99, self.Rwin.std.reffa99, self.Rwin.ste.reffa99 \
+            = calc.average(self.Rwin.reffa99, err=None, axis=1)
+        self.Rwin.avg.Te, self.Rwin.std.Te, self.Rwin.ste.Te \
+            = calc.average(self.Rwin.Te, err=self.Rwin.dTe, axis=1)
+        self.Rwin.avg.ne_calFIR, self.Rwin.std.ne_calFIR, self.Rwin.ste.ne_calFIR \
+            = calc.average(self.Rwin.ne_calFIR, err=self.Rwin.dne_calFIR, axis=1)
+        self.Rwin.avg.Te_fit, self.Rwin.std.Te_fit, self.Rwin.ste.Te_fit \
+            = calc.average(self.Rwin.Te_fit, err=self.Rwin.Te_fit_err, axis=1)
+        self.Rwin.avg.ne_fit, self.Rwin.std.ne_fit, self.Rwin.ste.ne_fit \
+            = calc.average(self.Rwin.ne_fit, err=self.Rwin.ne_fit_err, axis=1)
+        self.Rwin.avg.Br, self.Rwin.std.Br, self.Rwin.ste.Br \
+            = calc.average(self.Rwin.Br, err=None, axis=1)
+        self.Rwin.avg.Bz, self.Rwin.std.Bz, self.Rwin.ste.Bz \
+            = calc.average(self.Rwin.Bz, err=None, axis=1)
+        self.Rwin.avg.Bphi, self.Rwin.std.Bphi, self.Rwin.ste.Bphi \
+            = calc.average(self.Rwin.Bphi, err=None, axis=1)
+        self.Rwin.avg.B, self.Rwin.std.B, self.Rwin.ste.B \
+            = calc.average(self.Rwin.B, err=None, axis=1)
+        self.Rwin.avg.pe, self.Rwin.std.pe, self.Rwin.ste.pe \
+            = calc.average(self.Rwin.pe, err=self.Rwin.pe_err, axis=1)
+        self.Rwin.avg.pe_fit, self.Rwin.std.pe_fit, self.Rwin.ste.pe_fit \
+            = calc.average(self.Rwin.pe_fit, err=self.Rwin.pe_fit_err, axis=1)
+
+    # Te, or ne_calFIR 分布データの処理
+    # ※ 勾配計算は, 物理量をMとして, dM/dR と　dreff/dRをそれぞれ計算し、(dM/dR) / (dreff/dR) で dM/dreffを計算するのが良い。
+    #    （データ仕様の都合上）
+    # a. 生データのまま
+    #   1) 局所直線フィッティングで勾配をそのまま計算する。スケール長計算時のTe or neの値には0次項を使う。
+    #   2) 全点n次多項式フィッティングを行う。導関数から勾配を計算する。
+    # b. Te_fit or ne_fit を使う。
+    #   1) 2次中心差分で勾配を計算する。
+    #   2) 5点ステンシル中心差分で勾配を計算する。
+    # c. 平均処理（時間平均・ショット平均・空間平均（移動平均）などで処理）してばらつきを小さくしたデータを使う。
+    #   1) 局所直線フィッティングで勾配を計算する。スケール長計算時のTe or neの値には0次項を使う。
+    #   2) 全点n次多項式フィッティングを行う。導関数から勾配を計算する。
+    # a., b.はEGデータからそのまま計算できるので、自動で全て行う。
+    # c.はオプションとして実装しておく。平均処理した後に行えるように。
 
 class cxsmap7:
 

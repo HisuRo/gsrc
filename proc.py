@@ -165,12 +165,13 @@ def getXIdxsAndYs(xx, x_start, x_end, Ys_list, include_outerside=True):
     return idxs, Ys_list
 
 
-def getXIdxsAndYs_2dalongLastAxis(xx, x_start, x_end, Ys_list):
+def getXIdxsAndYs_2dalongLastAxis(xx, x_start, x_end, Ys_list, include_outerside=False):
     idxs = np.argwhere((xx >= x_start) & (xx <= x_end)).T[0]
-    if idxs[0] > 0:
-        idxs = np.insert(idxs, 0, idxs[0] - 1)
-    if idxs[-1] < len(xx) - 1:
-        idxs = np.append(idxs, idxs[-1] + 1)
+    if include_outerside:
+        if idxs[0] > 0:
+            idxs = np.insert(idxs, 0, idxs[0] - 1)
+        if idxs[-1] < len(xx) - 1:
+            idxs = np.append(idxs, idxs[-1] + 1)
     for ii, dat in enumerate(Ys_list):
         Ys_list[ii] = dat[:, idxs]
     return idxs, Ys_list

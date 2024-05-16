@@ -3,7 +3,7 @@
 by Tatsuhiro Nasu
 """
 
-from nasu import get, myEgdb
+from nasu import get_eg, myEgdb
 import matplotlib.pyplot as plt
 import numpy as np
 
