@@ -199,7 +199,6 @@ def ech(sn, tstart, tend):
 
     return echtime, echpw
 
-
 def ech_all(sn):
 
     diagech = 'echpw'
@@ -221,7 +220,6 @@ def ech_all(sn):
 
     return echtime, ech_77G_55UOut_pw, ech_77G_2Our_pw, ech_154G_2Oll_pw, ech_154G_2Oul_pw, ech_154G_2Olr_pw, ech_tot_pw
 
-
 def ech_v2(sn, tstart, tend, decimate=10):
 
     egech = LoadEG('echpw', sn)
@@ -241,7 +239,6 @@ def ech_v2(sn, tstart, tend, decimate=10):
 
     return o
 
-
 def wp(sn=174070, sub=1, tstart=3.0, tend=6.0, decimate=20):
 
     egwp = LoadEG("wp", sn=sn, sub=sub)
@@ -256,7 +253,6 @@ def wp(sn=174070, sub=1, tstart=3.0, tend=6.0, decimate=20):
     o.beta_vmec = egwp.trace_of(name="<beta-vmec>", dim=0, other_idxs=[0])[idx_ts: idx_te+1: decimate]
 
     return o
-
 
 def nel(sn=174070, sub=1, tstart=3.0, tend=6.0, decimate=10):
 
@@ -284,7 +280,6 @@ def nel(sn=174070, sub=1, tstart=3.0, tend=6.0, decimate=10):
     o.nl4389 = egnel.trace_of(name="nL(4389)", dim=0, other_idxs=[0])[idx_ts: idx_te + 1: decimate]
 
     return o
-
 
 class lhdgauss_ray_mwrm:
 
@@ -414,13 +409,15 @@ class lhdgauss_ray_mwrm:
 
         self.isExecuted_param_along_ray = True
 
-
 class tsmap:
 
-    def __init__(self, sn=184508, sub=1):
+    def __init__(self, sn=184508, sub=1, tstart=3., tend=6., tsfit_errfactor=2.):
 
         self.sn = sn
         self.sub = sub
+        self.tstart = tstart
+        self.tend = tend
+        self.tsfit_errfactor = tsfit_errfactor
 
         EG = LoadEG(diagname="tsmap_calib", sn=sn, sub=sub)
 
@@ -434,25 +431,12 @@ class tsmap:
         self.ne_calFIR = EG.trace_of_2d('ne_calFIR', [0, 1])
         self.dne_calFIR = EG.trace_of_2d('dne_calFIR', [0, 1])
         self.Te_fit = EG.trace_of_2d('Te_fit', [0, 1])
-        self.Te_fit_err = EG.trace_of_2d('Te_fit_err', [0, 1])
+        self.Te_fit_err = EG.trace_of_2d('Te_fit_err', [0, 1]) * self.tsfit_errfactor
         self.ne_fit = EG.trace_of_2d('ne_fit', [0, 1])
-        self.ne_fit_err = EG.trace_of_2d('ne_fit_err', [0, 1])
+        self.ne_fit_err = EG.trace_of_2d('ne_fit_err', [0, 1]) * self.tsfit_errfactor
         self.Br = EG.trace_of_2d('Br', [0, 1])
         self.Bz = EG.trace_of_2d('Bz', [0, 1])
         self.Bphi = EG.trace_of_2d('Bphi', [0, 1])
-
-        self.reffa99[self.reffa99 > 1.5] = np.nan
-        self.Te[self.Te == 0.] = np.nan
-        self.dTe[self.dTe == 0.] = np.nan
-        self.ne_calFIR[self.ne_calFIR == 0.] = np.nan
-        self.dne_calFIR[self.dne_calFIR == 0.] = np.nan
-        self.Te_fit[self.Te_fit == 0.] = np.nan
-        self.Te_fit_err[self.Te_fit_err == 0.] = np.nan
-        self.ne_fit[self.ne_fit == 0.] = np.nan
-        self.ne_fit_err[self.ne_fit_err == 0.] = np.nan  # 重み付き平均のときのエラーを消すため。
-        self.Br[self.Br == 0.] = np.nan
-        self.Bz[self.Bz == 0.] = np.nan
-        self.Bphi[self.Bphi == 0.] = np.nan
 
         self.reff = np.reshape(self.reff, EG.dimsize)
         self.reffa99 = np.reshape(self.reffa99, EG.dimsize)
@@ -468,6 +452,57 @@ class tsmap:
         self.Bz = np.reshape(self.Bz, EG.dimsize)
         self.Bphi = np.reshape(self.Bphi, EG.dimsize)
 
+        # self.Te[self.Te == 0.] = np.nan
+        # _idxs = np.where(self.dTeTe > 1.0)
+        # self.Te[_idxs] = np.nan
+        # self.dTe[_idxs] = np.nan
+        # self.dTe[self.dTe == 0.] = np.nan
+        # self.ne_calFIR[self.ne_calFIR == 0.] = np.nan
+        # self.dne_calFIR[self.dne_calFIR == 0.] = np.nan
+        # self.Te_fit[self.Te_fit == 0.] = np.nan
+        # self.Te_fit_err[self.Te_fit_err == 0.] = np.nan
+        # self.ne_fit[self.ne_fit == 0.] = np.nan
+        # self.ne_fit_err[self.ne_fit_err == 0.] = np.nan  # 重み付き平均のときのエラーを消すため。
+
+        _datlist = [self.t, self.reff, self.reffa99, self.Te, self.dTe, self.ne_calFIR, self.dne_calFIR,
+                    self.Te_fit, self.Te_fit_err, self.ne_fit, self.ne_fit_err, self.Br, self.Bz, self.Bphi]
+        _idxs, _datlist = proc.getTimeIdxsAndDats(self.t, self.tstart, self.tend, _datlist)
+        self.t, self.reff, self.reffa99, self.Te, self.dTe, self.ne_calFIR, self.dne_calFIR, \
+        self.Te_fit, self.Te_fit_err, self.ne_fit, self.ne_fit_err, self.Br, self.Bz, self.Bphi = _datlist
+
+        self.dTeTe = self.dTe / self.Te
+        self.dTeTe_Rmed = np.nanmedian(self.dTeTe, axis=1)
+        _tidx = np.where(self.dTeTe_Rmed < 1.)[0]
+
+        _datlist = [self.reff, self.reffa99, self.Te, self.dTe, self.dTeTe, self.ne_calFIR, self.dne_calFIR,
+                    self.Te_fit, self.Te_fit_err, self.ne_fit, self.ne_fit_err, self.Br, self.Bz, self.Bphi]
+        for i in range(len(_datlist)):
+            _datlist[i] = _datlist[i][_tidx]
+        self.reff, self.reffa99, self.Te, self.dTe, self.dTeTe, self.ne_calFIR, self.dne_calFIR, \
+        self.Te_fit, self.Te_fit_err, self.ne_fit, self.ne_fit_err, self.Br, self.Bz, self.Bphi = _datlist
+        self.t = self.t[_tidx]
+
+        self.dTeTe_tmed = np.nanmedian(self.dTeTe, axis=0)
+        _Ridx = np.where(self.dTeTe_tmed < 1.)[0]
+
+        _datlist = [self.reff, self.reffa99, self.Te, self.dTe, self.dTeTe, self.ne_calFIR, self.dne_calFIR,
+                    self.Te_fit, self.Te_fit_err, self.ne_fit, self.ne_fit_err, self.Br, self.Bz, self.Bphi]
+        for i in range(len(_datlist)):
+            _datlist[i] = _datlist[i][:, _Ridx]
+        self.reff, self.reffa99, self.Te, self.dTe, self.dTeTe, self.ne_calFIR, self.dne_calFIR, \
+        self.Te_fit, self.Te_fit_err, self.ne_fit, self.ne_fit_err, self.Br, self.Bz, self.Bphi = _datlist
+        self.R = self.R[_Ridx]
+
+        self.reffa99[np.abs(self.reffa99) > 1.05] = np.nan
+        _Ridxs = ~np.isnan(self.reffa99).any(axis=0)
+        self.R = self.R[_Ridxs]
+        _datlist = [self.reff, self.reffa99, self.Te, self.dTe, self.ne_calFIR, self.dne_calFIR,
+                    self.Te_fit, self.Te_fit_err, self.ne_fit, self.ne_fit_err, self.Br, self.Bz, self.Bphi]
+        for i in range(len(_datlist)):
+            _datlist[i] = _datlist[i][:, _Ridxs]
+        self.reff, self.reffa99, self.Te, self.dTe, self.ne_calFIR, self.dne_calFIR, \
+        self.Te_fit, self.Te_fit_err, self.ne_fit, self.ne_fit_err, self.Br, self.Bz, self.Bphi = _datlist
+
         self.Bax, self.Rax, self.Bq, self.gamma, self.datetime, self.cycle = getShotInfo.info(self.sn)
         coef = np.abs(self.Bax / 3)
         self.Br *= coef
@@ -482,7 +517,72 @@ class tsmap:
         self.pe_fit_err = np.sqrt((self.Te_fit_err / self.Te_fit) ** 2 +
                                   (self.ne_fit_err / self.ne_fit) ** 2) * self.pe_fit
 
-    def tat(self, time=4.5):
+    def calcgrad(self, polyN=14):
+
+        # a. 2)
+        _o = calc.polyN_LSM_der(xx=self.reff, yy=self.ne_calFIR, polyN=polyN, yErr=self.dne_calFIR, parity="even")
+        self.ne_polyfit = _o.yHut
+        self.ne_polyfit_err = _o.yHutErr
+        self.dnedreff_polyfit = _o.yHutDer
+        self.dnedreff_polyfit_err = _o.yHutDerErr
+        self.Lne_polyfit, self.Lne_polyfit_err, self.RLne_polyfit, self.RLne_polyfit_err \
+            = calc.Lscale(self.ne_polyfit, self.dnedreff_polyfit, self.Rax,
+                          self.ne_polyfit_err, self.dnedreff_polyfit_err)
+
+        _o = calc.polyN_LSM_der(xx=self.reff, yy=self.Te, polyN=polyN, yErr=self.dTe, parity="even")
+        self.Te_polyfit = _o.yHut
+        self.Te_polyfit_err = _o.yHutErr
+        self.dTedreff_polyfit = _o.yHutDer
+        self.dTedreff_polyfit_err = _o.yHutDerErr
+        self.LTe_polyfit, self.LTe_polyfit_err, self.RLTe_polyfit, self.RLTe_polyfit_err \
+            = calc.Lscale(self.Te_polyfit, self.dTedreff_polyfit, self.Rax,
+                          self.Te_polyfit_err, self.dTedreff_polyfit_err)
+
+        _o = calc.polyN_LSM_der(xx=self.reff, yy=self.pe, polyN=polyN, yErr=self.pe_err, parity="even")
+        self.pe_polyfit = _o.yHut
+        self.pe_polyfit_err = _o.yHutErr
+        self.dpedreff_polyfit = _o.yHutDer
+        self.dpedreff_polyfit_err = _o.yHutDerErr
+        self.Lpe_polyfit, self.Lpe_polyfit_err, self.RLpe_polyfit, self.RLpe_polyfit_err \
+            = calc.Lscale(self.pe_polyfit, self.dpedreff_polyfit, self.Rax,
+                          self.pe_polyfit_err, self.dpedreff_polyfit_err)
+
+        # b. 1)
+        self.dreffdR = np.gradient(self.reff, self.R, edge_order=2, axis=-1)
+        self.dTedR_fit = np.gradient(self.Te_fit, self.R, edge_order=2, axis=-1)
+        self.dTedR_fit_err = np.abs(np.gradient(self.Te_fit_err, self.R, edge_order=2, axis=-1))
+        self.dTedreff_fit, self.dTedreff_fit_err = calc.dMdreff(self.dTedR_fit, self.dreffdR, self.dTedR_fit_err)
+        self.LTe_fit, self.LTe_fit_err, self.RLTe_fit, self.RLTe_fit_err \
+            = calc.Lscale(self.Te_fit, self.dTedreff_fit, self.Rax, self.Te_fit_err, self.dTedreff_fit_err)
+
+        self.dnedR_fit = np.gradient(self.ne_fit, self.R, edge_order=2, axis=-1)
+        self.dnedR_fit_err = np.abs(np.gradient(self.ne_fit_err, self.R, edge_order=2, axis=-1))
+        self.dnedreff_fit, self.dnedreff_fit_err = calc.dMdreff(self.dnedR_fit, self.dreffdR, self.dnedR_fit_err)
+        self.Lne_fit, self.Lne_fit_err, self.RLne_fit, self.RLne_fit_err \
+            = calc.Lscale(self.ne_fit, self.dnedreff_fit, self.Rax, self.ne_fit_err, self.dnedreff_fit_err)
+
+        self.dpedR_fit = np.abs(np.gradient(self.pe_fit, self.R, edge_order=2, axis=-1))
+        self.dpedR_fit_err = np.abs(np.gradient(self.pe_fit_err, self.R, edge_order=2, axis=-1))
+        self.dpedreff_fit, self.dpedreff_fit_err = calc.dMdreff(self.dpedR_fit, self.dreffdR, self.dpedR_fit_err)
+        self.Lpe_fit, self.Lpe_fit_err, self.RLpe_fit, self.RLpe_fit_err \
+            = calc.Lscale(self.pe_fit, self.dpedreff_fit, self.Rax, self.pe_fit_err, self.dpedreff_fit_err)
+
+        self.dBzdR = np.gradient(self.Bz, self.R, edge_order=2, axis=-1)
+        self.dBzdreff, _ = calc.dMdreff(self.dBzdR, self.dreffdR)
+        self.LBz, _, self.RLBz, _ \
+            = calc.Lscale(self.Bz, self.dBzdreff, self.Rax)
+
+        self.dBphidR = np.gradient(self.Bphi, self.R, edge_order=2, axis=-1)
+        self.dBphidreff, _ = calc.dMdreff(self.dBphidR, self.dreffdR)
+        self.LBphi, _, self.RLBphi, _ \
+            = calc.Lscale(self.Bphi, self.dBphidreff, self.Rax)
+
+        self.dBdR = np.gradient(self.B, self.R, edge_order=2, axis=-1)
+        self.dBdreff, _ = calc.dMdreff(self.dBdR, self.dreffdR)
+        self.LB, _, self.RLB, _ \
+            = calc.Lscale(self.B, self.dBdreff, self.Rax)
+
+    def tat(self, time=4.5, include_grad=False):
 
         self.at = struct()
         datlist = [self.t, self.reff, self.reffa99, self.Te, self.dTe, self.ne_calFIR, self.dne_calFIR,
@@ -493,21 +593,59 @@ class tsmap:
         self.at.Te_fit, self.at.Te_fit_err, self.at.ne_fit, self.at.ne_fit_err, \
         self.at.Br, self.at.Bz, self.at.Bphi, self.at.B = datlist_at
 
-    def plot_reffa99(self, tstart=3, tend=6, Rmin=3.5, Rmax=4.7, rhomin=0, rhomax=1.2, drho=0.1):
+        if include_grad:
+
+            datlist = [self.dreffdR, self.Te_polyfit, self.Te_polyfit_err,
+                       self.ne_polyfit, self.ne_polyfit_err, self.pe_polyfit, self.pe_polyfit_err,
+                       self.dTedR_fit, self.dTedR_fit_err, self.dTedreff_fit, self.dTedreff_fit_err,
+                       self.LTe_fit, self.LTe_fit_err, self.RLTe_fit, self.RLTe_fit_err,
+                       self.dnedR_fit, self.dnedR_fit_err, self.dnedreff_fit, self.dnedreff_fit_err,
+                       self.Lne_fit, self.Lne_fit_err, self.RLne_fit, self.RLne_fit_err,
+                       self.dpedR_fit, self.dpedR_fit_err, self.dpedreff_fit, self.dpedreff_fit_err,
+                       self.Lpe_fit, self.Lpe_fit_err, self.RLpe_fit, self.RLpe_fit_err,
+                       self.dTedreff_polyfit, self.dTedreff_polyfit_err,
+                       self.LTe_polyfit, self.LTe_polyfit_err, self.RLTe_polyfit, self.RLTe_polyfit_err,
+                       self.dnedreff_polyfit, self.dnedreff_polyfit_err,
+                       self.Lne_polyfit, self.Lne_polyfit_err, self.RLne_polyfit, self.RLne_polyfit_err,
+                       self.dpedreff_polyfit, self.dpedreff_polyfit_err,
+                       self.Lpe_polyfit, self.Lpe_polyfit_err, self.RLpe_polyfit, self.RLpe_polyfit_err,
+                       self.dBzdR, self.dBzdreff, self.LBz, self.RLBz,
+                       self.dBphidR, self.dBphidreff, self.LBphi, self.RLBphi,
+                       self.dBdR, self.dBdreff, self.LB, self.RLB]
+            _, datlist_at = proc.getTimeIdxAndDats(self.t, time, datlist)
+            self.at.dreffdR, self.at.Te_polyfit, self.at.Te_polyfit_err, \
+            self.at.ne_polyfit, self.at.ne_polyfit_err, self.at.pe_polyfit, self.at.pe_polyfit_err, \
+            self.at.dTedR_fit, self.at.dTedR_fit_err, self.at.dTedreff_fit, self.at.dTedreff_fit_err, \
+            self.at.LTe_fit, self.at.LTe_fit_err, self.at.RLTe_fit, self.at.RLTe_fit_err, \
+            self.at.dnedR_fit, self.at.dnedR_fit_err, self.at.dnedreff_fit, self.at.dnedreff_fit_err, \
+            self.at.Lne_fit, self.at.Lne_fit_err, self.at.RLne_fit, self.at.RLne_fit_err, \
+            self.at.dpedR_fit, self.at.dpedR_fit_err, self.at.dpedreff_fit, self.at.dpedreff_fit_err, \
+            self.at.Lpe_fit, self.at.Lpe_fit_err, self.at.RLpe_fit, self.at.RLpe_fit_err, \
+            self.at.dTedreff_polyfit, self.at.dTedreff_polyfit_err, \
+            self.at.LTe_polyfit, self.at.LTe_polyfit_err, self.at.RLTe_polyfit, self.at.RLTe_polyfit_err, \
+            self.at.dnedreff_polyfit, self.at.dnedreff_polyfit_err, \
+            self.at.Lne_polyfit, self.at.Lne_polyfit_err, self.at.RLne_polyfit, self.at.RLne_polyfit_err, \
+            self.at.dpedreff_polyfit, self.at.dpedreff_polyfit_err, \
+            self.at.Lpe_polyfit, self.at.Lpe_polyfit_err, self.at.RLpe_polyfit, self.at.RLpe_polyfit_err, \
+            self.at.dBzdR, self.at.dBzdreff, self.at.LBz, self.at.RLBz, \
+            self.at.dBphidR, self.at.dBphidreff, self.at.LBphi, self.at.RLBphi, \
+            self.at.dBdR, self.at.dBdreff, self.at.LB, self.at.RLB = datlist_at
+
+    def plot_reffa99(self, Rmin=3.5, Rmax=4.7, rhomin=0, rhomax=1.2, drho=0.1):
         levels = np.arange(rhomin, rhomax+drho, drho)
         tg, Rg = np.meshgrid(self.t, self.R)
-        fnm=f"#{self.sn}-{self.sub}_{tstart}-{tend}s_{Rmin}-{Rmax}m"
+        fnm=f"#{self.sn}-{self.sub}_{self.tstart}-{self.tend}s_{Rmin}-{Rmax}m"
         plt.figure(num=fnm)
         cp = plt.contour(tg, Rg, self.reffa99.T, levels=levels)
         plt.clabel(cp, inline=True, fontsize=10)
         plt.title('reff/a99')
         plt.xlabel('Time [s]')
         plt.ylabel('R [m]')
-        plt.xlim(tstart, tend)
+        plt.xlim(self.tstart, self.tend)
         plt.ylim(Rmin, Rmax)
         plt.show()
 
-    def time_window(self, tstart=4.4, tend=4.5):
+    def t_window(self, tstart=4.4, tend=4.5):
 
         self.twin = struct()
         self.twin.tstart = tstart
@@ -568,12 +706,51 @@ class tsmap:
                    self.pe, self.pe_err, self.pe_fit, self.pe_fit_err]
         _idxs, datlist_win = proc.getXIdxsAndYs_2dalongLastAxis(xx=self.R, x_start=self.Rwin.Rin, x_end=self.Rwin.Rout,
                                                                 Ys_list=datlist, include_outerside=include_outerside)
-        self.Rwin.R = self.R[_idxs]
         self.Rwin.reff, self.Rwin.reffa99, \
         self.Rwin.Te, self.Rwin.dTe, self.Rwin.ne_calFIR, self.Rwin.dne_calFIR, \
         self.Rwin.Te_fit, self.Rwin.Te_fit_err, self.Rwin.ne_fit, self.Rwin.ne_fit_err, \
         self.Rwin.Br, self.Rwin.Bz, self.Rwin.Bphi, self.Rwin.B, \
         self.Rwin.pe, self.Rwin.pe_err, self.Rwin.pe_fit, self.Rwin.pe_fit_err = datlist_win
+        if include_grad:
+            datlist = [self.dreffdR, self.Te_polyfit, self.Te_polyfit_err,
+                       self.ne_polyfit, self.ne_polyfit_err, self.pe_polyfit, self.pe_polyfit_err,
+                       self.dTedR_fit, self.dTedR_fit_err, self.dTedreff_fit, self.dTedreff_fit_err,
+                       self.LTe_fit, self.LTe_fit_err, self.RLTe_fit, self.RLTe_fit_err,
+                       self.dnedR_fit, self.dnedR_fit_err, self.dnedreff_fit, self.dnedreff_fit_err,
+                       self.Lne_fit, self.Lne_fit_err, self.RLne_fit, self.RLne_fit_err,
+                       self.dpedR_fit, self.dpedR_fit_err, self.dpedreff_fit, self.dpedreff_fit_err,
+                       self.Lpe_fit, self.Lpe_fit_err, self.RLpe_fit, self.RLpe_fit_err,
+                       self.dTedreff_polyfit, self.dTedreff_polyfit_err,
+                       self.LTe_polyfit, self.LTe_polyfit_err, self.RLTe_polyfit, self.RLTe_polyfit_err,
+                       self.dnedreff_polyfit, self.dnedreff_polyfit_err,
+                       self.Lne_polyfit, self.Lne_polyfit_err, self.RLne_polyfit, self.RLne_polyfit_err,
+                       self.dpedreff_polyfit, self.dpedreff_polyfit_err,
+                       self.Lpe_polyfit, self.Lpe_polyfit_err, self.RLpe_polyfit, self.RLpe_polyfit_err,
+                       self.dBzdR, self.dBzdreff, self.LBz, self.RLBz,
+                       self.dBphidR, self.dBphidreff, self.LBphi, self.RLBphi,
+                       self.dBdR, self.dBdreff, self.LB, self.RLB]
+            _idxs, datlist_win = proc.getXIdxsAndYs_2dalongLastAxis(xx=self.R, x_start=self.Rwin.Rin,
+                                                                    x_end=self.Rwin.Rout,
+                                                                    Ys_list=datlist,
+                                                                    include_outerside=include_outerside)
+            self.Rwin.dreffdR, self.Rwin.Te_polyfit, self.Rwin.Te_polyfit_err, \
+            self.Rwin.ne_polyfit, self.Rwin.ne_polyfit_err, self.Rwin.pe_polyfit, self.Rwin.pe_polyfit_err, \
+            self.Rwin.dTedR_fit, self.Rwin.dTedR_fit_err, self.Rwin.dTedreff_fit, self.Rwin.dTedreff_fit_err, \
+            self.Rwin.LTe_fit, self.Rwin.LTe_fit_err, self.Rwin.RLTe_fit, self.Rwin.RLTe_fit_err, \
+            self.Rwin.dnedR_fit, self.Rwin.dnedR_fit_err, self.Rwin.dnedreff_fit, self.Rwin.dnedreff_fit_err, \
+            self.Rwin.Lne_fit, self.Rwin.Lne_fit_err, self.Rwin.RLne_fit, self.Rwin.RLne_fit_err, \
+            self.Rwin.dpedR_fit, self.Rwin.dpedR_fit_err, self.Rwin.dpedreff_fit, self.Rwin.dpedreff_fit_err, \
+            self.Rwin.Lpe_fit, self.Rwin.Lpe_fit_err, self.Rwin.RLpe_fit, self.Rwin.RLpe_fit_err, \
+            self.Rwin.dTedreff_polyfit, self.Rwin.dTedreff_polyfit_err, \
+            self.Rwin.LTe_polyfit, self.Rwin.LTe_polyfit_err, self.Rwin.RLTe_polyfit, self.Rwin.RLTe_polyfit_err, \
+            self.Rwin.dnedreff_polyfit, self.Rwin.dnedreff_polyfit_err, \
+            self.Rwin.Lne_polyfit, self.Rwin.Lne_polyfit_err, self.Rwin.RLne_polyfit, self.Rwin.RLne_polyfit_err, \
+            self.Rwin.dpedreff_polyfit, self.Rwin.dpedreff_polyfit_err, \
+            self.Rwin.Lpe_polyfit, self.Rwin.Lpe_polyfit_err, self.Rwin.RLpe_polyfit, self.Rwin.RLpe_polyfit_err, \
+            self.Rwin.dBzdR, self.Rwin.dBzdreff, self.Rwin.LBz, self.Rwin.RLBz, \
+            self.Rwin.dBphidR, self.Rwin.dBphidreff, self.Rwin.LBphi, self.Rwin.RLBphi, \
+            self.Rwin.dBdR, self.Rwin.dBdreff, self.Rwin.LB, self.Rwin.RLB = datlist_win
+        self.Rwin.R = self.R[_idxs]
 
         self.Rwin.reffin = np.ravel(self.Rwin.reff[:, 0])
         self.Rwin.reffout = np.ravel(self.Rwin.reff[:, -1])
@@ -609,19 +786,102 @@ class tsmap:
         self.Rwin.avg.pe_fit, self.Rwin.std.pe_fit, self.Rwin.ste.pe_fit \
             = calc.average(self.Rwin.pe_fit, err=self.Rwin.pe_fit_err, axis=1)
 
+        if include_grad:
+
+            self.Rwin.avg.Te_polyfit, self.Rwin.std.Te_polyfit, self.Rwin.ste.Te_polyfit \
+                = calc.average(self.Rwin.Te_polyfit, err=self.Rwin.Te_polyfit_err, axis=1)
+            self.Rwin.avg.dTedreff_polyfit, self.Rwin.std.dTedreff_polyfit, self.Rwin.ste.dTedreff_polyfit \
+                = calc.average(self.Rwin.dTedreff_polyfit, err=self.Rwin.dTedreff_polyfit_err, axis=1)
+            self.Rwin.avg.LTe_polyfit, self.Rwin.std.LTe_polyfit, self.Rwin.ste.LTe_polyfit \
+                = calc.average(self.Rwin.LTe_polyfit, err=self.Rwin.LTe_polyfit_err, axis=1)
+            self.Rwin.avg.RLTe_polyfit, self.Rwin.std.RLTe_polyfit, self.Rwin.ste.RLTe_polyfit \
+                = calc.average(self.Rwin.RLTe_polyfit, err=self.Rwin.RLTe_polyfit_err, axis=1)
+
+            self.Rwin.avg.ne_polyfit, self.Rwin.std.ne_polyfit, self.Rwin.ste.ne_polyfit \
+                = calc.average(self.Rwin.ne_polyfit, err=self.Rwin.ne_polyfit_err, axis=1)
+            self.Rwin.avg.dnedreff_polyfit, self.Rwin.std.dnedreff_polyfit, self.Rwin.ste.dnedreff_polyfit \
+                = calc.average(self.Rwin.dnedreff_polyfit, err=self.Rwin.dnedreff_polyfit_err, axis=1)
+            self.Rwin.avg.Lne_polyfit, self.Rwin.std.Lne_polyfit, self.Rwin.ste.Lne_polyfit \
+                = calc.average(self.Rwin.Lne_polyfit, err=self.Rwin.Lne_polyfit_err, axis=1)
+            self.Rwin.avg.RLne_polyfit, self.Rwin.std.RLne_polyfit, self.Rwin.ste.RLne_polyfit \
+                = calc.average(self.Rwin.RLne_polyfit, err=self.Rwin.RLne_polyfit_err, axis=1)
+
+            self.Rwin.avg.pe_polyfit, self.Rwin.std.pe_polyfit, self.Rwin.ste.pe_polyfit \
+                = calc.average(self.Rwin.pe_polyfit, err=self.Rwin.pe_polyfit_err, axis=1)
+            self.Rwin.avg.dpedreff_polyfit, self.Rwin.std.dpedreff_polyfit, self.Rwin.ste.dpedreff_polyfit \
+                = calc.average(self.Rwin.dpedreff_polyfit, err=self.Rwin.dpedreff_polyfit_err, axis=1)
+            self.Rwin.avg.Lpe_polyfit, self.Rwin.std.Lpe_polyfit, self.Rwin.ste.Lpe_polyfit \
+                = calc.average(self.Rwin.Lpe_polyfit, err=self.Rwin.Lpe_polyfit_err, axis=1)
+            self.Rwin.avg.RLpe_polyfit, self.Rwin.std.RLpe_polyfit, self.Rwin.ste.RLpe_polyfit \
+                = calc.average(self.Rwin.RLpe_polyfit, err=self.Rwin.RLpe_polyfit_err, axis=1)
+
+            self.Rwin.avg.dTedR_fit, self.Rwin.std.dTedR_fit, self.Rwin.ste.dTedR_fit \
+                = calc.average(self.Rwin.dTedR_fit, err=self.Rwin.dTedR_fit_err, axis=1)
+            self.Rwin.avg.dTedreff_fit, self.Rwin.std.dTedreff_fit, self.Rwin.ste.dTedreff_fit \
+                = calc.average(self.Rwin.dTedreff_fit, err=self.Rwin.dTedreff_fit_err, axis=1)
+            self.Rwin.avg.LTe_fit, self.Rwin.std.LTe_fit, self.Rwin.ste.LTe_fit \
+                = calc.average(self.Rwin.LTe_fit, err=self.Rwin.LTe_fit_err, axis=1)
+            self.Rwin.avg.RLTe_fit, self.Rwin.std.RLTe_fit, self.Rwin.ste.RLTe_fit \
+                = calc.average(self.Rwin.RLTe_fit, err=self.Rwin.RLTe_fit_err, axis=1)
+
+            self.Rwin.avg.dnedR_fit, self.Rwin.std.dnedR_fit, self.Rwin.ste.dnedR_fit \
+                = calc.average(self.Rwin.dnedR_fit, err=self.Rwin.dnedR_fit_err, axis=1)
+            self.Rwin.avg.dnedreff_fit, self.Rwin.std.dnedreff_fit, self.Rwin.ste.dnedreff_fit \
+                = calc.average(self.Rwin.dnedreff_fit, err=self.Rwin.dnedreff_fit_err, axis=1)
+            self.Rwin.avg.Lne_fit, self.Rwin.std.Lne_fit, self.Rwin.ste.Lne_fit \
+                = calc.average(self.Rwin.Lne_fit, err=self.Rwin.Lne_fit_err, axis=1)
+            self.Rwin.avg.RLne_fit, self.Rwin.std.RLne_fit, self.Rwin.ste.RLne_fit \
+                = calc.average(self.Rwin.RLne_fit, err=self.Rwin.RLne_fit_err, axis=1)
+
+            self.Rwin.avg.dpedR_fit, self.Rwin.std.dpedR_fit, self.Rwin.ste.dpedR_fit \
+                = calc.average(self.Rwin.dpedR_fit, err=self.Rwin.dpedR_fit_err, axis=1)
+            self.Rwin.avg.dpedreff_fit, self.Rwin.std.dpedreff_fit, self.Rwin.ste.dpedreff_fit \
+                = calc.average(self.Rwin.dpedreff_fit, err=self.Rwin.dpedreff_fit_err, axis=1)
+            self.Rwin.avg.Lpe_fit, self.Rwin.std.Lpe_fit, self.Rwin.ste.Lpe_fit \
+                = calc.average(self.Rwin.Lpe_fit, err=self.Rwin.Lpe_fit_err, axis=1)
+            self.Rwin.avg.RLpe_fit, self.Rwin.std.RLpe_fit, self.Rwin.ste.RLpe_fit \
+                = calc.average(self.Rwin.RLpe_fit, err=self.Rwin.RLpe_fit_err, axis=1)
+
+            self.Rwin.avg.dBzdR, self.Rwin.std.dBzdR, self.Rwin.ste.dBzdR \
+                = calc.average(self.Rwin.dBzdR, axis=1)
+            self.Rwin.avg.dBzdreff, self.Rwin.std.dBzdreff, self.Rwin.ste.dBzdreff \
+                = calc.average(self.Rwin.dBzdreff, axis=1)
+            self.Rwin.avg.LBz, self.Rwin.std.LBz, self.Rwin.ste.LBz \
+                = calc.average(self.Rwin.LBz, axis=1)
+            self.Rwin.avg.RLBz, self.Rwin.std.RLBz, self.Rwin.ste.RLBz \
+                = calc.average(self.Rwin.RLBz, axis=1)
+
+            self.Rwin.avg.dBphidR, self.Rwin.std.dBphidR, self.Rwin.ste.dBphidR \
+                = calc.average(self.Rwin.dBphidR, axis=1)
+            self.Rwin.avg.dBphidreff, self.Rwin.std.dBphidreff, self.Rwin.ste.dBphidreff \
+                = calc.average(self.Rwin.dBphidreff, axis=1)
+            self.Rwin.avg.LBphi, self.Rwin.std.LBphi, self.Rwin.ste.LBphi \
+                = calc.average(self.Rwin.LBphi, axis=1)
+            self.Rwin.avg.RLBphi, self.Rwin.std.RLBphi, self.Rwin.ste.RLBphi \
+                = calc.average(self.Rwin.RLBphi, axis=1)
+
+            self.Rwin.avg.dBdR, self.Rwin.std.dBdR, self.Rwin.ste.dBdR \
+                = calc.average(self.Rwin.dBdR, axis=1)
+            self.Rwin.avg.dBdreff, self.Rwin.std.dBdreff, self.Rwin.ste.dBdreff \
+                = calc.average(self.Rwin.dBdreff, axis=1)
+            self.Rwin.avg.LB, self.Rwin.std.LB, self.Rwin.ste.LB \
+                = calc.average(self.Rwin.LB, axis=1)
+            self.Rwin.avg.RLB, self.Rwin.std.RLB, self.Rwin.ste.RLB \
+                = calc.average(self.Rwin.RLB, axis=1)
+
     # Te, or ne_calFIR 分布データの処理
     # ※ 勾配計算は, 物理量をMとして, dM/dR と　dreff/dRをそれぞれ計算し、(dM/dR) / (dreff/dR) で dM/dreffを計算するのが良い。
     #    （データ仕様の都合上）
     # a. 生データのまま
     #   1) 局所直線フィッティングで勾配をそのまま計算する。スケール長計算時のTe or neの値には0次項を使う。
-    #   2) 全点n次多項式フィッティングを行う。導関数から勾配を計算する。
+    #   ok! 2) 全点n次多項式フィッティングを行う（横軸はreffで、左右対称な関数）。導関数から勾配を計算する。
     # b. Te_fit or ne_fit を使う。
-    #   1) 2次中心差分で勾配を計算する。
+    #   ok! 1) 2次中心差分で勾配を計算する。
     #   2) 5点ステンシル中心差分で勾配を計算する。
-    # c. 平均処理（時間平均・ショット平均・空間平均（移動平均）などで処理）してばらつきを小さくしたデータを使う。
+    # c. 平均処理（時間平均(ok!)・ショット平均・空間平均（移動平均）などで処理）してばらつきを小さくしたデータを使う。
     #   1) 局所直線フィッティングで勾配を計算する。スケール長計算時のTe or neの値には0次項を使う。
     #   2) 全点n次多項式フィッティングを行う。導関数から勾配を計算する。
-    # a., b.はEGデータからそのまま計算できるので、自動で全て行う。
+    # a., b.はEGデータからそのまま計算できるので、calcgrad関数で全て行う。
     # c.はオプションとして実装しておく。平均処理した後に行えるように。
 
 class cxsmap7:
@@ -692,8 +952,8 @@ class cxsmap7:
         self.tor.t1 = EG.trace_of_2d('t1', [0, 1])
 
         self.pol.Ti[self.pol.Ti == 0.] = np.nan
-        self.tor.reff[np.abs(self.tor.reff) > 1.5] = np.nan
-        self.pol.reff[np.abs(self.pol.reff) > 1.5] = np.nan
+        self.pol.reff[np.abs(self.pol.reff) > 0.63] = np.nan
+        self.tor.reff[np.abs(self.tor.reff) > 0.63] = np.nan
 
         varlist_pol = [self.pol.Ti, self.pol.Tier, self.pol.Vc, self.pol.Ver, self.pol.inc, self.pol.icer,
                        self.pol.Vr, self.pol.reff, self.pol.a99,
@@ -717,18 +977,21 @@ class cxsmap7:
             varlist_tor[i] = varlist_tor[i][:, idxs_sort_tor]
 
         tidxs = ~np.isnan(varlist_pol[0]).all(axis=1)
-        Rpolidxs = ~np.isnan(varlist_pol[7]).all(axis=0)
-        Rtoridxs = ~np.isnan(varlist_tor[7]).all(axis=0)
         self.t = self.t[tidxs]
+
+        for i in range(len(varlist_pol)):
+            varlist_pol[i] = varlist_pol[i][tidxs]
+        for i in range(len(varlist_tor)):
+            varlist_tor[i] = varlist_tor[i][tidxs]
+
+        Rpolidxs = ~np.isnan(varlist_pol[7]).any(axis=0)
+        Rtoridxs = ~np.isnan(varlist_tor[7]).any(axis=0)
         self.pol.R = self.pol.R[Rpolidxs]
         self.tor.R = self.tor.R[Rtoridxs]
 
         for i in range(len(varlist_pol)):
-            varlist_pol[i] = varlist_pol[i][tidxs]
             varlist_pol[i] = varlist_pol[i][:, Rpolidxs]
-
         for i in range(len(varlist_tor)):
-            varlist_tor[i] = varlist_tor[i][tidxs]
             varlist_tor[i] = varlist_tor[i][:, Rtoridxs]
 
         self.pol.Ti, self.pol.Tier, self.pol.Vc, self.pol.Ver, self.pol.inc, self.pol.icer, \
@@ -736,7 +999,6 @@ class cxsmap7:
         self.pol.p0, self.pol.pf, self.pol.ip, self.pol.ipf, \
         self.pol.Br, self.pol.Bz, self.pol.Bphi, self.pol.dVdreff, \
         self.pol.Te, self.pol.ne, self.pol.t1 = varlist_pol
-
         self.tor.Ti, self.tor.Tier, self.tor.Vc, self.tor.Ver, self.tor.inc, self.tor.icer, \
         self.tor.Vr, self.tor.reff, self.tor.a99, \
         self.tor.p0, self.tor.pf, self.tor.ip, self.tor.ipf, \
@@ -752,7 +1014,85 @@ class cxsmap7:
         self.pol.TeTi = self.pol.Te / self.pol.Ti
         self.tor.TeTi = self.tor.Te / self.tor.Ti
 
-    def tat(self, time=4.5):
+        self.Bax, self.Rax, self.Bq, self.gamma, self.datetime, self.cycle = getShotInfo.info(self.sn)
+
+    def calcgrad(self, polyN=10):
+
+        # a. 2)
+        self.polyN = polyN
+
+        _o = calc.polyN_LSM_der(xx=self.tor.reff, yy=self.tor.Ti, polyN=polyN, yErr=self.tor.Tier, parity="even")
+        self.tor.Ti_polyfit = _o.yHut
+        self.tor.Ti_polyfit_err = _o.yHutErr
+        self.tor.dTidreff_polyfit = _o.yHutDer
+        self.tor.dTidreff_polyfit_err = _o.yHutDerErr
+        self.tor.LTi_polyfit, self.tor.LTi_polyfit_err, self.tor.RLTi_polyfit, self.tor.RLTi_polyfit_err \
+            = calc.Lscale(self.tor.Ti_polyfit, self.tor.dTidreff_polyfit, self.Rax,
+                          self.tor.Ti_polyfit_err, self.tor.dTidreff_polyfit_err)
+
+        _o = calc.polyN_LSM_der(xx=self.pol.reff, yy=self.pol.Ti, polyN=polyN, yErr=self.pol.Tier, parity="even")
+        self.pol.Ti_polyfit = _o.yHut
+        self.pol.Ti_polyfit_err = _o.yHutErr
+        self.pol.dTidreff_polyfit = _o.yHutDer
+        self.pol.dTidreff_polyfit_err = _o.yHutDerErr
+        self.pol.LTi_polyfit, self.pol.LTi_polyfit_err, self.pol.RLTi_polyfit, self.pol.RLTi_polyfit_err \
+            = calc.Lscale(self.pol.Ti_polyfit, self.pol.dTidreff_polyfit, self.Rax,
+                          self.pol.Ti_polyfit_err, self.pol.dTidreff_polyfit_err)
+
+        _o = calc.polyN_LSM_der(xx=self.tor.reff, yy=self.tor.Vc, polyN=polyN, yErr=self.tor.Ver)
+        self.tor.Vc_polyfit = _o.yHut
+        self.tor.Vc_polyfit_err = _o.yHutErr
+        self.tor.dVcdreff_polyfit = _o.yHutDer
+        self.tor.dVcdreff_polyfit_err = _o.yHutDerErr
+        self.tor.LVc_polyfit, self.tor.LVc_polyfit_err, self.tor.RLVc_polyfit, self.tor.RLVc_polyfit_err \
+            = calc.Lscale(self.tor.Vc_polyfit, self.tor.dVcdreff_polyfit, self.Rax,
+                          self.tor.Vc_polyfit_err, self.tor.dVcdreff_polyfit_err)
+
+        _o = calc.polyN_LSM_der(xx=self.pol.reff, yy=self.pol.Vc, polyN=polyN, yErr=self.pol.Ver)
+        self.pol.Vc_polyfit = _o.yHut
+        self.pol.Vc_polyfit_err = _o.yHutErr
+        self.pol.dVcdreff_polyfit = _o.yHutDer
+        self.pol.dVcdreff_polyfit_err = _o.yHutDerErr
+        self.pol.LVc_polyfit, self.pol.LVc_polyfit_err, self.pol.RLVc_polyfit, self.pol.RLVc_polyfit_err \
+            = calc.Lscale(self.pol.Vc_polyfit, self.pol.dVcdreff_polyfit, self.Rax,
+                          self.pol.Vc_polyfit_err, self.pol.dVcdreff_polyfit_err)
+
+        # # b. 1)
+        # self.dreffdR = np.gradient(self.reff, self.R, edge_order=2, axis=-1)
+        # self.dTedR_fit = np.gradient(self.Te_fit, self.R, edge_order=2, axis=-1)
+        # self.dTedR_fit_err = np.abs(np.gradient(self.Te_fit_err, self.R, edge_order=2, axis=-1))
+        # self.dTedreff_fit, self.dTedreff_fit_err = calc.dMdreff(self.dTedR_fit, self.dreffdR, self.dTedR_fit_err)
+        # self.LTe_fit, self.LTe_fit_err, self.RLTe_fit, self.RLTe_fit_err \
+        #     = calc.Lscale(self.Te_fit, self.dTedreff_fit, self.Rax, self.Te_fit_err, self.dTedreff_fit_err)
+        #
+        # self.dnedR_fit = np.gradient(self.ne_fit, self.R, edge_order=2, axis=-1)
+        # self.dnedR_fit_err = np.abs(np.gradient(self.ne_fit_err, self.R, edge_order=2, axis=-1))
+        # self.dnedreff_fit, self.dnedreff_fit_err = calc.dMdreff(self.dnedR_fit, self.dreffdR, self.dnedR_fit_err)
+        # self.Lne_fit, self.Lne_fit_err, self.RLne_fit, self.RLne_fit_err \
+        #     = calc.Lscale(self.ne_fit, self.dnedreff_fit, self.Rax, self.ne_fit_err, self.dnedreff_fit_err)
+        #
+        # self.dpedR_fit = np.abs(np.gradient(self.pe_fit, self.R, edge_order=2, axis=-1))
+        # self.dpedR_fit_err = np.abs(np.gradient(self.pe_fit_err, self.R, edge_order=2, axis=-1))
+        # self.dpedreff_fit, self.dpedreff_fit_err = calc.dMdreff(self.dpedR_fit, self.dreffdR, self.dpedR_fit_err)
+        # self.Lpe_fit, self.Lpe_fit_err, self.RLpe_fit, self.RLpe_fit_err \
+        #     = calc.Lscale(self.pe_fit, self.dpedreff_fit, self.Rax, self.pe_fit_err, self.dpedreff_fit_err)
+        #
+        # self.dBzdR = np.gradient(self.Bz, self.R, edge_order=2, axis=-1)
+        # self.dBzdreff, _ = calc.dMdreff(self.dBzdR, self.dreffdR)
+        # self.LBz, _, self.RLBz, _ \
+        #     = calc.Lscale(self.Bz, self.dBzdreff, self.Rax)
+        #
+        # self.dBphidR = np.gradient(self.Bphi, self.R, edge_order=2, axis=-1)
+        # self.dBphidreff, _ = calc.dMdreff(self.dBphidR, self.dreffdR)
+        # self.LBphi, _, self.RLBphi, _ \
+        #     = calc.Lscale(self.Bphi, self.dBphidreff, self.Rax)
+        #
+        # self.dBdR = np.gradient(self.B, self.R, edge_order=2, axis=-1)
+        # self.dBdreff, _ = calc.dMdreff(self.dBdR, self.dreffdR)
+        # self.LB, _, self.RLB, _ \
+        #     = calc.Lscale(self.B, self.dBdreff, self.Rax)
+
+    def tat(self, time=4.5, include_grad=True):
 
         self.at = struct()
         self.at.pol = struct()
@@ -785,3 +1125,347 @@ class cxsmap7:
         self.at.tor.Br, self.at.tor.Bz, self.at.tor.Bphi, self.at.tor.dVdreff, \
         self.at.tor.Te, self.at.tor.ne, self.at.tor.t1, \
         self.at.tor.reffa99, self.at.tor.TeTi = datlist_at
+
+        if include_grad:
+            datlist = [self.pol.Ti_polyfit, self.pol.Ti_polyfit_err,
+                       self.pol.dTidreff_polyfit, self.pol.dTidreff_polyfit_err,
+                       self.pol.LTi_polyfit, self.pol.LTi_polyfit_err,
+                       self.pol.RLTi_polyfit, self.pol.RLTi_polyfit_err,
+                       self.pol.Vc_polyfit, self.pol.Vc_polyfit_err,
+                       self.pol.dVcdreff_polyfit, self.pol.dVcdreff_polyfit_err,
+                       self.pol.LVc_polyfit, self.pol.LVc_polyfit_err,
+                       self.pol.RLVc_polyfit, self.pol.RLVc_polyfit_err,
+                       self.tor.Ti_polyfit, self.tor.Ti_polyfit_err,
+                       self.tor.dTidreff_polyfit, self.tor.dTidreff_polyfit_err,
+                       self.tor.LTi_polyfit, self.tor.LTi_polyfit_err,
+                       self.tor.RLTi_polyfit, self.tor.RLTi_polyfit_err,
+                       self.tor.Vc_polyfit, self.tor.Vc_polyfit_err,
+                       self.tor.dVcdreff_polyfit, self.tor.dVcdreff_polyfit_err,
+                       self.tor.LVc_polyfit, self.tor.LVc_polyfit_err,
+                       self.tor.RLVc_polyfit, self.tor.RLVc_polyfit_err
+                       ]
+            _, datlist_at = proc.getTimeIdxAndDats(self.t, time, datlist)
+            self.at.pol.Ti_polyfit, self.at.pol.Ti_polyfit_err, \
+            self.at.pol.dTidreff_polyfit, self.at.pol.dTidreff_polyfit_err, \
+            self.at.pol.LTi_polyfit, self.at.pol.LTi_polyfit_err, \
+            self.at.pol.RLTi_polyfit, self.at.pol.RLTi_polyfit_err, \
+            self.at.pol.Vc_polyfit, self.at.pol.Vc_polyfit_err, \
+            self.at.pol.dVcdreff_polyfit, self.at.pol.dVcdreff_polyfit_err, \
+            self.at.pol.LVc_polyfit, self.at.pol.LVc_polyfit_err, \
+            self.at.pol.RLVc_polyfit, self.at.pol.RLVc_polyfit_err, \
+            self.at.tor.Ti_polyfit, self.at.tor.Ti_polyfit_err, \
+            self.at.tor.dTidreff_polyfit, self.at.tor.dTidreff_polyfit_err, \
+            self.at.tor.LTi_polyfit, self.at.tor.LTi_polyfit_err, \
+            self.at.tor.RLTi_polyfit, self.at.tor.RLTi_polyfit_err, \
+            self.at.tor.Vc_polyfit, self.at.tor.Vc_polyfit_err, \
+            self.at.tor.dVcdreff_polyfit, self.at.tor.dVcdreff_polyfit_err, \
+            self.at.tor.LVc_polyfit, self.at.tor.LVc_polyfit_err, \
+            self.at.tor.RLVc_polyfit, self.at.tor.RLVc_polyfit_err = datlist_at
+
+    def t_window(self, tstart=4.4, tend=4.5):
+
+        self.twin = struct()
+        self.twin.tstart = tstart
+        self.twin.tend = tend
+        self.twin.pol = struct()
+        self.twin.tor = struct()
+
+        datlist = [self.t, self.pol.Ti, self.pol.Tier, self.pol.Vc, self.pol.Ver,
+                   self.pol.inc, self.pol.icer,
+                   self.pol.Vr, self.pol.reff,
+                   self.pol.p0, self.pol.pf, self.pol.ip, self.pol.ipf,
+                   self.pol.Br, self.pol.Bz, self.pol.Bphi, self.pol.dVdreff,
+                   self.pol.Te, self.pol.ne, self.pol.t1,
+                   self.pol.reffa99, self.pol.TeTi,
+                   self.tor.Ti, self.tor.Tier, self.tor.Vc, self.tor.Ver, self.tor.inc, self.tor.icer,
+                   self.tor.Vr, self.tor.reff,
+                   self.tor.p0, self.tor.pf, self.tor.ip, self.tor.ipf,
+                   self.tor.Br, self.tor.Bz, self.tor.Bphi, self.tor.dVdreff,
+                   self.tor.Te, self.tor.ne, self.tor.t1,
+                   self.tor.reffa99, self.tor.TeTi]
+        _idxs, datlist_win = proc.getTimeIdxsAndDats(self.t, self.twin.tstart, self.twin.tend, datlist)
+        self.twin.t, self.twin.pol.Ti, self.twin.pol.Tier, self.twin.pol.Vc, self.twin.pol.Ver, \
+        self.twin.pol.inc, self.twin.pol.icer, \
+        self.twin.pol.Vr, self.twin.pol.reff, \
+        self.twin.pol.p0, self.twin.pol.pf, self.twin.pol.ip, self.twin.pol.ipf, \
+        self.twin.pol.Br, self.twin.pol.Bz, self.twin.pol.Bphi, self.twin.pol.dVdreff, \
+        self.twin.pol.Te, self.twin.pol.ne, self.twin.pol.t1, \
+        self.twin.pol.reffa99, self.twin.pol.TeTi, \
+        self.twin.tor.Ti, self.twin.tor.Tier, self.twin.tor.Vc, self.twin.tor.Ver, \
+        self.twin.tor.inc, self.twin.tor.icer, \
+        self.twin.tor.Vr, self.twin.tor.reff, \
+        self.twin.tor.p0, self.twin.tor.pf, self.twin.tor.ip, self.twin.tor.ipf, \
+        self.twin.tor.Br, self.twin.tor.Bz, self.twin.tor.Bphi, self.twin.tor.dVdreff, \
+        self.twin.tor.Te, self.twin.tor.ne, self.twin.tor.t1, \
+        self.twin.tor.reffa99, self.twin.tor.TeTi = datlist_win
+
+        self.twin.pol.avg = struct()
+        self.twin.pol.std = struct()
+        self.twin.pol.ste = struct()
+        self.twin.tor.avg = struct()
+        self.twin.tor.std = struct()
+        self.twin.tor.ste = struct()
+
+        self.twin.pol.avg.reff, self.twin.pol.std.reff, self.twin.pol.ste.reff \
+            = calc.average(self.twin.pol.reff, err=None, axis=0)
+        self.twin.pol.avg.reffa99, self.twin.pol.std.reffa99, self.twin.pol.ste.reffa99 \
+            = calc.average(self.twin.pol.reffa99, err=None, axis=0)
+        self.twin.pol.avg.Ti, self.twin.pol.std.Ti, self.twin.pol.ste.Ti \
+            = calc.average(self.twin.pol.Ti, err=self.twin.pol.Tier, axis=0)
+        self.twin.pol.avg.Vc, self.twin.pol.std.Vc, self.twin.pol.ste.Vc \
+            = calc.average(self.twin.pol.Vc, err=self.twin.pol.Ver, axis=0)
+
+        self.twin.tor.avg.reff, self.twin.tor.std.reff, self.twin.tor.ste.reff \
+            = calc.average(self.twin.tor.reff, err=None, axis=0)
+        self.twin.tor.avg.reffa99, self.twin.tor.std.reffa99, self.twin.tor.ste.reffa99 \
+            = calc.average(self.twin.tor.reffa99, err=None, axis=0)
+        self.twin.tor.avg.Ti, self.twin.tor.std.Ti, self.twin.tor.ste.Ti \
+            = calc.average(self.twin.tor.Ti, err=self.twin.tor.Tier, axis=0)
+        self.twin.tor.avg.Vc, self.twin.tor.std.Vc, self.twin.tor.ste.Vc \
+            = calc.average(self.twin.tor.Vc, err=self.twin.tor.Ver, axis=0)
+
+    def R_window(self, Rat=4.1, dR=0.106, include_outerside=False, include_grad=False):
+
+        self.Rwin = struct()
+        self.Rwin.pol = struct()
+        self.Rwin.tor = struct()
+        self.Rwin.Rat = Rat
+        self.Rwin.dR = dR
+        self.Rwin.Rin = Rat - 0.5 * dR
+        self.Rwin.Rout = Rat + 0.5 * dR
+
+        datlist = [self.pol.Ti, self.pol.Tier, self.pol.Vc, self.pol.Ver, self.pol.inc, self.pol.icer,
+                   self.pol.Vr, self.pol.reff,
+                   self.pol.p0, self.pol.pf, self.pol.ip, self.pol.ipf,
+                   self.pol.Br, self.pol.Bz, self.pol.Bphi, self.pol.dVdreff,
+                   self.pol.Te, self.pol.ne, self.pol.t1,
+                   self.pol.reffa99, self.pol.TeTi]
+        _idxs, datlist_win = proc.getXIdxsAndYs_2dalongLastAxis(xx=self.pol.R, x_start=self.Rwin.Rin, x_end=self.Rwin.Rout,
+                                                                Ys_list=datlist, include_outerside=include_outerside)
+        self.Rwin.pol.Ti, self.Rwin.pol.Tier, self.Rwin.pol.Vc, self.Rwin.pol.Ver, \
+        self.Rwin.pol.inc, self.Rwin.pol.icer, \
+        self.Rwin.pol.Vr, self.Rwin.pol.reff, \
+        self.Rwin.pol.p0, self.Rwin.pol.pf, self.Rwin.pol.ip, self.Rwin.pol.ipf, \
+        self.Rwin.pol.Br, self.Rwin.pol.Bz, self.Rwin.pol.Bphi, self.Rwin.pol.dVdreff, \
+        self.Rwin.pol.Te, self.Rwin.pol.ne, self.Rwin.pol.t1, \
+        self.Rwin.pol.reffa99, self.Rwin.pol.TeTi = datlist_win
+        self.Rwin.pol.R = self.pol.R[_idxs]
+
+        datlist = [self.tor.Ti, self.tor.Tier, self.tor.Vc, self.tor.Ver, self.tor.inc, self.tor.icer,
+                   self.tor.Vr, self.tor.reff,
+                   self.tor.p0, self.tor.pf, self.tor.ip, self.tor.ipf,
+                   self.tor.Br, self.tor.Bz, self.tor.Bphi, self.tor.dVdreff,
+                   self.tor.Te, self.tor.ne, self.tor.t1,
+                   self.tor.reffa99, self.tor.TeTi]
+        _idxs, datlist_win = proc.getXIdxsAndYs_2dalongLastAxis(xx=self.tor.R, x_start=self.Rwin.Rin,
+                                                                x_end=self.Rwin.Rout,
+                                                                Ys_list=datlist, include_outerside=include_outerside)
+        self.Rwin.tor.Ti, self.Rwin.tor.Tier, self.Rwin.tor.Vc, self.Rwin.tor.Ver, \
+        self.Rwin.tor.inc, self.Rwin.tor.icer, \
+        self.Rwin.tor.Vr, self.Rwin.tor.reff, \
+        self.Rwin.tor.p0, self.Rwin.tor.pf, self.Rwin.tor.ip, self.Rwin.tor.ipf, \
+        self.Rwin.tor.Br, self.Rwin.tor.Bz, self.Rwin.tor.Bphi, self.Rwin.tor.dVdreff, \
+        self.Rwin.tor.Te, self.Rwin.tor.ne, self.Rwin.tor.t1, \
+        self.Rwin.tor.reffa99, self.Rwin.tor.TeTi = datlist_win
+        self.Rwin.tor.R = self.tor.R[_idxs]
+
+        if include_grad:
+            datlist = [self.pol.Ti_polyfit, self.pol.Ti_polyfit_err,
+                       self.pol.dTidreff_polyfit, self.pol.dTidreff_polyfit_err,
+                       self.pol.LTi_polyfit, self.pol.LTi_polyfit_err,
+                       self.pol.RLTi_polyfit, self.pol.RLTi_polyfit_err,
+                       self.pol.Vc_polyfit, self.pol.Vc_polyfit_err,
+                       self.pol.dVcdreff_polyfit, self.pol.dVcdreff_polyfit_err,
+                       self.pol.LVc_polyfit, self.pol.LVc_polyfit_err,
+                       self.pol.RLVc_polyfit, self.pol.RLVc_polyfit_err]
+            _idxs, datlist_win = proc.getXIdxsAndYs_2dalongLastAxis(xx=self.pol.R, x_start=self.Rwin.Rin,
+                                                                    x_end=self.Rwin.Rout,
+                                                                    Ys_list=datlist,
+                                                                    include_outerside=include_outerside)
+            self.Rwin.pol.Ti_polyfit, self.Rwin.pol.Ti_polyfit_err, \
+            self.Rwin.pol.dTidreff_polyfit, self.Rwin.pol.dTidreff_polyfit_err, \
+            self.Rwin.pol.LTi_polyfit, self.Rwin.pol.LTi_polyfit_err, \
+            self.Rwin.pol.RLTi_polyfit, self.Rwin.pol.RLTi_polyfit_err, \
+            self.Rwin.pol.Vc_polyfit, self.Rwin.pol.Vc_polyfit_err, \
+            self.Rwin.pol.dVcdreff_polyfit, self.Rwin.pol.dVcdreff_polyfit_err, \
+            self.Rwin.pol.LVc_polyfit, self.Rwin.pol.LVc_polyfit_err, \
+            self.Rwin.pol.RLVc_polyfit, self.Rwin.pol.RLVc_polyfit_err = datlist_win
+
+            datlist = [self.tor.Ti_polyfit, self.tor.Ti_polyfit_err,
+                       self.tor.dTidreff_polyfit, self.tor.dTidreff_polyfit_err,
+                       self.tor.LTi_polyfit, self.tor.LTi_polyfit_err,
+                       self.tor.RLTi_polyfit, self.tor.RLTi_polyfit_err,
+                       self.tor.Vc_polyfit, self.tor.Vc_polyfit_err,
+                       self.tor.dVcdreff_polyfit, self.tor.dVcdreff_polyfit_err,
+                       self.tor.LVc_polyfit, self.tor.LVc_polyfit_err,
+                       self.tor.RLVc_polyfit, self.tor.RLVc_polyfit_err]
+            _idxs, datlist_win = proc.getXIdxsAndYs_2dalongLastAxis(xx=self.tor.R, x_start=self.Rwin.Rin,
+                                                                    x_end=self.Rwin.Rout,
+                                                                    Ys_list=datlist,
+                                                                    include_outerside=include_outerside)
+            self.Rwin.tor.Ti_polyfit, self.Rwin.tor.Ti_polyfit_err, \
+            self.Rwin.tor.dTidreff_polyfit, self.Rwin.tor.dTidreff_polyfit_err, \
+            self.Rwin.tor.LTi_polyfit, self.Rwin.tor.LTi_polyfit_err, \
+            self.Rwin.tor.RLTi_polyfit, self.Rwin.tor.RLTi_polyfit_err, \
+            self.Rwin.tor.Vc_polyfit, self.Rwin.tor.Vc_polyfit_err, \
+            self.Rwin.tor.dVcdreff_polyfit, self.Rwin.tor.dVcdreff_polyfit_err, \
+            self.Rwin.tor.LVc_polyfit, self.Rwin.tor.LVc_polyfit_err, \
+            self.Rwin.tor.RLVc_polyfit, self.Rwin.tor.RLVc_polyfit_err = datlist_win
+
+        self.Rwin.pol.reffin = np.ravel(self.Rwin.pol.reff[:, 0])
+        self.Rwin.pol.reffout = np.ravel(self.Rwin.pol.reff[:, -1])
+        self.Rwin.pol.reffa99in = np.ravel(self.Rwin.pol.reffa99[:, 0])
+        self.Rwin.pol.reffa99out = np.ravel(self.Rwin.pol.reffa99[:, -1])
+        self.Rwin.tor.reffin = np.ravel(self.Rwin.tor.reff[:, 0])
+        self.Rwin.tor.reffout = np.ravel(self.Rwin.tor.reff[:, -1])
+        self.Rwin.tor.reffa99in = np.ravel(self.Rwin.tor.reffa99[:, 0])
+        self.Rwin.tor.reffa99out = np.ravel(self.Rwin.tor.reffa99[:, -1])
+
+        self.Rwin.pol.avg = struct()
+        self.Rwin.pol.std = struct()
+        self.Rwin.pol.ste = struct()
+        self.Rwin.tor.avg = struct()
+        self.Rwin.tor.std = struct()
+        self.Rwin.tor.ste = struct()
+
+        self.Rwin.pol.avg.reff, self.Rwin.pol.std.reff, self.Rwin.pol.ste.reff \
+            = calc.average(self.Rwin.pol.reff, err=None, axis=1)
+        self.Rwin.pol.avg.reffa99, self.Rwin.pol.std.reffa99, self.Rwin.pol.ste.reffa99 \
+            = calc.average(self.Rwin.pol.reffa99, err=None, axis=1)
+        self.Rwin.pol.avg.Ti, self.Rwin.pol.std.Ti, self.Rwin.pol.ste.Ti \
+            = calc.average(self.Rwin.pol.Ti, err=self.Rwin.pol.Tier, axis=1)
+        self.Rwin.pol.avg.Vc, self.Rwin.pol.std.Vc, self.Rwin.pol.ste.Vc \
+            = calc.average(self.Rwin.pol.Vc, err=self.Rwin.pol.Ver, axis=1)
+
+        self.Rwin.tor.avg.reff, self.Rwin.tor.std.reff, self.Rwin.tor.ste.reff \
+            = calc.average(self.Rwin.tor.reff, err=None, axis=1)
+        self.Rwin.tor.avg.reffa99, self.Rwin.tor.std.reffa99, self.Rwin.tor.ste.reffa99 \
+            = calc.average(self.Rwin.tor.reffa99, err=None, axis=1)
+        self.Rwin.tor.avg.Ti, self.Rwin.tor.std.Ti, self.Rwin.tor.ste.Ti \
+            = calc.average(self.Rwin.tor.Ti, err=self.Rwin.tor.Tier, axis=1)
+        self.Rwin.tor.avg.Vc, self.Rwin.tor.std.Vc, self.Rwin.tor.ste.Vc \
+            = calc.average(self.Rwin.tor.Vc, err=self.Rwin.tor.Ver, axis=1)
+
+
+        if include_grad:
+            self.Rwin.pol.avg.Ti_polyfit, self.Rwin.pol.std.Ti_polyfit, self.Rwin.pol.ste.Ti_polyfit \
+                = calc.average(self.Rwin.pol.Ti_polyfit, err=self.Rwin.pol.Ti_polyfit_err, axis=1)
+            self.Rwin.pol.avg.dTidreff_polyfit, self.Rwin.pol.std.dTidreff_polyfit, self.Rwin.pol.ste.dTidreff_polyfit \
+                = calc.average(self.Rwin.pol.dTidreff_polyfit, err=self.Rwin.pol.dTidreff_polyfit_err, axis=1)
+            self.Rwin.pol.avg.LTi_polyfit, self.Rwin.pol.std.LTi_polyfit, self.Rwin.pol.ste.LTi_polyfit \
+                = calc.average(self.Rwin.pol.LTi_polyfit, err=self.Rwin.pol.LTi_polyfit_err, axis=1)
+            self.Rwin.pol.avg.RLTi_polyfit, self.Rwin.pol.std.RLTi_polyfit, self.Rwin.pol.ste.RLTi_polyfit \
+                = calc.average(self.Rwin.pol.RLTi_polyfit, err=self.Rwin.pol.RLTi_polyfit_err, axis=1)
+
+            self.Rwin.pol.avg.Vc_polyfit, self.Rwin.pol.std.Vc_polyfit, self.Rwin.pol.ste.Vc_polyfit \
+                = calc.average(self.Rwin.pol.Vc_polyfit, err=self.Rwin.pol.Vc_polyfit_err, axis=1)
+            self.Rwin.pol.avg.dVcdreff_polyfit, self.Rwin.pol.std.dVcdreff_polyfit, self.Rwin.pol.ste.dVcdreff_polyfit \
+                = calc.average(self.Rwin.pol.dVcdreff_polyfit, err=self.Rwin.pol.dVcdreff_polyfit_err, axis=1)
+            self.Rwin.pol.avg.LVc_polyfit, self.Rwin.pol.std.LVc_polyfit, self.Rwin.pol.ste.LVc_polyfit \
+                = calc.average(self.Rwin.pol.LVc_polyfit, err=self.Rwin.pol.LVc_polyfit_err, axis=1)
+            self.Rwin.pol.avg.RLVc_polyfit, self.Rwin.pol.std.RLVc_polyfit, self.Rwin.pol.ste.RLVc_polyfit \
+                = calc.average(self.Rwin.pol.RLVc_polyfit, err=self.Rwin.pol.RLVc_polyfit_err, axis=1)
+
+            self.Rwin.tor.avg.Ti_polyfit, self.Rwin.tor.std.Ti_polyfit, self.Rwin.tor.ste.Ti_polyfit \
+                = calc.average(self.Rwin.tor.Ti_polyfit, err=self.Rwin.tor.Ti_polyfit_err, axis=1)
+            self.Rwin.tor.avg.dTidreff_polyfit, self.Rwin.tor.std.dTidreff_polyfit, self.Rwin.tor.ste.dTidreff_polyfit \
+                = calc.average(self.Rwin.tor.dTidreff_polyfit, err=self.Rwin.tor.dTidreff_polyfit_err, axis=1)
+            self.Rwin.tor.avg.LTi_polyfit, self.Rwin.tor.std.LTi_polyfit, self.Rwin.tor.ste.LTi_polyfit \
+                = calc.average(self.Rwin.tor.LTi_polyfit, err=self.Rwin.tor.LTi_polyfit_err, axis=1)
+            self.Rwin.tor.avg.RLTi_polyfit, self.Rwin.tor.std.RLTi_polyfit, self.Rwin.tor.ste.RLTi_polyfit \
+                = calc.average(self.Rwin.tor.RLTi_polyfit, err=self.Rwin.tor.RLTi_polyfit_err, axis=1)
+
+            self.Rwin.tor.avg.Vc_polyfit, self.Rwin.tor.std.Vc_polyfit, self.Rwin.tor.ste.Vc_polyfit \
+                = calc.average(self.Rwin.tor.Vc_polyfit, err=self.Rwin.tor.Vc_polyfit_err, axis=1)
+            self.Rwin.tor.avg.dVcdreff_polyfit, self.Rwin.tor.std.dVcdreff_polyfit, self.Rwin.tor.ste.dVcdreff_polyfit \
+                = calc.average(self.Rwin.tor.dVcdreff_polyfit, err=self.Rwin.tor.dVcdreff_polyfit_err, axis=1)
+            self.Rwin.tor.avg.LVc_polyfit, self.Rwin.tor.std.LVc_polyfit, self.Rwin.tor.ste.LVc_polyfit \
+                = calc.average(self.Rwin.tor.LVc_polyfit, err=self.Rwin.tor.LVc_polyfit_err, axis=1)
+            self.Rwin.tor.avg.RLVc_polyfit, self.Rwin.tor.std.RLVc_polyfit, self.Rwin.tor.ste.RLVc_polyfit \
+                = calc.average(self.Rwin.tor.RLVc_polyfit, err=self.Rwin.tor.RLVc_polyfit_err, axis=1)
+
+
+
+class LID_cur:
+
+    def __init__(self, sn=184508, sub=1):
+        self.t, list_dat, self.list_dimnms, self.list_valnms, self.list_dimunits, self.list_valunits \
+            = read.eg1d("LID_cur", sn, sub=1)
+        if list_dat != None:
+            self.A, self.B1, self.B2 = list_dat
+
+    def tat(self, time=3.):
+
+        self.at = struct()
+        datlist = [self.t, self.A, self.B1, self.B2]
+        _idx, datlist = proc.getTimeIdxAndDats(time=self.t, time_at=time, datList=datlist)
+        self.at.t, self.at.A, self.at.B1, self.at.B2 = datlist
+
+    def time_window(self, tstart=4., tend=5.):
+
+        self.twin = struct()
+        self.twin.tstart = tstart
+        self.twin.tend = tend
+        datlist = [self.t, self.A, self.B1, self.B2]
+        _idx, datlist = proc.getTimeIdxsAndDats(self.t, self.twin.tstart, self.twin.tend, datlist)
+        self.twin.t, self.twin.A, self.twin.B1, self.twin.B2 = datlist
+
+        self.twin.avg = struct()
+        self.twin.std = struct()
+        self.twin.ste = struct()
+        self.twin.avg.t, self.twin.std.t, self.twin.ste.t = calc.average(self.twin.t)
+        self.twin.avg.A, self.twin.std.A, self.twin.ste.A = calc.average(self.twin.A)
+        self.twin.avg.B1, self.twin.std.B1, self.twin.ste.B1 = calc.average(self.twin.B1)
+        self.twin.avg.B2, self.twin.std.B2, self.twin.ste.B2 = calc.average(self.twin.B2)
+
+class ece:
+    def __init__(self, sn=185857, sub=1, fluc_thresh=0.1):
+        self.diagname = "ece_fast"
+        self.sn = sn
+        self.sub = sub
+        self.t, self.R, list_dat, self.list_dimnms, self.list_valnms, self.list_dimunits, self.list_valunits \
+            = read.eg2d(diagnm=self.diagname, sn=self.sn, sub=self.sub)
+        if list_dat != None:
+            self.Te, self.fece, self.calib, self.diag_number, self.ADC_ch, self.rho_vacuum = list_dat
+
+        sample_tidx = np.where((self.t >= 4.0) & (self.t <= 4.01))[0]
+        fluc = 2 * np.std(self.Te[sample_tidx], axis=0)
+        # eceDelRIdxs = [0, 1, 3, 18, 19, 25, 31, 33, 39, 40, 41, 42, 44, 45, 46, 47, 48, 52, 53, 55, 56, 57, 59]
+        eceDelRIdxs = np.where(fluc >= fluc_thresh)[0]
+
+        self.R = np.delete(self.R, eceDelRIdxs)
+        self.Te = np.delete(self.Te, eceDelRIdxs, axis=1)
+        self.fece = np.delete(self.fece, eceDelRIdxs, axis=1)
+        self.calib = np.delete(self.calib, eceDelRIdxs, axis=1)
+        self.diag_number = np.delete(self.diag_number, eceDelRIdxs, axis=1)
+        self.ADC_ch = np.delete(self.ADC_ch, eceDelRIdxs, axis=1)
+        self.rho_vacuum = np.delete(self.rho_vacuum, eceDelRIdxs, axis=1)
+
+        _idx1 = np.where(self.diag_number[0] == 1.)[0]
+        _idx2 = np.where(self.diag_number[0] == 2.)[0]
+        _idx3 = np.where(self.diag_number[0] == 3.)[0]
+
+        self.diag1 = calc.struct()
+        self.diag2 = calc.struct()
+        self.diag3 = calc.struct()
+
+        self.diag1.R = self.R[_idx1]
+        self.diag1.Te = self.Te[:, _idx1]
+        self.diag1.fece = self.fece[0][_idx1]
+        self.diag1.calib = self.calib[:, _idx1]
+        self.diag1.ADC_ch = self.ADC_ch[0][_idx1]
+        self.diag1.rho_vacuum = self.rho_vacuum[0][_idx1]
+
+        self.diag2.R = self.R[_idx2]
+        self.diag2.Te = self.Te[:, _idx2]
+        self.diag2.fece = self.fece[0][_idx2]
+        self.diag2.calib = self.calib[:, _idx2]
+        self.diag2.ADC_ch = self.ADC_ch[0][_idx2]
+        self.diag2.rho_vacuum = self.rho_vacuum[0][_idx2]
+
+        self.diag3.R = self.R[_idx3]
+        self.diag3.Te = self.Te[:, _idx3]
+        self.diag3.fece = self.fece[0][_idx3]
+        self.diag3.calib = self.calib[:, _idx3]
+        self.diag3.ADC_ch = self.ADC_ch[0][_idx3]
+        self.diag3.rho_vacuum = self.rho_vacuum[0][_idx3]

@@ -71,7 +71,7 @@ def caption(fig, fig_title, hspace=0.1, wspace=0.1):
     return fig
 
 def capsave(fig, fig_title, fnm, path):
-    fig.text(1, 0.01, fnm, ha='right', color='grey', size='xx-small')
+    fig.text(0.01, 0.01, fnm, ha='left', color='grey', size='xx-small')
     fig.savefig(path)
     return fig
 

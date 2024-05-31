@@ -67,10 +67,10 @@ class comb_R:
 
     def read_param(self):
 
-        self.ech = get.ech_v2(sn=self.sn, tstart=self.ch1.Iamp.time[0], tend=self.ch1.Iamp.time[-1])
-        self.nb = get.nb_alldev(sn=self.sn, tstart=self.ch1.Iamp.time[0], tend=self.ch1.Iamp.time[-1])
-        self.wp = get.wp(sn=self.sn, sub=self.sub, tstart=self.ch1.Iamp.time[0], tend=self.ch1.Iamp.time[-1])
-        self.nel = get.nel(sn=self.sn, sub=self.sub, tstart=self.ch1.Iamp.time[0], tend=self.ch1.Iamp.time[-1])
+        self.ech = get_eg.ech_v2(sn=self.sn, tstart=self.ch1.Iamp.time[0], tend=self.ch1.Iamp.time[-1])
+        self.nb = get_eg.nb_alldev(sn=self.sn, tstart=self.ch1.Iamp.time[0], tend=self.ch1.Iamp.time[-1])
+        self.wp = get_eg.wp(sn=self.sn, sub=self.sub, tstart=self.ch1.Iamp.time[0], tend=self.ch1.Iamp.time[-1])
+        self.nel = get_eg.nel(sn=self.sn, sub=self.sub, tstart=self.ch1.Iamp.time[0], tend=self.ch1.Iamp.time[-1])
 
     def plot_ch(self, freq=27.7, tstart=False, tend=False):
 
@@ -366,10 +366,10 @@ class comb_U:
 
     def read_heat(self):
 
-        self.ech = get.ech_v2(sn=self.sn, tstart=self.ch1.Iamp.time[0], tend=self.ch1.Iamp.time[-1])
-        self.nb = get.nb_alldev(sn=self.sn, tstart=self.ch1.Iamp.time[0], tend=self.ch1.Iamp.time[-1])
-        self.wp = get.wp(sn=self.sn, sub=self.sub, tstart=self.ch1.Iamp.time[0], tend=self.ch1.Iamp.time[-1])
-        self.nel = get.nel(sn=self.sn, sub=self.sub, tstart=self.ch1.Iamp.time[0], tend=self.ch1.Iamp.time[-1])
+        self.ech = get_eg.ech_v2(sn=self.sn, tstart=self.ch1.Iamp.time[0], tend=self.ch1.Iamp.time[-1])
+        self.nb = get_eg.nb_alldev(sn=self.sn, tstart=self.ch1.Iamp.time[0], tend=self.ch1.Iamp.time[-1])
+        self.wp = get_eg.wp(sn=self.sn, sub=self.sub, tstart=self.ch1.Iamp.time[0], tend=self.ch1.Iamp.time[-1])
+        self.nel = get_eg.nel(sn=self.sn, sub=self.sub, tstart=self.ch1.Iamp.time[0], tend=self.ch1.Iamp.time[-1])
 
     def plot_ch(self, freq=45, tstart=False, tend=False):
 
@@ -650,10 +650,10 @@ class highK:
 
     def read_param(self):
 
-        self.ech = get.ech_v2(sn=self.sn, tstart=self.ch1.Iamp.time[0], tend=self.ch1.Iamp.time[-1])
-        self.nb = get.nb_alldev(sn=self.sn, tstart=self.ch1.Iamp.time[0], tend=self.ch1.Iamp.time[-1])
-        self.wp = get.wp(sn=self.sn, sub=self.sub, tstart=self.ch1.Iamp.time[0], tend=self.ch1.Iamp.time[-1])
-        self.nel = get.nel(sn=self.sn, sub=self.sub, tstart=self.ch1.Iamp.time[0], tend=self.ch1.Iamp.time[-1])
+        self.ech = get_eg.ech_v2(sn=self.sn, tstart=self.ch1.Iamp.time[0], tend=self.ch1.Iamp.time[-1])
+        self.nb = get_eg.nb_alldev(sn=self.sn, tstart=self.ch1.Iamp.time[0], tend=self.ch1.Iamp.time[-1])
+        self.wp = get_eg.wp(sn=self.sn, sub=self.sub, tstart=self.ch1.Iamp.time[0], tend=self.ch1.Iamp.time[-1])
+        self.nel = get_eg.nel(sn=self.sn, sub=self.sub, tstart=self.ch1.Iamp.time[0], tend=self.ch1.Iamp.time[-1])
 
     def plot_ch(self, ch=1, tstart=False, tend=False):
 

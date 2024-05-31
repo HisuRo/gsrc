@@ -348,3 +348,9 @@ def datAtRhoByTimeVariatingRho(rho2d, dat2d, rho_at):
         datAtRho[i] = interp1d(rho2d[i], dat2d[i])(rho_at)
     datAtRho = np.array(datAtRho)
     return datAtRho
+
+
+def pad_lists_to_ndarray(lists):
+    max_length = max(len(lst) for lst in lists)
+    padded_array = np.array([np.pad(lst, (0, max_length - len(lst)), constant_values=np.nan) for lst in lists])
+    return padded_array

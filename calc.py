@@ -9,6 +9,7 @@ import sys
 
 ee = 1.602176634E-19   # [C]
 me = 9.1093837E-31     # [kg]
+mp = 1.672621898e-27  # (kg)
 eps0 = 8.85418782E-12  # [m^-3 kg^-1 s^4 A^2]
 mu0 = 4*np.pi*1.E-7    # [m kg s^-2 A^-2]
 
@@ -2034,6 +2035,7 @@ def pulsepair(t, iq, Nsample=100, ovr=0.5):
 
     return o
 
+
 def nonaveragedBiSpectrum(X1, X2, X3):
 
     X2X1 = np.matmul(X2, X1)
@@ -2408,6 +2410,7 @@ def average_bicoherence_at_f3(freq1, freq2, bicoherence):
     freq3 = dfreq * idxs
     bicoh_f3 = np.array([np.nanmean(np.diagonal(bicoherence, offset=i)) for i in idxs])
     return freq3, bicoh_f3
+
 
 def average_bicoherence_at_f3_withErr(freq1, freq2, bicoherence, bicoherence_Err):
     N1 = len(freq1)
@@ -3281,8 +3284,6 @@ def EMwaveInPlasma(freqin, ne, B):
     return o
 
 
-
-
 def gradient_reg(R, reff, a99, dat, err, Nfit, poly):
 
     proc.suggestNewVer(2, 'gradient_reg')
@@ -3365,28 +3366,60 @@ def gradient_reg_1d(R, reff, a99, dat, err, Nfit, poly):
     return R_f, reff_f, rho_f, dat_grad, err_grad, dat_reg, err_reg
 
 
-def polyN_LSM_der(xx, yy, polyN, yErr=np.array([False])):
-    if xx.shape != yy.shape:
+def polyN_LSM_der(xx, yy, polyN=10, yErr=None, parity=None):  #parity = None, "even", or "odd"
+
+    if xx.shape == yy.shape:
+        mode = "multiple_x"
+    elif xx.size == yy.shape[-1]:
+        mode = "single_x"
+    else:
         print('Improper data shape')
         exit()
 
+    if parity == "even" and polyN % 2 != 0:
+        polyN -= 1
+    if parity == "odd" and polyN % 2 == 0:
+        polyN -= 1
     o = struct()
     o.polyN = polyN
 
-    rawdatshape = xx.shape
-    Nfit = rawdatshape[-1]
-    otherNs_array = np.array(xx.shape[:-1]).astype(int)
+    otherNs_array = np.array(yy.shape[:-1]).astype(int)
     others_ndim = otherNs_array.size
 
-    if not yErr.all():
+    def makeXX(xx, polyN, parity):
+
+        if parity == "even":
+            xN0 = np.array([xx ** (polyN - ii) for ii in range(0, polyN + 1, 2)])
+            Nparam = xN0.shape[0]
+        elif parity == "odd":
+            xN0 = np.array([xx ** (polyN - ii) for ii in range(0, polyN + 1, 2)])
+            Nparam = xN0.shape[0]
+        elif parity == None:
+            xN0 = np.array([xx ** (polyN - ii) for ii in range(polyN + 1)])
+            Nparam = xN0.shape[0]
+        else:
+            print("Unavailable input in parity.")
+            exit()
+
+        return xN0, Nparam
+
+    if mode == "multiple_x":
+        Nfit = xx.shape[-1]
+        xN0, Nparam = makeXX(xx, polyN, parity)
+        XT = np.transpose(xN0, axes=tuple(np.append((np.arange(others_ndim) + 1), [0, others_ndim + 1])))
+        XX = transposeLast2Dims(XT)
+    elif mode == "single_x":
+        Nfit = xx.size
+        XT, Nparam = makeXX(xx, polyN, parity)
+        XX = np.transpose(XT)
+    else:
+        exit()
+
+    if yErr is None:
         WW = np.identity(Nfit)
     else:
         WW = 1. / yErr ** 2
         WW = turnLastDimToDiagMat(WW)  # !!array shape has changed!!
-
-    xN0 = np.array([xx ** (polyN - ii) for ii in range(polyN + 1)])
-    XT = np.transpose(xN0, axes=tuple(np.append((np.arange(others_ndim) + 1), [0, others_ndim + 1])))
-    XX = transposeLast2Dims(XT)
 
     WX = np.matmul(WW, XX)
     XTWX = np.matmul(XT, WX)
@@ -3403,18 +3436,55 @@ def polyN_LSM_der(xx, yy, polyN, yErr=np.array([False])):
     popt_vec = np.matmul(Xplus, y_vec)
     yHut_vec = np.matmul(XX, popt_vec)
     yHut = turnLastColumnVectorToDim(yHut_vec)
-    if not yErr.all():
-        sigma_y = np.sqrt(np.sum((yy - yHut) ** 2, axis=-1) / (Nfit - (polyN + 1)))
+    if yErr is None:
+        sigma_y = np.sqrt(np.sum((yy - yHut) ** 2, axis=-1) / (Nfit - Nparam))
     else:
         sigma_y = np.sqrt(np.sum(yErr ** 2 + (yy - yHut) ** 2, axis=-1) / Nfit)
-    perr = np.sqrt(np.diagonal(XpXpT, axis1=-2, axis2=-1)) * repeat_and_add_lastdim(sigma_y, polyN + 1)
+    perr = np.sqrt(np.diagonal(XpXpT, axis1=-2, axis2=-1)) * repeat_and_add_lastdim(sigma_y, Nparam)
     yHutErr = np.sqrt(np.diagonal(XXpXXpT, axis1=-2, axis2=-1)) * repeat_and_add_lastdim(sigma_y, Nfit)
 
-    MM = np.diagflat(np.flip(np.arange(1, polyN + 1, 1)), k=-1)
-    XM = np.matmul(XX, MM)
-    XMXp = np.matmul(XM, Xplus)
-    XMXpT = transposeLast2Dims(XMXp)
-    XMXpXMXpT = np.matmul(XMXp, XMXpT)
+    if parity is None:
+        MM = np.diagflat(np.flip(np.arange(1, polyN + 1, 1)), k=-1)
+        XM = np.matmul(XX, MM)
+        XMXp = np.matmul(XM, Xplus)
+        XMXpT = transposeLast2Dims(XMXp)
+        XMXpXMXpT = np.matmul(XMXp, XMXpT)
+    elif parity == "even":
+        if mode == "multiple_x":
+            Nfit = xx.shape[-1]
+            xN0, Nparam = makeXX(xx, polyN=polyN + 1, parity="odd")
+            XoT = np.transpose(xN0, axes=tuple(np.append((np.arange(others_ndim) + 1), [0, others_ndim + 1])))
+            Xo = transposeLast2Dims(XoT)
+        elif mode == "single_x":
+            Nfit = xx.size
+            XoT, Nparam = makeXX(xx, polyN=polyN + 1, parity="odd")
+            Xo = np.transpose(XoT)
+        else:
+            exit()
+        MM = np.diagflat(np.flip(np.arange(2, polyN + 1, 2)), k=-1)
+        XM = np.matmul(Xo, MM)
+        XMXp = np.matmul(XM, Xplus)
+        XMXpT = transposeLast2Dims(XMXp)
+        XMXpXMXpT = np.matmul(XMXp, XMXpT)
+    elif parity == "odd":
+        if mode == "multiple_x":
+            Nfit = xx.shape[-1]
+            xN0, Nparam = makeXX(xx, polyN=polyN + 1, parity="even")
+            XoT = np.transpose(xN0, axes=tuple(np.append((np.arange(others_ndim) + 1), [0, others_ndim + 1])))
+            Xo = transposeLast2Dims(XoT)
+        elif mode == "single_x":
+            Nfit = xx.size
+            XoT, Nparam = makeXX(xx, polyN=polyN + 1, parity="even")
+            Xo = np.transpose(XoT)
+        else:
+            exit()
+        MM = np.diagflat(np.flip(np.arange(1, polyN + 1, 2)), k=-1)
+        XM = np.matmul(Xo, MM)
+        XMXp = np.matmul(XM, Xplus)
+        XMXpT = transposeLast2Dims(XMXp)
+        XMXpXMXpT = np.matmul(XMXp, XMXpT)
+    else:
+        exit()
 
     yHutDer_vec = np.matmul(XM, popt_vec)
     yHutDer = turnLastColumnVectorToDim(yHutDer_vec)
@@ -3429,24 +3499,27 @@ def polyN_LSM_der(xx, yy, polyN, yErr=np.array([False])):
     o.yHutErr = yHutErr
     o.popt = popt
     o.perr = perr
-    o.yHutDer = o.yHutDer
-    o.yHutDerErr = o.yHutDerErr
+    o.yHutDer = yHutDer
+    o.yHutDerErr = yHutDerErr
 
     return o
 
 
 # 2022/3/28 define R as Rax (changed from measured position)
-def Lscale(dat, err, dat_grad, err_grad, Rax):
-
-    rer = np.abs(err / dat)
-    rer_grad = np.abs(err_grad / dat_grad)
+def Lscale(dat, dat_grad, Rax, err=None, err_grad=None):
 
     dat_L = - dat / dat_grad
-    rer_L = np.sqrt(rer ** 2 + rer_grad ** 2)
-    err_L = np.abs(dat_L * rer_L)
-
     dat_RpL = Rax / dat_L
-    err_RpL = np.abs(dat_RpL * rer_L)
+
+    if err is None or err_grad is None:
+        err_L = None
+        err_RpL = None
+    else:
+        rer = np.abs(err / dat)
+        rer_grad = np.abs(err_grad / dat_grad)
+        rer_L = np.sqrt(rer ** 2 + rer_grad ** 2)
+        err_L = np.abs(dat_L * rer_L)
+        err_RpL = np.abs(dat_RpL * rer_L)
 
     return dat_L, err_L, dat_RpL, err_RpL
 
@@ -3461,3 +3534,39 @@ def eta(dat_LT, err_LT, dat_Ln, err_Ln):
     err_eta = np.abs(dat_eta * rer_eta)
 
     return dat_eta, err_eta
+
+
+def dMdreff(dMdR, dreffdR, dMdR_err=None):
+    dMdreff = dMdR / dreffdR
+    if dMdR_err is not None:
+        dMdreff_err = np.abs(dMdR_err / dreffdR)
+    else:
+        dMdreff_err = None
+    return dMdreff, dMdreff_err
+
+
+def gyroradius(T_keV, B_T, kind="electron", A=1, Z=1, T_err=None):
+    # T [keV], B [T]
+
+    o = struct()
+    if kind == "electron":
+        o.m = me
+        o.q = ee
+    elif kind == "ion":
+        o.m = mp * A
+        o.q = Z * ee
+    else:
+        print("Please input correct kind name.")
+        exit()
+
+    o.gyrofreq_rads = o.q * B_T / o.m
+    o.gyrofreq_Hz = o.gyrofreq_rads / (2 * np.pi)
+
+    o.vT = np.sqrt(o.q * T_keV * 1e3 / o.m)
+    o.gyroradius_m = o.vT / o.gyrofreq_rads
+
+    if not T_err is None:
+        o.vT_err = 1. / (2. * o.vT) * o.q * T_err * 1e3 / o.m
+        o.gyroradius_err = o.vT_err / o.gyrofreq_rads
+
+    return o

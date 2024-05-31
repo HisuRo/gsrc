@@ -96,7 +96,7 @@ def CloseFile(zf, fp):
         fp.close()
 
 def LoadEG(diagname, sn, sub=1, flg_remove=True):
-    filepath = LoadEGFile(diagname, sn, sub=1)
+    filepath = LoadEGFile(diagname, sn, sub=sub)
     if filepath == None:
         eg = None
     else:

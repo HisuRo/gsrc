@@ -3,13 +3,58 @@ import matplotlib.pyplot as plt
 from matplotlib.animation import ArtistAnimation
 import matplotlib
 import os
-from scipy.signal import welch
+from scipy.signal import welch, find_peaks, savgol_filter
+from scipy.optimize import curve_fit
+from scipy.interpolate import interp1d
 from scipy import fft
 import numpy as np
 
 plot.set("talk", "ticks")
 pathCalib = os.path.join("C:\\pythonProject\\nasu\\calib_table.csv")
 
+
+def gauss(x, a, b, c, d):
+    return a * (np.exp(-(x-c)**2/b**2)) + d
+
+def symgauss(x, a, b, d):
+    return gauss(x, a, b, 0, d)
+
+def oddgauss(x, a, b, c):
+    return a * (np.exp(-(x-c)**2/b**2) - np.exp(-(x+c)**2/b**2))
+
+def oddgauss2(x, a1, b1, c1, a2, b2, c2):
+    return oddgauss(x, a1, b1, c1) + oddgauss(x, a2, b2, c2)
+
+def oddgauss3(x, a1, b1, c1, a2, b2, c2, a3, b3, c3):
+    return oddgauss(x, a1, b1, c1) + oddgauss(x, a2, b2, c2) + oddgauss(x, a3, b3, c3)
+
+def oddgauss4(x, a1, b1, c1, a2, b2, c2, a3, b3, c3, a4, b4, c4):
+    return oddgauss(x, a1, b1, c1) + oddgauss(x, a2, b2, c2) + oddgauss(x, a3, b3, c3) + oddgauss(x, a4, b4, c4)
+
+def evengauss(x, a, b, c):
+    return a * (np.exp(-(x-c)**2/b**2) + np.exp(-(x+c)**2/b**2))
+
+def symgauss2(x, a1, b1, a2, b2, c2, d):
+    return symgauss(x, a1, b1, d) + evengauss(x, a2, b2, c2)
+
+def symgauss3(x, a1, b1, a2, b2, c2, a3, b3, c3, d):
+    return symgauss(x, a1, b1, d) + evengauss(x, a2, b2, c2) + evengauss(x, a3, b3, c3)
+
+def symgauss4(x, a1, b1, a2, b2, c2, a3, b3, c3, a4, b4, c4, d):
+    return symgauss(x, a1, b1, d) + evengauss(x, a2, b2, c2) + evengauss(x, a3, b3, c3) + evengauss(x, a4, b4, c4)
+
+def gauss1(x, a0, b0, d, a1, b1, c1):
+    return gauss(x, a0, b0, 0, d) + gauss(x, a1, b1, c1, 0)
+
+def gauss2(x, a0, b0, d, a1, b1, c1, a2, b2, c2):
+    return gauss(x, a0, b0, 0, d) + gauss(x, a1, b1, c1, 0) + gauss(x, a2, b2, c2, 0)
+
+def gauss3(x, a0, b0, d, a1, b1, c1, a2, b2, c2, a3, b3, c3):
+    return gauss(x, a0, b0, 0, d) + gauss(x, a1, b1, c1, 0) + gauss(x, a2, b2, c2, 0) + gauss(x, a3, b3, c3, 0)
+
+def gauss4(x, a0, b0, d, a1, b1, c1, a2, b2, c2, a3, b3, c3, a4, b4, c4):
+    return gauss(x, a0, b0, 0, d) + gauss(x, a1, b1, c1, 0) + \
+           gauss(x, a2, b2, c2, 0) + gauss(x, a3, b3, c3, 0) + gauss(x, a4, b4, c4, 0)
 
 class single:
 
@@ -124,6 +169,8 @@ class IQ:
         else:
             self.phaseIQ = np.angle(self.IQ)
 
+        dirname = "Retrieve_MWRM"
+
     def specgram(self, NFFT=2**10, ovr=0.5, window="hann", dT=5e-3,
                  cmap="viridis", magnify=True, fmin=False, fmax=False, pause=0,
                  display=True, detrend="constant"):
@@ -158,7 +205,7 @@ class IQ:
         self.spg.psddB = 10 * np.log10(self.spg.psd)
         # self.spg.lindetpsd = fft.fftshift(self.spg.lindetpsd, axes=-1)
         # self.spg.lindetpsddB = 10 * np.log10(self.spg.lindetpsd)
-        self.spg.dF = self.dT * self.spg.NFFT
+        self.spg.dF = self.Fs / self.spg.NFFT
 
         if magnify:
             if fmin:
@@ -170,16 +217,11 @@ class IQ:
             else:
                 self.spg.fmax = self.Fs / 2
 
-            _idx = np.where((np.abs(self.spg.f) > self.spg.fmin) & (np.abs(self.spg.f) < self.spg.fmax))[0]
-            self.spg.vmax = self.spg.psd[:, _idx].max()
-            self.spg.vmaxdB = 10*np.log10(self.spg.vmax)
-            self.spg.vmin = self.spg.psd[:, _idx].min()
-            self.spg.vmindB = 10*np.log10(self.spg.vmin)
-        else:
-            self.spg.vmax = self.spg.psd.max()
-            self.spg.vmaxdB = 10*np.log10(self.spg.vmax)
-            self.spg.vmin = self.spg.psd.min()
-            self.spg.vmindB = 10*np.log10(self.spg.vmin)
+        _idx = np.where((np.abs(self.spg.f) > self.spg.fmin) & (np.abs(self.spg.f) < self.spg.fmax))[0]
+        self.spg.vmax = self.spg.psd[:, _idx].max()
+        self.spg.vmaxdB = 10 * np.log10(self.spg.vmax)
+        self.spg.vmin = self.spg.psd[:, _idx].min()
+        self.spg.vmindB = 10 * np.log10(self.spg.vmin)
 
         if not display:
             matplotlib.use('Agg')
@@ -231,6 +273,231 @@ class IQ:
             plot.check(pause)
         else:
             plot.close(fig)
+
+    def specgram_asymmetric_component(self, fmin=None, fmax=None,
+                                      peak_detection=True, gaussfitting=True,
+                                      polyorder=2, prominence=3, iniwidth=40e3, maxfev=2000,
+                                      cmap="coolwarm",
+                                      display=True, pause=0, show_smoothing=True):
+
+        self.spg.asym = calc.struct()
+        self.spg.asym.iniwidth = iniwidth
+        self.spg.asym.cmap = cmap
+
+        if fmin is None:
+            self.spg.asym.fmin = self.spg.dF
+        else:
+            self.spg.asym.fmin = fmin
+        if fmax is None:
+            self.spg.asym.fmax = self.Fs / 2
+        else:
+            self.spg.asym.fmax = fmax
+        _idx = np.where((np.abs(self.spg.f) > self.spg.asym.fmin)
+                        & (np.abs(self.spg.f) < self.spg.asym.fmax))[0]
+        self.spg.asym.psddB = self.spg.psddB - np.flip(self.spg.psddB, axis=-1)
+        self.spg.asym.winlen = int(self.spg.asym.iniwidth / self.spg.dF / 2) * 2 + 1
+        if peak_detection:
+            self.spg.asym.psddB_smooth = np.zeros(self.spg.asym.psddB.shape)
+            self.spg.asym.peak_idxs = [0] * len(self.spg.t)
+            self.spg.asym.peak_freqs = [0] * len(self.spg.t)
+            self.spg.asym.peak_psddB = [0] * len(self.spg.t)
+            self.spg.asym.peak_nums = [0] * len(self.spg.t)
+            for i in range(len(self.spg.t)):
+                # peak detection
+                tmp = interp1d(self.spg.f[_idx], self.spg.asym.psddB[i][_idx],
+                               bounds_error=False, fill_value=0.)(self.spg.f)
+                self.spg.asym.psddB_smooth[i] = savgol_filter(tmp,
+                                                              window_length=self.spg.asym.winlen,
+                                                              polyorder=polyorder)
+                self.spg.asym.peak_idxs[i] = find_peaks(self.spg.asym.psddB_smooth[i], prominence=prominence)[0]
+                self.spg.asym.peak_freqs[i] = self.spg.f[self.spg.asym.peak_idxs[i]]
+                self.spg.asym.peak_psddB[i] = self.spg.asym.psddB_smooth[i][self.spg.asym.peak_idxs[i]]
+                self.spg.asym.peak_nums[i] = np.array(self.spg.asym.peak_idxs[i]).size
+
+        if gaussfitting:
+            self.spg.asym.peak_fit = [0] * len(self.spg.t)
+            self.spg.asym.peak_fit_err = [0] * len(self.spg.t)
+            self.spg.asym.fD_fit = [0] * len(self.spg.t)
+            self.spg.asym.fD_fit_err = [0] * len(self.spg.t)
+            self.spg.asym.width_fit = [0] * len(self.spg.t)
+            self.spg.asym.width_fit_err = [0] * len(self.spg.t)
+            self.spg.asym.gaussfit_num = [0] * len(self.spg.t)
+            for i in range(len(self.spg.t)):
+                # gauss fitting
+                if self.spg.asym.peak_nums[i] == 0:
+                    self.spg.asym.gaussfit_num[i] = 0
+                    self.spg.asym.peak_fit[i], self.spg.asym.width_fit[i], self.spg.asym.fD_fit[i] \
+                        = [np.array([]), np.array([]), np.array([])]
+                    self.spg.asym.peak_fit_err[i], self.spg.asym.width_fit_err[i], self.spg.asym.fD_fit_err[i] \
+                        = [np.array([]), np.array([]), np.array([])]
+                elif self.spg.asym.peak_nums[i] == 1:
+                    self.spg.asym.gaussfit_num[i] = 1
+                    inip = [self.spg.asym.peak_psddB[i][0], iniwidth, self.spg.asym.peak_freqs[i][0]]
+                    try:
+                        popt, pcov = curve_fit(oddgauss, self.spg.f[_idx], self.spg.asym.psddB[i][_idx],
+                                               p0=inip, maxfev=maxfev)
+                        self.spg.asym.peak_fit[i] = [popt[0]]
+                        self.spg.asym.width_fit[i] = [popt[1]]
+                        self.spg.asym.fD_fit[i] = [popt[2]]
+                        self.spg.asym.peak_fit_err[i] = [np.sqrt(np.diag(pcov))[0]]
+                        self.spg.asym.width_fit_err[i] = [np.sqrt(np.diag(pcov))[1]]
+                        self.spg.asym.fD_fit_err[i] = [np.sqrt(np.diag(pcov))[2]]
+
+                    except RuntimeError as e:
+                        print(f"Optimal parameters not found: {e}")
+                        self.spg.asym.peak_fit[i], self.spg.asym.width_fit[i], self.spg.asym.fD_fit[i] \
+                            = [np.array([]), np.array([]), np.array([])]
+                        self.spg.asym.peak_fit_err[i], self.spg.asym.width_fit_err[i], self.spg.asym.fD_fit_err[i] \
+                            = [np.array([]), np.array([]), np.array([])]
+                elif self.spg.asym.peak_nums[i] == 2:
+                    self.spg.asym.gaussfit_num[i] = 2
+                    inip = [self.spg.asym.peak_psddB[i], [iniwidth, iniwidth], self.spg.asym.peak_freqs[i]]
+                    inip = np.array(inip).flatten(order="F").tolist()
+                    try:
+                        popt, pcov = curve_fit(oddgauss2, self.spg.f[_idx], self.spg.asym.psddB[i][_idx],
+                                               p0=inip, maxfev=maxfev)
+                        self.spg.asym.peak_fit[i], self.spg.asym.width_fit[i], self.spg.asym.fD_fit[i] \
+                            = popt.reshape((self.spg.asym.peak_nums[i], 3)).T
+                        self.spg.asym.peak_fit_err[i], self.spg.asym.width_fit_err[i], self.spg.asym.fD_fit_err[i] \
+                            = np.sqrt(np.diag(pcov)).reshape((self.spg.asym.peak_nums[i], 3)).T
+                    except RuntimeError as e:
+                        print(f"Optimal parameters not found: {e}")
+                        self.spg.asym.peak_fit[i], self.spg.asym.width_fit[i], self.spg.asym.fD_fit[i] \
+                            = [np.array([]), np.array([]), np.array([])]
+                        self.spg.asym.peak_fit_err[i], self.spg.asym.width_fit_err[i], self.spg.asym.fD_fit_err[i] \
+                            = [np.array([]), np.array([]), np.array([])]
+                elif self.spg.asym.peak_nums[i] == 3:
+                    self.spg.asym.gaussfit_num[i] = 3
+                    inip = [self.spg.asym.peak_psddB[i], [iniwidth, iniwidth, iniwidth], self.spg.asym.peak_freqs[i]]
+                    inip = np.array(inip).flatten(order="F").tolist()
+                    try:
+                        popt, pcov = curve_fit(oddgauss3, self.spg.f[_idx], self.spg.asym.psddB[i][_idx],
+                                               p0=inip, maxfev=maxfev)
+                        self.spg.asym.peak_fit[i], self.spg.asym.width_fit[i], self.spg.asym.fD_fit[i] \
+                            = popt.reshape((self.spg.asym.peak_nums[i], 3)).T
+                        self.spg.asym.peak_fit_err[i], self.spg.asym.width_fit_err[i], self.spg.asym.fD_fit_err[i] \
+                            = np.sqrt(np.diag(pcov)).reshape((self.spg.asym.peak_nums[i], 3)).T
+                    except RuntimeError as e:
+                        print(f"Optimal parameters not found: {e}")
+                        self.spg.asym.peak_fit[i], self.spg.asym.width_fit[i], self.spg.asym.fD_fit[i] \
+                            = [np.array([]), np.array([]), np.array([])]
+                        self.spg.asym.peak_fit_err[i], self.spg.asym.width_fit_err[i], self.spg.asym.fD_fit_err[i] \
+                            = [np.array([]), np.array([]), np.array([])]
+                elif self.spg.asym.peak_nums[i] == 4:
+                    self.spg.asym.gaussfit_num[i] = 4
+                    inip = [self.spg.asym.peak_psddB[i],
+                            [iniwidth, iniwidth, iniwidth, iniwidth],
+                            self.spg.asym.peak_freqs[i]]
+                    inip = np.array(inip).flatten(order="F").tolist()
+                    try:
+                        popt, pcov = curve_fit(oddgauss4, self.spg.f[_idx], self.spg.asym.psddB[i][_idx],
+                                               p0=inip, maxfev=maxfev)
+                        self.spg.asym.peak_fit[i], self.spg.asym.width_fit[i], self.spg.asym.fD_fit[i] \
+                            = popt.reshape((self.spg.asym.gaussfit_num[i], 3)).T
+                        self.spg.asym.peak_fit_err[i], self.spg.asym.width_fit_err[i], self.spg.asym.fD_fit_err[i] \
+                            = np.sqrt(np.diag(pcov)).reshape((self.spg.asym.gaussfit_num[i], 3)).T
+                    except RuntimeError as e:
+                        print(f"Optimal parameters not found: {e}")
+                        self.spg.asym.peak_fit[i], self.spg.asym.width_fit[i], self.spg.asym.fD_fit[i] \
+                            = [np.array([]), np.array([]), np.array([])]
+                        self.spg.asym.peak_fit_err[i], self.spg.asym.width_fit_err[i], self.spg.asym.fD_fit_err[i] \
+                            = [np.array([]), np.array([]), np.array([])]
+                else:  # until 3.
+                    self.spg.asym.gaussfit_num[i] = 4
+                    idx_str = np.argsort(self.spg.asym.peak_psddB[i])[-self.spg.asym.gaussfit_num[i]:]
+                    inip = [self.spg.asym.peak_psddB[i][idx_str],
+                            [iniwidth, iniwidth, iniwidth, iniwidth],
+                            self.spg.asym.peak_freqs[i][idx_str]]
+                    inip = np.array(inip).flatten(order="F").tolist()
+                    try:
+                        popt, pcov = curve_fit(oddgauss4, self.spg.f[_idx], self.spg.asym.psddB[i][_idx],
+                                               p0=inip, maxfev=maxfev)
+                        self.spg.asym.peak_fit[i], self.spg.asym.width_fit[i], self.spg.asym.fD_fit[i] \
+                            = popt.reshape((self.spg.asym.gaussfit_num[i], 3)).T
+                        self.spg.asym.peak_fit_err[i], self.spg.asym.width_fit_err[i], self.spg.asym.fD_fit_err[i] \
+                            = np.sqrt(np.diag(pcov)).reshape((self.spg.asym.gaussfit_num[i], 3)).T
+                    except RuntimeError as e:
+                        print(f"Optimal parameters not found: {e}")
+                        self.spg.asym.peak_fit[i], self.spg.asym.width_fit[i], self.spg.asym.fD_fit[i] \
+                            = [np.array([]), np.array([]), np.array([])]
+                        self.spg.asym.peak_fit_err[i], self.spg.asym.width_fit_err[i], self.spg.asym.fD_fit_err[i] \
+                            = [np.array([]), np.array([]), np.array([])]
+
+        def pad_lists_to_ndarray(lists, len_list):
+            _max = np.max(len_list)
+            padded_array = np.array([np.pad(np.array(lists[i]),
+                                             (0, _max - len_list[i]),
+                                              constant_values=np.nan)
+                                      for i in range(len(lists))])
+
+            return padded_array
+
+        if peak_detection:
+            self.spg.asym.peak_freqs = pad_lists_to_ndarray(self.spg.asym.peak_freqs, self.spg.asym.peak_nums)
+            self.spg.asym.peak_psddB = pad_lists_to_ndarray(self.spg.asym.peak_psddB, self.spg.asym.peak_nums)
+        if gaussfitting:
+            self.spg.asym.valnums_fit = [np.array(self.spg.asym.peak_fit[i]).size for i in range(self.spg.Nsp)]
+            self.spg.asym.peak_fit = pad_lists_to_ndarray(self.spg.asym.peak_fit, self.spg.asym.valnums_fit)
+            self.spg.asym.peak_fit_err = pad_lists_to_ndarray(self.spg.asym.peak_fit_err, self.spg.asym.valnums_fit)
+            self.spg.asym.width_fit = pad_lists_to_ndarray(self.spg.asym.width_fit, self.spg.asym.valnums_fit)
+            self.spg.asym.width_fit_err = pad_lists_to_ndarray(self.spg.asym.width_fit_err, self.spg.asym.valnums_fit)
+            self.spg.asym.fD_fit = pad_lists_to_ndarray(self.spg.asym.fD_fit, self.spg.asym.valnums_fit)
+            self.spg.asym.fD_fit_err = pad_lists_to_ndarray(self.spg.asym.fD_fit_err, self.spg.asym.valnums_fit)
+
+        figdir = "Retrieve_MWRM_asym"
+        proc.ifNotMake(figdir)
+        fnm = f"{self.sn}_{self.subsn}_{self.tstart}_{self.tend}_{self.diagname}_{self.chI}_{self.chQ}"
+        if fmin is not None:
+            fnm += f"_min{self.spg.asym.fmin * 1e-3}kHz"
+        if fmax is not None:
+            fnm += f"_max{self.spg.asym.fmax * 1e-3}kHz"
+        path = os.path.join(figdir, f"{fnm}.png")
+        title = f"#{self.sn}-{self.subsn} {self.tstart}-{self.tend}s\n" \
+                f"{self.diagname} ch:{self.chI},{self.chQ}"
+        fig, ax = plt.subplots(nrows=1, sharex=True, figsize=(7, 6), num=fnm)
+
+        self.spg.asym.vmaxdB = self.spg.asym.psddB[:, _idx].max()
+        self.spg.asym.vmindB = self.spg.asym.psddB[:, _idx].min()
+
+        if show_smoothing and peak_detection:
+            im = ax.pcolormesh(np.append(self.spg.t - 0.5 * self.spg.dT, self.spg.t[-1] + 0.5 * self.spg.dT),
+                               np.append(self.spg.f - 0.5 * self.spg.dF, self.spg.f[-1] + 0.5 * self.spg.dF),
+                               self.spg.asym.psddB_smooth.T,
+                               cmap=self.spg.asym.cmap, vmin=self.spg.asym.vmindB, vmax=self.spg.asym.vmaxdB)
+            ax.fill_between(self.spg.t, -self.spg.asym.fmin, self.spg.asym.fmin, color="white", alpha=0.3)
+        else:
+            im = ax.pcolormesh(np.append(self.spg.t - 0.5 * self.spg.dT, self.spg.t[-1] + 0.5 * self.spg.dT),
+                               np.append(self.spg.f - 0.5 * self.spg.dF, self.spg.f[-1] + 0.5 * self.spg.dF),
+                               self.spg.asym.psddB.T,
+                               cmap=self.spg.asym.cmap, vmin=self.spg.asym.vmindB, vmax=self.spg.asym.vmaxdB)
+            ax.fill_between(self.spg.t, -self.spg.asym.fmin, self.spg.asym.fmin, color="white", alpha=0.3)
+        cbar = plt.colorbar(im)
+        cbar.set_label("S(f) - S(-f) [dB]")
+        if peak_detection:
+            # for i in range(len(self.spg.t)):
+            #     ax.scatter([self.spg.t[i]] * self.spg.asym.peak_nums[i], self.spg.asym.peak_freqs[i],
+            #                s=1, c="red", alpha=0.5)
+            ax.plot(self.spg.t, self.spg.asym.peak_freqs, ".", ms=3, c="red", alpha=0.5)
+        if gaussfitting:
+            # for i in range(len(self.spg.t)):
+            #     if (~isinstance(self.spg.asym.fD_fit[i], np.ndarray)) and (self.spg.asym.fD_fit[i] is np.nan):
+            #         continue
+            #     ax.scatter([self.spg.t[i]]*self.spg.asym.gaussfit_num[i], self.spg.asym.fD_fit[i],
+            #                 s=1, c="pink", alpha=0.5)
+            ax.plot(self.spg.t, self.spg.asym.fD_fit, ".", ms=2, c="pink")
+        ax.set_ylim(- self.spg.asym.fmax, self.spg.asym.fmax)
+        ax.set_ylabel("Frequency [Hz]")
+        ax.set_xlabel("Time [s]")
+        ax.set_xlim(self.tstart, self.tend)
+
+        plot.caption(fig, title, hspace=0.1, wspace=0.1)
+        plot.capsave(fig, title, fnm, path)
+
+        if display:
+            plot.check(pause)
+        else:
+            plot.close(fig)
+
 
     def specgram_amp(self, NFFT=2**10, ovr=0.5, window="hann", dT=5e-3,
                      cmap="viridis", magnify=True,
@@ -560,6 +827,9 @@ class IQ:
         self.pp.fd = o.fd
         self.pp.fdstd = o.fdstd
 
+    def gaussfit(self, numgauss=1, fmin=1e3, fmax=500e3, p0_list=[(1, 1, 1)]):
+        calc.shifted_gauss()
+
     def specgram_pp(self, NFFT=2 ** 7, ovr=0.5, window="hann", dT=2e-2,
                      cmap="viridis", magnify=True,
                      fmin=False, fmax=False, logfreq=False,
@@ -796,7 +1066,9 @@ class IQ:
         # ani = ArtistAnimation(fig, frames, interval=50, blit=True)
         # fig.legend()
 
-        ani.save(f"{fname}.gif")
+        figdir = "Retrieve_MWRM_spec_anime"
+        path = os.path.join(figdir, f"{fname}.gif")
+        ani.save(path)
         plt.show(ani)
 
     def spectrum(self, tstart=4.9, tend=5.0, NFFT=2**10, ovr=0.5, window="hann", pause=0, display=True, bgon=False):
@@ -814,7 +1086,7 @@ class IQ:
                                              [self.t, self.IQ, self.I, self.Q])
         self.sp.traw, self.sp.IQraw, self.sp.Iraw, self.sp.Qraw = datlist
         self.sp.NSamp = self.sp.traw.size
-        self.sp.dF = self.dT * self.sp.NFFT
+        self.sp.dF = self.Fs / self.sp.NFFT
 
         self.sp.t = (self.sp.tstart + self.sp.tend) / 2
         self.sp.fIQ, self.sp.psdIQ = welch(x=self.sp.IQraw, fs=self.Fs, window="hann",
@@ -823,6 +1095,9 @@ class IQ:
                                            average="mean")
         self.sp.fIQ = fft.fftshift(self.sp.fIQ)
         self.sp.psdIQ = fft.fftshift(self.sp.psdIQ)
+        self.sp.psdIQdB = 10 * np.log10(self.sp.psdIQ)
+        self.sp.vmindB = np.min(self.sp.psdIQdB)
+        self.sp.vmaxdB = np.max(self.sp.psdIQdB)
 
         self.sp.fI, self.sp.psdI = welch(x=self.sp.Iraw, fs=self.Fs, window="hann",
                                          nperseg=self.sp.NFFT, noverlap=self.sp.NOV,
@@ -836,7 +1111,7 @@ class IQ:
         if not display:
             matplotlib.use('Agg')
 
-        figdir = "Retrieve_MWRM"
+        figdir = "Retrieve_MWRM_spectrum"
         proc.ifNotMake(figdir)
 
         fnm = f"{self.sn}_{self.subsn}_{self.sp.t}_{self.diagname}_{self.chI}_{self.chQ}_IQsp"
@@ -845,7 +1120,7 @@ class IQ:
                 f"({self.sp.tstart}-{self.sp.tend}s)\n" \
                 f"{self.diagname} ch:{self.chI},{self.chQ}"
         fig, ax = plt.subplots(figsize=(6, 6), num=fnm)
-        ax.plot(self.sp.fIQ, 10 * np.log10(self.sp.psdIQ), c="black")
+        ax.plot(self.sp.fIQ, self.sp.psdIQdB, c="black")
         if bgon:
             tidx_s = np.argmin(np.abs(self.bg.t - self.sp.tstart))
             tidx_e = np.argmin(np.abs(self.bg.t - self.sp.tend))
@@ -853,6 +1128,7 @@ class IQ:
                 ax.scatter(self.spg.f, 10 * np.log10(self.bg.psd[i]), marker=".", c="grey")
         ax.set_xlabel("Frequency [Hz]")
         ax.set_ylabel("PSD [dBV/$\sqrt{\\rm{Hz}}$]")
+        ax.set_ylim(self.sp.vmindB, self.sp.vmaxdB)
 
         plot.caption(fig, title, hspace=0.1, wspace=0.1)
         plot.capsave(fig, title, fnm, path)
@@ -862,7 +1138,7 @@ class IQ:
         else:
             plot.close(fig)
 
-        fnm2 = f"{self.sn}_{self.subsn}_{self.sp.t}_{self.diagname}_{self.chI}_{self.chQ}_sp"
+        fnm2 = f"{self.sn}_{self.subsn}_{self.sp.tstart}_{self.sp.tend}_{self.diagname}_{self.chI}_{self.chQ}"
         path2 = os.path.join(figdir, f"{fnm2}.png")
         title2 = f"#{self.sn}-{self.subsn} {self.sp.t}s\n" \
                  f"({self.sp.tstart}-{self.sp.tend}s)\n" \
@@ -883,7 +1159,1133 @@ class IQ:
         else:
             plot.close(fig2)
 
-        return self.sp
+    def spectrum_asymmetric_component(self, fmin=None, fmax=None,
+                                      peak_detection=True, gaussfitting=True,
+                                      polyorder=2, prominence=3, iniwidth=40e3,
+                                      maxfev=2000, bydB=True,
+                                      display=True, pause=0):
+
+        self.sp.asym = calc.struct()
+        self.sp.asym.iniwidth = iniwidth
+
+        if fmin is None:
+            self.sp.asym.fmin = self.sp.dF
+        else:
+            self.sp.asym.fmin = fmin
+        if fmax is None:
+            self.sp.asym.fmax = self.Fs / 2
+        else:
+            self.sp.asym.fmax = fmax
+        _idx = np.where((np.abs(self.sp.fIQ) > self.sp.asym.fmin)
+                        & (np.abs(self.sp.fIQ) < self.sp.asym.fmax))[0]
+
+        self.sp.asym.srcpsddB = self.sp.psdIQdB[_idx]
+        self.sp.asym.f = self.sp.fIQ[_idx]
+        self.sp.asym.winlen = int(self.sp.asym.iniwidth / self.sp.dF / 2) * 2 + 1
+        if bydB:
+            self.sp.asym.psddB = self.sp.psdIQdB - np.flip(self.sp.psdIQdB, axis=-1)
+
+            if peak_detection:
+                # peak detection
+                self.sp.asym.psddB_smooth = savgol_filter(self.sp.asym.psddB[_idx],
+                                                          window_length=self.sp.asym.winlen,
+                                                          polyorder=polyorder)
+                self.sp.asym.peak_idxs = find_peaks(self.sp.asym.psddB_smooth, prominence=prominence,
+                                                    height=0)[0]
+                self.sp.asym.peak_freqs = self.sp.fIQ[_idx][self.sp.asym.peak_idxs]
+                self.sp.asym.peak_psddB = self.sp.asym.psddB_smooth[self.sp.asym.peak_idxs]
+                self.sp.asym.peak_nums = np.array(self.sp.asym.peak_idxs).size
+
+            if gaussfitting:
+                # gauss fitting
+                if self.sp.asym.peak_nums == 0:
+                    self.sp.asym.gaussfit_num = 0
+                    self.sp.asym.peak_fit, self.sp.asym.width_fit, self.sp.asym.fD_fit \
+                        = [np.nan, np.nan, np.nan]
+                    self.sp.asym.peak_fit_err, self.sp.asym.width_fit_err, self.sp.asym.fD_fit_err \
+                        = [np.nan, np.nan, np.nan]
+                elif self.sp.asym.peak_nums == 1:
+                    self.sp.asym.gaussfit_num = 1
+                    inip = [self.sp.asym.peak_psddB[0], iniwidth, self.sp.asym.peak_freqs[0]]
+                    try:
+                        popt, pcov = curve_fit(oddgauss, self.sp.fIQ[_idx], self.sp.asym.psddB[_idx],
+                                               p0=inip, maxfev=maxfev)
+                        self.sp.asym.peak_fit, self.sp.asym.width_fit, self.sp.asym.fD_fit = popt
+                        self.sp.asym.peak_fit_err, self.sp.asym.width_fit_err, self.sp.asym.fD_fit_err \
+                            = np.sqrt(np.diag(pcov))
+                    except RuntimeError as e:
+                        print(f"Optimal parameters not found: {e}")
+                        self.sp.asym.peak_fit, self.sp.asym.width_fit, self.sp.asym.fD_fit \
+                            = [np.nan, np.nan, np.nan]
+                        self.sp.asym.peak_fit_err, self.sp.asym.width_fit_err, self.sp.asym.fD_fit_err \
+                            = [np.nan, np.nan, np.nan]
+                elif self.sp.asym.peak_nums == 2:
+                    self.sp.asym.gaussfit_num = 2
+                    inip = [self.sp.asym.peak_psddB, [iniwidth, iniwidth], self.sp.asym.peak_freqs]
+                    inip = np.array(inip).flatten(order="F").tolist()
+                    try:
+                        popt, pcov = curve_fit(oddgauss2, self.sp.fIQ[_idx], self.sp.asym.psddB[_idx],
+                                               p0=inip, maxfev=maxfev)
+                        self.sp.asym.peak_fit, self.sp.asym.width_fit, self.sp.asym.fD_fit \
+                            = popt.reshape((self.sp.asym.gaussfit_num, 3)).T
+                        self.sp.asym.peak_fit_err, self.sp.asym.width_fit_err, self.sp.asym.fD_fit_err \
+                            = np.sqrt(np.diag(pcov)).reshape((self.sp.asym.gaussfit_num, 3)).T
+                    except RuntimeError as e:
+                        print(f"Optimal parameters not found: {e}")
+                        self.sp.asym.peak_fit, self.sp.asym.width_fit, self.sp.asym.fD_fit \
+                            = [np.nan, np.nan, np.nan]
+                        self.sp.asym.peak_fit_err, self.sp.asym.width_fit_err, self.sp.asym.fD_fit_err \
+                            = [np.nan, np.nan, np.nan]
+                elif self.sp.asym.peak_nums == 3:
+                    self.sp.asym.gaussfit_num = 3
+                    inip = [self.sp.asym.peak_psddB, [iniwidth, iniwidth, iniwidth], self.sp.asym.peak_freqs]
+                    inip = np.array(inip).flatten(order="F").tolist()
+                    try:
+                        popt, pcov = curve_fit(oddgauss3, self.sp.fIQ[_idx], self.sp.asym.psddB[_idx],
+                                               p0=inip, maxfev=maxfev)
+                        self.sp.asym.peak_fit, self.sp.asym.width_fit, self.sp.asym.fD_fit \
+                            = popt.reshape((self.sp.asym.peak_nums, 3)).T
+                        self.sp.asym.peak_fit_err, self.sp.asym.width_fit_err, self.sp.asym.fD_fit_err \
+                            = np.sqrt(np.diag(pcov)).reshape((self.sp.asym.peak_nums, 3)).T
+                    except RuntimeError as e:
+                        print(f"Optimal parameters not found: {e}")
+                        self.sp.asym.peak_fit, self.sp.asym.width_fit, self.sp.asym.fD_fit \
+                            = [np.nan, np.nan, np.nan]
+                        self.sp.asym.peak_fit_err, self.sp.asym.width_fit_err, self.sp.asym.fD_fit_err \
+                            = [np.nan, np.nan, np.nan]
+                elif self.sp.asym.peak_nums == 4:
+                    self.sp.asym.gaussfit_num = 4
+                    inip = [self.sp.asym.peak_psddB, [iniwidth, iniwidth, iniwidth, iniwidth], self.sp.asym.peak_freqs]
+                    inip = np.array(inip).flatten(order="F").tolist()
+                    try:
+                        popt, pcov = curve_fit(oddgauss4, self.sp.fIQ[_idx], self.sp.asym.psddB[_idx],
+                                               p0=inip, maxfev=maxfev)
+                        self.sp.asym.peak_fit, self.sp.asym.width_fit, self.sp.asym.fD_fit \
+                            = popt.reshape((self.sp.asym.gaussfit_num, 3)).T
+                        self.sp.asym.peak_fit_err, self.sp.asym.width_fit_err, self.sp.asym.fD_fit_err \
+                            = np.sqrt(np.diag(pcov)).reshape((self.sp.asym.gaussfit_num, 3)).T
+                    except RuntimeError as e:
+                        print(f"Optimal parameters not found: {e}")
+                        self.sp.asym.peak_fit, self.sp.asym.width_fit, self.sp.asym.fD_fit \
+                            = [np.nan, np.nan, np.nan]
+                        self.sp.asym.peak_fit_err, self.sp.asym.width_fit_err, self.sp.asym.fD_fit_err \
+                            = [np.nan, np.nan, np.nan]
+                else:  # until 4.
+                    self.sp.asym.gaussfit_num = 4
+                    idx_str = np.argsort(self.sp.asym.peak_psddB)[- self.sp.asym.gaussfit_num:]
+                    inip = [self.sp.asym.peak_psddB[idx_str],
+                            [iniwidth, iniwidth, iniwidth, iniwidth],
+                            self.sp.asym.peak_freqs[idx_str]]
+                    inip = np.array(inip).flatten(order="F").tolist()
+                    try:
+                        popt, pcov = curve_fit(oddgauss4, self.sp.fIQ[_idx], self.sp.asym.psddB[_idx],
+                                               p0=inip, maxfev=maxfev)
+                        self.sp.asym.peak_fit, self.sp.asym.width_fit, self.sp.asym.fD_fit \
+                            = popt.reshape((self.sp.asym.gaussfit_num, 3)).T
+                        self.sp.asym.peak_fit_err, self.sp.asym.width_fit_err, self.sp.asym.fD_fit_err \
+                            = np.sqrt(np.diag(pcov)).reshape((self.sp.asym.gaussfit_num, 3)).T
+                    except RuntimeError as e:
+                        print(f"Optimal parameters not found: {e}")
+                        self.sp.asym.peak_fit, self.sp.asym.width_fit, self.sp.asym.fD_fit \
+                            = [np.nan, np.nan, np.nan]
+                        self.sp.asym.peak_fit_err, self.sp.asym.width_fit_err, self.sp.asym.fD_fit_err \
+                            = [np.nan, np.nan, np.nan]
+        else:
+            self.sp.asym.psd = self.sp.psdIQ - np.flip(self.sp.psdIQ)
+
+            if peak_detection:
+                # peak detection
+                self.sp.asym.psd_smooth = savgol_filter(self.sp.asym.psd[_idx],
+                                                          window_length=self.sp.asym.winlen,
+                                                          polyorder=polyorder)
+                self.sp.asym.peak_idxs = find_peaks(self.sp.asym.psd_smooth, prominence=prominence)[0]
+                self.sp.asym.peak_freqs = self.sp.fIQ[_idx][self.sp.asym.peak_idxs]
+                self.sp.asym.peak_psd = self.sp.asym.psd_smooth[self.sp.asym.peak_idxs]
+                self.sp.asym.peak_nums = np.array(self.sp.asym.peak_idxs).size
+
+            if gaussfitting:
+                # gauss fitting
+                if self.sp.asym.peak_nums == 0:
+                    self.sp.asym.gaussfit_num = 0
+                    self.sp.asym.peak_fit, self.sp.asym.width_fit, self.sp.asym.fD_fit \
+                        = [np.nan, np.nan, np.nan]
+                    self.sp.asym.peak_fit_err, self.sp.asym.width_fit_err, self.sp.asym.fD_fit_err \
+                        = [np.nan, np.nan, np.nan]
+                elif self.sp.asym.peak_nums == 1:
+                    self.sp.asym.gaussfit_num = 1
+                    inip = [self.sp.asym.peak_psd[0], iniwidth, self.sp.asym.peak_freqs[0]]
+                    try:
+                        popt, pcov = curve_fit(oddgauss, self.sp.fIQ[_idx], self.sp.asym.psd[_idx],
+                                               p0=inip, maxfev=maxfev)
+                        self.sp.asym.peak_fit, self.sp.asym.width_fit, self.sp.asym.fD_fit = popt
+                        self.sp.asym.peak_fit_err, self.sp.asym.width_fit_err, self.sp.asym.fD_fit_err \
+                            = np.sqrt(np.diag(pcov))
+                    except RuntimeError as e:
+                        print(f"Optimal parameters not found: {e}")
+                        self.sp.asym.peak_fit, self.sp.asym.width_fit, self.sp.asym.fD_fit \
+                            = [np.nan, np.nan, np.nan]
+                        self.sp.asym.peak_fit_err, self.sp.asym.width_fit_err, self.sp.asym.fD_fit_err \
+                            = [np.nan, np.nan, np.nan]
+                elif self.sp.asym.peak_nums == 2:
+                    self.sp.asym.gaussfit_num = 2
+                    inip = [self.sp.asym.peak_psd, [iniwidth, iniwidth], self.sp.asym.peak_freqs]
+                    inip = np.array(inip).flatten(order="F").tolist()
+                    try:
+                        popt, pcov = curve_fit(oddgauss2, self.sp.fIQ[_idx], self.sp.asym.psd[_idx],
+                                               p0=inip, maxfev=maxfev)
+                        self.sp.asym.peak_fit, self.sp.asym.width_fit, self.sp.asym.fD_fit \
+                            = popt.reshape((self.sp.asym.peak_nums, 3)).T
+                        self.sp.asym.peak_fit_err, self.sp.asym.width_fit_err, self.sp.asym.fD_fit_err \
+                            = np.sqrt(np.diag(pcov)).reshape((self.sp.asym.peak_nums, 3)).T
+                    except RuntimeError as e:
+                        print(f"Optimal parameters not found: {e}")
+                        self.sp.asym.peak_fit, self.sp.asym.width_fit, self.sp.asym.fD_fit \
+                            = [np.nan, np.nan, np.nan]
+                        self.sp.asym.peak_fit_err, self.sp.asym.width_fit_err, self.sp.asym.fD_fit_err \
+                            = [np.nan, np.nan, np.nan]
+                elif self.sp.asym.peak_nums == 3:
+                    self.sp.asym.gaussfit_num = 3
+                    inip = [self.sp.asym.peak_psd, [iniwidth, iniwidth, iniwidth], self.sp.asym.peak_freqs]
+                    inip = np.array(inip).flatten(order="F").tolist()
+                    try:
+                        popt, pcov = curve_fit(oddgauss3, self.sp.fIQ[_idx], self.sp.asym.psd[_idx],
+                                               p0=inip, maxfev=maxfev)
+                        self.sp.asym.peak_fit, self.sp.asym.width_fit, self.sp.asym.fD_fit \
+                            = popt.reshape((self.sp.asym.peak_nums, 3)).T
+                        self.sp.asym.peak_fit_err, self.sp.asym.width_fit_err, self.sp.asym.fD_fit_err \
+                            = np.sqrt(np.diag(pcov)).reshape((self.sp.asym.peak_nums, 3)).T
+                    except RuntimeError as e:
+                        print(f"Optimal parameters not found: {e}")
+                        self.sp.asym.peak_fit, self.sp.asym.width_fit, self.sp.asym.fD_fit \
+                            = [np.nan, np.nan, np.nan]
+                        self.sp.asym.peak_fit_err, self.sp.asym.width_fit_err, self.sp.asym.fD_fit_err \
+                            = [np.nan, np.nan, np.nan]
+                elif self.sp.asym.peak_nums == 4:
+                    self.sp.asym.gaussfit_num = 4
+                    inip = [self.sp.asym.peak_psd, [iniwidth, iniwidth, iniwidth, iniwidth], self.sp.asym.peak_freqs]
+                    inip = np.array(inip).flatten(order="F").tolist()
+                    try:
+                        popt, pcov = curve_fit(oddgauss4, self.sp.fIQ[_idx], self.sp.asym.psd[_idx],
+                                               p0=inip, maxfev=maxfev)
+                        self.sp.asym.peak_fit, self.sp.asym.width_fit, self.sp.asym.fD_fit \
+                            = popt.reshape((self.sp.asym.gaussfit_num, 3)).T
+                        self.sp.asym.peak_fit_err, self.sp.asym.width_fit_err, self.sp.asym.fD_fit_err \
+                            = np.sqrt(np.diag(pcov)).reshape((self.sp.asym.gaussfit_num, 3)).T
+                    except RuntimeError as e:
+                        print(f"Optimal parameters not found: {e}")
+                        self.sp.asym.peak_fit, self.sp.asym.width_fit, self.sp.asym.fD_fit \
+                            = [np.nan, np.nan, np.nan]
+                        self.sp.asym.peak_fit_err, self.sp.asym.width_fit_err, self.sp.asym.fD_fit_err \
+                            = [np.nan, np.nan, np.nan]
+                else:  # until 4.
+                    self.sp.asym.gaussfit_num = 4
+                    idx_str = np.argsort(self.sp.asym.peak_psd)[- self.sp.asym.gaussfit_num:]
+                    inip = [self.sp.asym.peak_psd[idx_str],
+                            [iniwidth, iniwidth, iniwidth, iniwidth],
+                            self.sp.asym.peak_freqs[idx_str]]
+                    inip = np.array(inip).flatten(order="F").tolist()
+                    try:
+                        popt, pcov = curve_fit(oddgauss4, self.sp.fIQ[_idx], self.sp.asym.psd[_idx],
+                                               p0=inip, maxfev=maxfev)
+                        self.sp.asym.peak_fit, self.sp.asym.width_fit, self.sp.asym.fD_fit \
+                            = popt.reshape((self.sp.asym.gaussfit_num, 3)).T
+                        self.sp.asym.peak_fit_err, self.sp.asym.width_fit_err, self.sp.asym.fD_fit_err \
+                            = np.sqrt(np.diag(pcov)).reshape((self.sp.asym.gaussfit_num, 3)).T
+                    except RuntimeError as e:
+                        print(f"Optimal parameters not found: {e}")
+                        self.sp.asym.peak_fit, self.sp.asym.width_fit, self.sp.asym.fD_fit \
+                            = [np.nan, np.nan, np.nan]
+                        self.sp.asym.peak_fit_err, self.sp.asym.width_fit_err, self.sp.asym.fD_fit_err \
+                            = [np.nan, np.nan, np.nan]
+
+        if bydB:
+            figdir = "Retrieve_MWRM_spectrum_asym"
+            proc.ifNotMake(figdir)
+            fnm = f"{self.sn}_{self.subsn}_{self.sp.tstart}_{self.sp.tend}_{self.diagname}_{self.chI}_{self.chQ}_dB"
+            if fmin is not None:
+                fnm += f"_min{self.sp.asym.fmin * 1e-3}kHz"
+            if fmax is not None:
+                fnm += f"_max{self.sp.asym.fmax * 1e-3}kHz"
+            path = os.path.join(figdir, f"{fnm}.png")
+            title = f"#{self.sn}-{self.subsn} {self.sp.tstart}-{self.sp.tend}s\n" \
+                    f"{self.diagname} ch:{self.chI},{self.chQ}"
+            fig, (ax, ax2) = plt.subplots(nrows=2, sharex=True, figsize=(5, 8), num=fnm)
+
+            self.sp.asym.vmaxdB = self.sp.asym.psddB[_idx].max()
+            self.sp.asym.vmindB = self.sp.asym.psddB[_idx].min()
+
+            ax.plot(self.sp.fIQ, self.sp.asym.psddB, ".", c="grey", ms=1)
+            ax2.plot(self.sp.fIQ, self.sp.psdIQdB, ".", c="grey", ms=1)
+            ax.plot(self.sp.fIQ[_idx], self.sp.asym.psddB_smooth, c="blue", lw=2, alpha=0.5)
+            ax.hlines(0, - self.sp.asym.fmax, self.sp.asym.fmax, colors="grey", ls="--", lw=1)
+
+            # if peak_detection:
+                # ax.vlines(self.sp.asym.peak_freqs, self.sp.asym.vmindB, self.sp.asym.vmaxdB,
+                #           colors="red", alpha=0.5, lw=1, ls="--")
+            if gaussfitting:
+                if (~isinstance(self.sp.asym.fD_fit, np.ndarray)) and (self.sp.asym.fD_fit is np.nan):
+                    print("\n")
+                else:
+                    ax.vlines(self.sp.asym.fD_fit, self.sp.asym.vmindB, self.sp.asym.vmaxdB,
+                              colors="pink", lw=1, ls="--")
+                    if self.sp.asym.gaussfit_num == 1:
+                        ax.plot(self.sp.fIQ, oddgauss(self.sp.fIQ, self.sp.asym.peak_fit,
+                                                      self.sp.asym.width_fit, self.sp.asym.fD_fit), c="lightblue", lw=2)
+                        ax2.plot(self.sp.fIQ, gauss(self.sp.fIQ, self.sp.asym.peak_fit,
+                                                    self.sp.asym.width_fit, self.sp.asym.fD_fit, self.sp.vmindB),
+                                 c="lightblue", lw=2, alpha=0.5)
+                        ax.plot(self.sp.fIQ, oddgauss(self.sp.fIQ, self.sp.asym.peak_fit,
+                                                      self.sp.asym.width_fit, self.sp.asym.fD_fit),
+                                 c="green", lw=1, alpha=0.5, ls="--")
+                        ax2.plot(self.sp.fIQ, self.sp.psdIQdB - gauss(self.sp.fIQ, self.sp.asym.peak_fit,
+                                                                      self.sp.asym.width_fit, self.sp.asym.fD_fit,
+                                                                      0),
+                                 c="green", lw=1, alpha=0.5, ls="--")
+                        ax2.plot(- self.sp.fIQ, self.sp.psdIQdB - gauss(self.sp.fIQ, self.sp.asym.peak_fit,
+                                                                      self.sp.asym.width_fit, self.sp.asym.fD_fit,
+                                                                      0),
+                                 c="purple", lw=1, alpha=0.5, ls="--")
+                    elif self.sp.asym.gaussfit_num == 2:
+                        ax.plot(self.sp.fIQ, oddgauss2(self.sp.fIQ, self.sp.asym.peak_fit[0],
+                                                       self.sp.asym.width_fit[0], self.sp.asym.fD_fit[0],
+                                                       self.sp.asym.peak_fit[1],
+                                                       self.sp.asym.width_fit[1], self.sp.asym.fD_fit[1],
+                                                       ),
+                                c="green", lw=1, alpha=0.5)
+                        ax.plot(self.sp.fIQ, oddgauss(self.sp.fIQ, self.sp.asym.peak_fit[0],
+                                                      self.sp.asym.width_fit[0], self.sp.asym.fD_fit[0]),
+                                c="lightblue", lw=2, alpha=0.5)
+                        ax2.plot(self.sp.fIQ, gauss(self.sp.fIQ, self.sp.asym.peak_fit[0],
+                                                    self.sp.asym.width_fit[0], self.sp.asym.fD_fit[0], self.sp.vmindB),
+                                c="lightblue", lw=2, alpha=0.5)
+                        ax.plot(self.sp.fIQ, oddgauss(self.sp.fIQ, self.sp.asym.peak_fit[1],
+                                                      self.sp.asym.width_fit[1], self.sp.asym.fD_fit[1]),
+                                c="lightgreen", lw=2, alpha=0.5)
+                        ax2.plot(self.sp.fIQ, gauss(self.sp.fIQ, self.sp.asym.peak_fit[1],
+                                                    self.sp.asym.width_fit[1], self.sp.asym.fD_fit[1], self.sp.vmindB),
+                                c="lightgreen", lw=2, alpha=0.5)
+                        ax2.plot(self.sp.fIQ,
+                                 self.sp.psdIQdB
+                                 - gauss(self.sp.fIQ, self.sp.asym.peak_fit[0],
+                                                    self.sp.asym.width_fit[0], self.sp.asym.fD_fit[0], 0)
+                                 - gauss(self.sp.fIQ, self.sp.asym.peak_fit[1],
+                                                    self.sp.asym.width_fit[1], self.sp.asym.fD_fit[1], 0),
+                                 c="green", lw=1, alpha=0.5, ls="--")
+                        ax2.plot(- self.sp.fIQ,
+                                 self.sp.psdIQdB
+                                 - gauss(self.sp.fIQ, self.sp.asym.peak_fit[0],
+                                                    self.sp.asym.width_fit[0], self.sp.asym.fD_fit[0], 0)
+                                 - gauss(self.sp.fIQ, self.sp.asym.peak_fit[1],
+                                                    self.sp.asym.width_fit[1], self.sp.asym.fD_fit[1], 0),
+                                 c="purple", lw=1, alpha=0.5, ls="--")
+                    elif self.sp.asym.gaussfit_num == 3:
+                        ax.plot(self.sp.fIQ, oddgauss3(self.sp.fIQ, self.sp.asym.peak_fit[0],
+                                                       self.sp.asym.width_fit[0], self.sp.asym.fD_fit[0],
+                                                       self.sp.asym.peak_fit[1],
+                                                       self.sp.asym.width_fit[1], self.sp.asym.fD_fit[1],
+                                                       self.sp.asym.peak_fit[2],
+                                                       self.sp.asym.width_fit[2], self.sp.asym.fD_fit[2],
+                                                       ),
+                                c="green", lw=1, alpha=0.5)
+                        ax.plot(self.sp.fIQ, oddgauss(self.sp.fIQ, self.sp.asym.peak_fit[0],
+                                                      self.sp.asym.width_fit[0], self.sp.asym.fD_fit[0]),
+                                c="lightblue", lw=2, alpha=0.5)
+                        ax2.plot(self.sp.fIQ, gauss(self.sp.fIQ, self.sp.asym.peak_fit[0],
+                                                    self.sp.asym.width_fit[0], self.sp.asym.fD_fit[0], self.sp.vmindB),
+                                c="lightblue", lw=2, alpha=0.5)
+                        ax.plot(self.sp.fIQ, oddgauss(self.sp.fIQ, self.sp.asym.peak_fit[1],
+                                                      self.sp.asym.width_fit[1], self.sp.asym.fD_fit[1]),
+                                c="lightgreen", lw=2, alpha=0.5)
+                        ax2.plot(self.sp.fIQ, gauss(self.sp.fIQ, self.sp.asym.peak_fit[1],
+                                                    self.sp.asym.width_fit[1], self.sp.asym.fD_fit[1], self.sp.vmindB),
+                                c="lightgreen", lw=2, alpha=0.5)
+                        ax.plot(self.sp.fIQ, oddgauss(self.sp.fIQ, self.sp.asym.peak_fit[2],
+                                                      self.sp.asym.width_fit[2], self.sp.asym.fD_fit[2]),
+                                c="plum", lw=2, alpha=0.5)
+                        ax2.plot(self.sp.fIQ, gauss(self.sp.fIQ, self.sp.asym.peak_fit[2],
+                                                    self.sp.asym.width_fit[2], self.sp.asym.fD_fit[2], self.sp.vmindB),
+                                c="plum", lw=2, alpha=0.5)
+                        ax2.plot(self.sp.fIQ,
+                                 self.sp.psdIQdB
+                                 - gauss(self.sp.fIQ, self.sp.asym.peak_fit[0],
+                                                    self.sp.asym.width_fit[0], self.sp.asym.fD_fit[0], 0)
+                                 - gauss(self.sp.fIQ, self.sp.asym.peak_fit[1],
+                                                    self.sp.asym.width_fit[1], self.sp.asym.fD_fit[1], 0)
+                                 - gauss(self.sp.fIQ, self.sp.asym.peak_fit[2],
+                                                    self.sp.asym.width_fit[2], self.sp.asym.fD_fit[2], 0),
+                                 c="green", lw=1, alpha=0.5, ls="--")
+                        ax2.plot(- self.sp.fIQ,
+                                 self.sp.psdIQdB
+                                 - gauss(self.sp.fIQ, self.sp.asym.peak_fit[0],
+                                                    self.sp.asym.width_fit[0], self.sp.asym.fD_fit[0], 0)
+                                 - gauss(self.sp.fIQ, self.sp.asym.peak_fit[1],
+                                                    self.sp.asym.width_fit[1], self.sp.asym.fD_fit[1], 0)
+                                 - gauss(self.sp.fIQ, self.sp.asym.peak_fit[2],
+                                                    self.sp.asym.width_fit[2], self.sp.asym.fD_fit[2], 0),
+                                 c="purple", lw=1, alpha=0.5, ls="--")
+                    elif self.sp.asym.gaussfit_num == 4:
+                        ax.plot(self.sp.fIQ, oddgauss4(self.sp.fIQ, self.sp.asym.peak_fit[0],
+                                                       self.sp.asym.width_fit[0], self.sp.asym.fD_fit[0],
+                                                       self.sp.asym.peak_fit[1],
+                                                       self.sp.asym.width_fit[1], self.sp.asym.fD_fit[1],
+                                                       self.sp.asym.peak_fit[2],
+                                                       self.sp.asym.width_fit[2], self.sp.asym.fD_fit[2],
+                                                       self.sp.asym.peak_fit[3],
+                                                       self.sp.asym.width_fit[3], self.sp.asym.fD_fit[3]
+                                                       ),
+                                c="green", lw=2, alpha=0.5)
+                        ax.plot(self.sp.fIQ, oddgauss(self.sp.fIQ, self.sp.asym.peak_fit[0],
+                                                      self.sp.asym.width_fit[0], self.sp.asym.fD_fit[0]),
+                                c="lightblue", lw=2, alpha=0.5)
+                        ax2.plot(self.sp.fIQ, gauss(self.sp.fIQ, self.sp.asym.peak_fit[0],
+                                                    self.sp.asym.width_fit[0], self.sp.asym.fD_fit[0], self.sp.vmindB),
+                                c="lightblue", lw=2, alpha=0.5)
+                        ax.plot(self.sp.fIQ, oddgauss(self.sp.fIQ, self.sp.asym.peak_fit[1],
+                                                      self.sp.asym.width_fit[1], self.sp.asym.fD_fit[1]),
+                                c="lightgreen", lw=2, alpha=0.5)
+                        ax2.plot(self.sp.fIQ, gauss(self.sp.fIQ, self.sp.asym.peak_fit[1],
+                                                    self.sp.asym.width_fit[1], self.sp.asym.fD_fit[1], self.sp.vmindB),
+                                c="lightgreen", lw=2, alpha=0.5)
+                        ax.plot(self.sp.fIQ, oddgauss(self.sp.fIQ, self.sp.asym.peak_fit[2],
+                                                      self.sp.asym.width_fit[2], self.sp.asym.fD_fit[2]),
+                                c="plum", lw=2, alpha=0.5)
+                        ax2.plot(self.sp.fIQ, gauss(self.sp.fIQ, self.sp.asym.peak_fit[2],
+                                                    self.sp.asym.width_fit[2], self.sp.asym.fD_fit[2], self.sp.vmindB),
+                                c="plum", lw=2, alpha=0.5)
+                        ax.plot(self.sp.fIQ, oddgauss(self.sp.fIQ, self.sp.asym.peak_fit[3],
+                                                      self.sp.asym.width_fit[3], self.sp.asym.fD_fit[3]),
+                                c="lightsalmon", lw=2, alpha=0.5)
+                        ax2.plot(self.sp.fIQ, gauss(self.sp.fIQ, self.sp.asym.peak_fit[3],
+                                                    self.sp.asym.width_fit[3], self.sp.asym.fD_fit[3], self.sp.vmindB),
+                                c="lightsalmon", lw=2, alpha=0.5)
+                        ax2.plot(self.sp.fIQ,
+                                 self.sp.psdIQdB
+                                 - gauss(self.sp.fIQ, self.sp.asym.peak_fit[0],
+                                                    self.sp.asym.width_fit[0], self.sp.asym.fD_fit[0], 0)
+                                 - gauss(self.sp.fIQ, self.sp.asym.peak_fit[1],
+                                                    self.sp.asym.width_fit[1], self.sp.asym.fD_fit[1], 0)
+                                 - gauss(self.sp.fIQ, self.sp.asym.peak_fit[2],
+                                                    self.sp.asym.width_fit[2], self.sp.asym.fD_fit[2], 0)
+                                 - gauss(self.sp.fIQ, self.sp.asym.peak_fit[3],
+                                         self.sp.asym.width_fit[3], self.sp.asym.fD_fit[3], 0),
+                                 c="green", lw=1, alpha=0.5, ls="--")
+                        # ax2.plot(- self.sp.fIQ,
+                        #          self.sp.psdIQdB
+                        #          - gauss(self.sp.fIQ, self.sp.asym.peak_fit[0],
+                        #                  self.sp.asym.width_fit[0], self.sp.asym.fD_fit[0], 0)
+                        #          - gauss(self.sp.fIQ, self.sp.asym.peak_fit[1],
+                        #                  self.sp.asym.width_fit[1], self.sp.asym.fD_fit[1], 0)
+                        #          - gauss(self.sp.fIQ, self.sp.asym.peak_fit[2],
+                        #                  self.sp.asym.width_fit[2], self.sp.asym.fD_fit[2], 0)
+                        #          - gauss(self.sp.fIQ, self.sp.asym.peak_fit[3],
+                        #                  self.sp.asym.width_fit[3], self.sp.asym.fD_fit[3], 0),
+                        #          c="purple", lw=1, alpha=0.5, ls="--")
+                        ax2.plot(self.sp.fIQ, (self.sp.psdIQdB + np.flip(self.sp.psdIQdB))/2,
+                                 c="purple", lw=1, alpha=0.5, ls="--")
+
+            ax.set_ylim(self.sp.asym.vmindB, self.sp.asym.vmaxdB)
+            ax2.set_ylim(self.sp.vmindB, self.sp.vmaxdB)
+            ax.set_ylabel("S(f) - S(-f)\n"
+                          "[dB]")
+            ax2.set_ylabel("S(f) [dB]")
+            ax2.set_xlabel("Frequency [Hz]")
+            ax2.set_xlim(- self.sp.asym.fmax, self.sp.asym.fmax)
+
+        else:
+            figdir = "Retrieve_MWRM_spectrum_asym"
+            proc.ifNotMake(figdir)
+            fnm = f"{self.sn}_{self.subsn}_{self.sp.tstart}_{self.sp.tend}_{self.diagname}_{self.chI}_{self.chQ}"
+            if fmin is not None:
+                fnm += f"_min{self.sp.asym.fmin * 1e-3}kHz"
+            if fmax is not None:
+                fnm += f"_max{self.sp.asym.fmax * 1e-3}kHz"
+            path = os.path.join(figdir, f"{fnm}.png")
+            title = f"#{self.sn}-{self.subsn} {self.sp.tstart}-{self.sp.tend}s\n" \
+                    f"{self.diagname} ch:{self.chI},{self.chQ}"
+            fig, (ax, ax2) = plt.subplots(nrows=2, sharex=True, figsize=(5, 8), num=fnm)
+
+            self.sp.asym.vmax = self.sp.asym.psd[_idx].max()
+            self.sp.asym.vmin = self.sp.asym.psd[_idx].min()
+
+            ax.plot(self.sp.fIQ, self.sp.asym.psd, ".", c="grey", ms=1)
+            ax2.plot(self.sp.fIQ, self.sp.psdIQ, ".", c="grey", ms=1)
+            ax.plot(self.sp.fIQ[_idx], self.sp.asym.psd_smooth, c="blue", lw=2, alpha=0.5)
+            ax.hlines(0, - self.sp.asym.fmax, self.sp.asym.fmax, colors="grey", ls="--", lw=1)
+
+            if peak_detection:
+                ax.vlines(self.sp.asym.peak_freqs, self.sp.asym.vmin, self.sp.asym.vmax,
+                          colors="red", alpha=0.5, lw=1, ls="--")
+            if gaussfitting:
+                if (~isinstance(self.sp.asym.fD_fit, np.ndarray)) and (self.sp.asym.fD_fit is np.nan):
+                    print("\n")
+                else:
+                    ax.vlines(self.sp.asym.fD_fit, self.sp.asym.vmin, self.sp.asym.vmax,
+                              colors="pink", lw=1, ls="--")
+                    if self.sp.asym.gaussfit_num == 1:
+                        ax.plot(self.sp.fIQ, oddgauss(self.sp.fIQ, self.sp.asym.peak_fit,
+                                                      self.sp.asym.width_fit, self.sp.asym.fD_fit), c="lightblue", lw=2)
+                        ax2.plot(self.sp.fIQ, gauss(self.sp.fIQ, self.sp.asym.peak_fit,
+                                                    self.sp.asym.width_fit, self.sp.asym.fD_fit, 0),
+                                 c="lightblue", lw=2, alpha=0.5)
+                        ax.plot(self.sp.fIQ, oddgauss(self.sp.fIQ, self.sp.asym.peak_fit,
+                                                      self.sp.asym.width_fit, self.sp.asym.fD_fit),
+                                c="green", lw=1, alpha=0.5, ls="--")
+                        ax2.plot(self.sp.fIQ, self.sp.psdIQ - gauss(self.sp.fIQ, self.sp.asym.peak_fit,
+                                                                      self.sp.asym.width_fit, self.sp.asym.fD_fit,
+                                                                      0),
+                                 c="green", lw=1, alpha=0.5, ls="--")
+                        ax2.plot(- self.sp.fIQ, self.sp.psdIQ - gauss(self.sp.fIQ, self.sp.asym.peak_fit,
+                                                                        self.sp.asym.width_fit, self.sp.asym.fD_fit,
+                                                                        0),
+                                 c="purple", lw=1, alpha=0.5, ls="--")
+                    elif self.sp.asym.gaussfit_num == 2:
+                        ax.plot(self.sp.fIQ, oddgauss2(self.sp.fIQ, self.sp.asym.peak_fit[0],
+                                                       self.sp.asym.width_fit[0], self.sp.asym.fD_fit[0],
+                                                       self.sp.asym.peak_fit[1],
+                                                       self.sp.asym.width_fit[1], self.sp.asym.fD_fit[1],
+                                                       ),
+                                c="green", lw=1, alpha=0.5)
+                        ax.plot(self.sp.fIQ, oddgauss(self.sp.fIQ, self.sp.asym.peak_fit[0],
+                                                      self.sp.asym.width_fit[0], self.sp.asym.fD_fit[0]),
+                                c="lightblue", lw=2, alpha=0.5)
+                        ax2.plot(self.sp.fIQ, gauss(self.sp.fIQ, self.sp.asym.peak_fit[0],
+                                                    self.sp.asym.width_fit[0], self.sp.asym.fD_fit[0], 0),
+                                 c="lightblue", lw=2, alpha=0.5)
+                        ax.plot(self.sp.fIQ, oddgauss(self.sp.fIQ, self.sp.asym.peak_fit[1],
+                                                      self.sp.asym.width_fit[1], self.sp.asym.fD_fit[1]),
+                                c="lightgreen", lw=2, alpha=0.5)
+                        ax2.plot(self.sp.fIQ, gauss(self.sp.fIQ, self.sp.asym.peak_fit[1],
+                                                    self.sp.asym.width_fit[1], self.sp.asym.fD_fit[1], 0),
+                                 c="lightgreen", lw=2, alpha=0.5)
+                        ax2.plot(self.sp.fIQ,
+                                 self.sp.psdIQ
+                                 - gauss(self.sp.fIQ, self.sp.asym.peak_fit[0],
+                                         self.sp.asym.width_fit[0], self.sp.asym.fD_fit[0], 0)
+                                 - gauss(self.sp.fIQ, self.sp.asym.peak_fit[1],
+                                         self.sp.asym.width_fit[1], self.sp.asym.fD_fit[1], 0),
+                                 c="green", lw=1, alpha=0.5, ls="--")
+                        ax2.plot(- self.sp.fIQ,
+                                 self.sp.psdIQ
+                                 - gauss(self.sp.fIQ, self.sp.asym.peak_fit[0],
+                                         self.sp.asym.width_fit[0], self.sp.asym.fD_fit[0], 0)
+                                 - gauss(self.sp.fIQ, self.sp.asym.peak_fit[1],
+                                         self.sp.asym.width_fit[1], self.sp.asym.fD_fit[1], 0),
+                                 c="purple", lw=1, alpha=0.5, ls="--")
+                    elif self.sp.asym.gaussfit_num == 3:
+                        ax.plot(self.sp.fIQ, oddgauss3(self.sp.fIQ, self.sp.asym.peak_fit[0],
+                                                       self.sp.asym.width_fit[0], self.sp.asym.fD_fit[0],
+                                                       self.sp.asym.peak_fit[1],
+                                                       self.sp.asym.width_fit[1], self.sp.asym.fD_fit[1],
+                                                       self.sp.asym.peak_fit[2],
+                                                       self.sp.asym.width_fit[2], self.sp.asym.fD_fit[2],
+                                                       ),
+                                c="green", lw=1, alpha=0.5)
+                        ax.plot(self.sp.fIQ, oddgauss(self.sp.fIQ, self.sp.asym.peak_fit[0],
+                                                      self.sp.asym.width_fit[0], self.sp.asym.fD_fit[0]),
+                                c="lightblue", lw=2, alpha=0.5)
+                        ax2.plot(self.sp.fIQ, gauss(self.sp.fIQ, self.sp.asym.peak_fit[0],
+                                                    self.sp.asym.width_fit[0], self.sp.asym.fD_fit[0], 0),
+                                 c="lightblue", lw=2, alpha=0.5)
+                        ax.plot(self.sp.fIQ, oddgauss(self.sp.fIQ, self.sp.asym.peak_fit[1],
+                                                      self.sp.asym.width_fit[1], self.sp.asym.fD_fit[1]),
+                                c="lightgreen", lw=2, alpha=0.5)
+                        ax2.plot(self.sp.fIQ, gauss(self.sp.fIQ, self.sp.asym.peak_fit[1],
+                                                    self.sp.asym.width_fit[1], self.sp.asym.fD_fit[1], 0),
+                                 c="lightgreen", lw=2, alpha=0.5)
+                        ax.plot(self.sp.fIQ, oddgauss(self.sp.fIQ, self.sp.asym.peak_fit[2],
+                                                      self.sp.asym.width_fit[2], self.sp.asym.fD_fit[2]),
+                                c="plum", lw=2, alpha=0.5)
+                        ax2.plot(self.sp.fIQ, gauss(self.sp.fIQ, self.sp.asym.peak_fit[2],
+                                                    self.sp.asym.width_fit[2], self.sp.asym.fD_fit[2], 0),
+                                 c="plum", lw=2, alpha=0.5)
+                        ax2.plot(self.sp.fIQ,
+                                 self.sp.psdIQ
+                                 - gauss(self.sp.fIQ, self.sp.asym.peak_fit[0],
+                                         self.sp.asym.width_fit[0], self.sp.asym.fD_fit[0], 0)
+                                 - gauss(self.sp.fIQ, self.sp.asym.peak_fit[1],
+                                         self.sp.asym.width_fit[1], self.sp.asym.fD_fit[1], 0)
+                                 - gauss(self.sp.fIQ, self.sp.asym.peak_fit[2],
+                                         self.sp.asym.width_fit[2], self.sp.asym.fD_fit[2], 0),
+                                 c="green", lw=1, alpha=0.5, ls="--")
+                        ax2.plot(- self.sp.fIQ,
+                                 self.sp.psdIQ
+                                 - gauss(self.sp.fIQ, self.sp.asym.peak_fit[0],
+                                         self.sp.asym.width_fit[0], self.sp.asym.fD_fit[0], 0)
+                                 - gauss(self.sp.fIQ, self.sp.asym.peak_fit[1],
+                                         self.sp.asym.width_fit[1], self.sp.asym.fD_fit[1], 0)
+                                 - gauss(self.sp.fIQ, self.sp.asym.peak_fit[2],
+                                         self.sp.asym.width_fit[2], self.sp.asym.fD_fit[2], 0),
+                                 c="purple", lw=1, alpha=0.5, ls="--")
+                    elif self.sp.asym.gaussfit_num == 4:
+                        ax.plot(self.sp.fIQ, oddgauss4(self.sp.fIQ, self.sp.asym.peak_fit[0],
+                                                       self.sp.asym.width_fit[0], self.sp.asym.fD_fit[0],
+                                                       self.sp.asym.peak_fit[1],
+                                                       self.sp.asym.width_fit[1], self.sp.asym.fD_fit[1],
+                                                       self.sp.asym.peak_fit[2],
+                                                       self.sp.asym.width_fit[2], self.sp.asym.fD_fit[2],
+                                                       self.sp.asym.peak_fit[3],
+                                                       self.sp.asym.width_fit[3], self.sp.asym.fD_fit[3]
+                                                       ),
+                                c="green", lw=2, alpha=0.5)
+                        ax.plot(self.sp.fIQ, oddgauss(self.sp.fIQ, self.sp.asym.peak_fit[0],
+                                                      self.sp.asym.width_fit[0], self.sp.asym.fD_fit[0]),
+                                c="lightblue", lw=2, alpha=0.5)
+                        ax2.plot(self.sp.fIQ, gauss(self.sp.fIQ, self.sp.asym.peak_fit[0],
+                                                    self.sp.asym.width_fit[0], self.sp.asym.fD_fit[0], 0),
+                                 c="lightblue", lw=2, alpha=0.5)
+                        ax.plot(self.sp.fIQ, oddgauss(self.sp.fIQ, self.sp.asym.peak_fit[1],
+                                                      self.sp.asym.width_fit[1], self.sp.asym.fD_fit[1]),
+                                c="lightgreen", lw=2, alpha=0.5)
+                        ax2.plot(self.sp.fIQ, gauss(self.sp.fIQ, self.sp.asym.peak_fit[1],
+                                                    self.sp.asym.width_fit[1], self.sp.asym.fD_fit[1], 0),
+                                 c="lightgreen", lw=2, alpha=0.5)
+                        ax.plot(self.sp.fIQ, oddgauss(self.sp.fIQ, self.sp.asym.peak_fit[2],
+                                                      self.sp.asym.width_fit[2], self.sp.asym.fD_fit[2]),
+                                c="plum", lw=2, alpha=0.5)
+                        ax2.plot(self.sp.fIQ, gauss(self.sp.fIQ, self.sp.asym.peak_fit[2],
+                                                    self.sp.asym.width_fit[2], self.sp.asym.fD_fit[2], 0),
+                                 c="plum", lw=2, alpha=0.5)
+                        ax.plot(self.sp.fIQ, oddgauss(self.sp.fIQ, self.sp.asym.peak_fit[3],
+                                                      self.sp.asym.width_fit[3], self.sp.asym.fD_fit[3]),
+                                c="lightsalmon", lw=2, alpha=0.5)
+                        ax2.plot(self.sp.fIQ, gauss(self.sp.fIQ, self.sp.asym.peak_fit[3],
+                                                    self.sp.asym.width_fit[3], self.sp.asym.fD_fit[3], 0),
+                                 c="lightsalmon", lw=2, alpha=0.5)
+                        ax2.plot(self.sp.fIQ,
+                                 self.sp.psdIQ
+                                 - gauss(self.sp.fIQ, self.sp.asym.peak_fit[0],
+                                         self.sp.asym.width_fit[0], self.sp.asym.fD_fit[0], 0)
+                                 - gauss(self.sp.fIQ, self.sp.asym.peak_fit[1],
+                                         self.sp.asym.width_fit[1], self.sp.asym.fD_fit[1], 0)
+                                 - gauss(self.sp.fIQ, self.sp.asym.peak_fit[2],
+                                         self.sp.asym.width_fit[2], self.sp.asym.fD_fit[2], 0)
+                                 - gauss(self.sp.fIQ, self.sp.asym.peak_fit[3],
+                                         self.sp.asym.width_fit[3], self.sp.asym.fD_fit[3], 0),
+                                 c="green", lw=1, alpha=0.5, ls="--")
+                        ax2.plot(- self.sp.fIQ,
+                                 self.sp.psdIQ
+                                 - gauss(self.sp.fIQ, self.sp.asym.peak_fit[0],
+                                         self.sp.asym.width_fit[0], self.sp.asym.fD_fit[0], 0)
+                                 - gauss(self.sp.fIQ, self.sp.asym.peak_fit[1],
+                                         self.sp.asym.width_fit[1], self.sp.asym.fD_fit[1], 0)
+                                 - gauss(self.sp.fIQ, self.sp.asym.peak_fit[2],
+                                         self.sp.asym.width_fit[2], self.sp.asym.fD_fit[2], 0)
+                                 - gauss(self.sp.fIQ, self.sp.asym.peak_fit[3],
+                                         self.sp.asym.width_fit[3], self.sp.asym.fD_fit[3], 0),
+                                 c="purple", lw=1, alpha=0.5, ls="--")
+
+            ax.set_ylim(self.sp.asym.vmin, self.sp.asym.vmax)
+            ax.set_ylabel("S(f) - S(-f)"
+                          "[a.u.]")
+            ax2.set_ylabel("S(f) [a.u.]")
+            ax2.set_xlabel("Frequency [Hz]")
+            ax2.set_xlim(- self.sp.asym.fmax, self.sp.asym.fmax)
+
+        plot.caption(fig, title, hspace=0.1, wspace=0.1)
+        plot.capsave(fig, title, fnm, path)
+
+        if display:
+            plot.check(pause)
+        else:
+            plot.close(fig)
+
+    def spectrum_symmetric_component(self, fmin=None, fmax=None,
+                                      polyorder=2, iniwidth=100e3,
+                                      maxfev=2000,
+                                      display=True, pause=0):
+
+        self.sp.sym = calc.struct()
+        self.sp.sym.iniwidth = iniwidth
+
+        if fmin is None:
+            self.sp.sym.fmin = self.sp.dF
+        else:
+            self.sp.sym.fmin = fmin
+        if fmax is None:
+            self.sp.sym.fmax = self.Fs / 2
+        else:
+            self.sp.sym.fmax = fmax
+        _idx = np.where((np.abs(self.sp.fIQ) > self.sp.sym.fmin)
+                        & (np.abs(self.sp.fIQ) < self.sp.sym.fmax))[0]
+        self.sp.sym.winlen = int(self.sp.sym.iniwidth / self.sp.dF / 2) * 2 + 1
+
+        self.sp.sym.psddB = (self.sp.psdIQdB + np.flip(self.sp.psdIQdB, axis=-1)) / 2
+
+        self.sp.sym.srcpsddB = self.sp.psdIQdB[_idx]
+        self.sp.sym.f = self.sp.fIQ[_idx]
+
+        # if peak_detection:
+        #     # peak detection
+        self.sp.sym.psddB_smooth = savgol_filter(self.sp.sym.psddB[_idx],
+                                                 window_length=self.sp.sym.winlen,
+                                                 polyorder=polyorder)
+        #     self.sp.sym.peak_idxs = find_peaks(self.sp.sym.psddB_smooth, prominence=prominence)[0]
+        #     self.sp.sym.peak_freqs = self.sp.fIQ[self.sp.sym.peak_idxs]
+        #     self.sp.sym.peak_psddB = self.sp.sym.psddB_smooth[self.sp.sym.peak_idxs]
+        #     self.sp.sym.peak_nums = np.array(self.sp.sym.peak_idxs).size
+
+        self.sp.sym.vmaxdB = self.sp.sym.psddB[_idx].max()
+        self.sp.sym.vmindB = self.sp.sym.psddB[_idx].min()
+
+        # if gaussfitting:
+        # gauss fitting
+        # if self.sp.sym.peak_nums == 0:
+        #     self.sp.sym.gaussfit_num = 0
+        #     self.sp.sym.peak_c_fit, self.sp.sym.width_c_fit, self.sp.sym.floor_fit \
+        #         = [np.nan, np.nan, np.nan]
+        #     self.sp.sym.peak_c_fit_err, self.sp.sym.width_c_fit_err, self.sp.sym.floor_fit_err \
+        #         = [np.nan, np.nan, np.nan]
+        # elif self.sp.sym.peak_nums == 1:
+        self.sp.sym.gaussfit_num = 1
+        inip = [self.sp.sym.vmaxdB, iniwidth, self.sp.sym.vmindB]
+        # try:
+        popt, pcov = curve_fit(symgauss, self.sp.fIQ[_idx], self.sp.sym.psddB_smooth,
+                               p0=inip, maxfev=maxfev)
+        self.sp.sym.cpeak_fit, self.sp.sym.cwidth_fit, self.sp.sym.floor_fit = popt
+        self.sp.sym.cpeak_fit_err, self.sp.sym.cwidth_fit_err, self.sp.sym.floor_fit_err \
+            = np.sqrt(np.diag(pcov))
+        # except RuntimeError as e:
+        #     print(f"Optimal parameters not found: {e}")
+        #     self.sp.sym.peak_fit, self.sp.sym.width_fit, self.sp.sym.fD_fit \
+        #         = [np.nan, np.nan, np.nan]
+        #     self.sp.sym.peak_fit_err, self.sp.sym.width_fit_err, self.sp.sym.fD_fit_err \
+        #         = [np.nan, np.nan, np.nan]
+        # elif self.sp.sym.peak_nums == 3:
+        #     self.sp.sym.gaussfit_num = 2
+        #     inip = [self.sp.sym.peak_psddB, [iniwidth, iniwidth], self.sp.sym.peak_freqs]
+        #     inip = np.array(inip).flatten(order="F").tolist()
+        #     try:
+        #         popt, pcov = curve_fit(oddgauss2, self.sp.fIQ[_idx], self.sp.sym.psddB[_idx],
+        #                                p0=inip, maxfev=maxfev)
+        #         self.sp.sym.peak_fit, self.sp.sym.width_fit, self.sp.sym.fD_fit \
+        #             = popt.reshape((self.sp.sym.peak_nums, 3)).T
+        #         self.sp.sym.peak_fit_err, self.sp.sym.width_fit_err, self.sp.sym.fD_fit_err \
+        #             = np.sqrt(np.diag(pcov)).reshape((self.sp.sym.peak_nums, 3)).T
+        #     except RuntimeError as e:
+        #         print(f"Optimal parameters not found: {e}")
+        #         self.sp.sym.peak_fit, self.sp.sym.width_fit, self.sp.sym.fD_fit \
+        #             = [np.nan, np.nan, np.nan]
+        #         self.sp.sym.peak_fit_err, self.sp.sym.width_fit_err, self.sp.sym.fD_fit_err \
+        #             = [np.nan, np.nan, np.nan]
+        # elif self.sp.sym.peak_nums == 5:
+        #     self.sp.sym.gaussfit_num = 3
+        #     inip = [self.sp.sym.peak_psddB, [iniwidth, iniwidth, iniwidth], self.sp.sym.peak_freqs]
+        #     inip = np.array(inip).flatten(order="F").tolist()
+        #     try:
+        #         popt, pcov = curve_fit(oddgauss3, self.sp.fIQ[_idx], self.sp.sym.psddB[_idx],
+        #                                p0=inip, maxfev=maxfev)
+        #         self.sp.sym.peak_fit, self.sp.sym.width_fit, self.sp.sym.fD_fit \
+        #             = popt.reshape((self.sp.sym.peak_nums, 3)).T
+        #         self.sp.sym.peak_fit_err, self.sp.sym.width_fit_err, self.sp.sym.fD_fit_err \
+        #             = np.sqrt(np.diag(pcov)).reshape((self.sp.sym.peak_nums, 3)).T
+        #     except RuntimeError as e:
+        #         print(f"Optimal parameters not found: {e}")
+        #         self.sp.sym.peak_fit, self.sp.sym.width_fit, self.sp.sym.fD_fit \
+        #             = [np.nan, np.nan, np.nan]
+        #         self.sp.sym.peak_fit_err, self.sp.sym.width_fit_err, self.sp.sym.fD_fit_err \
+        #             = [np.nan, np.nan, np.nan]
+        # elif self.sp.sym.peak_nums == 7:
+        #     self.sp.sym.gaussfit_num = 4
+        #     inip = [self.sp.sym.peak_psddB, [iniwidth, iniwidth, iniwidth, iniwidth], self.sp.sym.peak_freqs]
+        #     inip = np.array(inip).flatten(order="F").tolist()
+        #     try:
+        #         popt, pcov = curve_fit(oddgauss4, self.sp.fIQ[_idx], self.sp.sym.psddB[_idx],
+        #                                p0=inip, maxfev=maxfev)
+        #         self.sp.sym.peak_fit, self.sp.sym.width_fit, self.sp.sym.fD_fit \
+        #             = popt.reshape((self.sp.sym.gaussfit_num, 3)).T
+        #         self.sp.sym.peak_fit_err, self.sp.sym.width_fit_err, self.sp.sym.fD_fit_err \
+        #             = np.sqrt(np.diag(pcov)).reshape((self.sp.sym.gaussfit_num, 3)).T
+        #     except RuntimeError as e:
+        #         print(f"Optimal parameters not found: {e}")
+        #         self.sp.sym.peak_fit, self.sp.sym.width_fit, self.sp.sym.fD_fit \
+        #             = [np.nan, np.nan, np.nan]
+        #         self.sp.sym.peak_fit_err, self.sp.sym.width_fit_err, self.sp.sym.fD_fit_err \
+        #             = [np.nan, np.nan, np.nan]
+        # else:  # until 4.
+        #     self.sp.sym.gaussfit_num = 4
+        #     idx_str = np.argsort(self.sp.sym.peak_psddB)[- self.sp.sym.gaussfit_num:]
+        #     inip = [self.sp.sym.peak_psddB[idx_str],
+        #             [iniwidth, iniwidth, iniwidth, iniwidth],
+        #             self.sp.sym.peak_freqs[idx_str]]
+        #     inip = np.array(inip).flatten(order="F").tolist()
+        #     try:
+        #         popt, pcov = curve_fit(oddgauss4, self.sp.fIQ[_idx], self.sp.sym.psddB[_idx],
+        #                                p0=inip, maxfev=maxfev)
+        #         self.sp.sym.peak_fit, self.sp.sym.width_fit, self.sp.sym.fD_fit \
+        #             = popt.reshape((self.sp.sym.gaussfit_num, 3)).T
+        #         self.sp.sym.peak_fit_err, self.sp.sym.width_fit_err, self.sp.sym.fD_fit_err \
+        #             = np.sqrt(np.diag(pcov)).reshape((self.sp.sym.gaussfit_num, 3)).T
+        #     except RuntimeError as e:
+        #         print(f"Optimal parameters not found: {e}")
+        #         self.sp.sym.peak_fit, self.sp.sym.width_fit, self.sp.sym.fD_fit \
+        #             = [np.nan, np.nan, np.nan]
+        #         self.sp.sym.peak_fit_err, self.sp.sym.width_fit_err, self.sp.sym.fD_fit_err \
+        #             = [np.nan, np.nan, np.nan]
+        figdir = "Retrieve_MWRM_spectrum_sym"
+        proc.ifNotMake(figdir)
+        fnm = f"{self.sn}_{self.subsn}_{self.sp.tstart}_{self.sp.tend}_{self.diagname}_{self.chI}_{self.chQ}_dB"
+        if fmin is not None:
+            fnm += f"_min{self.sp.sym.fmin * 1e-3}kHz"
+        if fmax is not None:
+            fnm += f"_max{self.sp.sym.fmax * 1e-3}kHz"
+        path = os.path.join(figdir, f"{fnm}.png")
+        title = f"#{self.sn}-{self.subsn} {self.sp.tstart}-{self.sp.tend}s\n" \
+                f"{self.diagname} ch:{self.chI},{self.chQ}"
+        fig, ax = plt.subplots(nrows=1, sharex=True, figsize=(5, 5), num=fnm)
+
+        ax.plot(self.sp.fIQ, self.sp.psdIQdB, ".", c="grey", ms=1)
+        ax.plot(self.sp.fIQ, self.sp.sym.psddB, ".", c="grey", ms=1)
+        ax.plot(self.sp.fIQ[_idx], self.sp.sym.psddB_smooth, c="blue", lw=2, alpha=0.5)
+
+        # if gaussfitting:
+        ax.plot(self.sp.fIQ, symgauss(self.sp.fIQ, self.sp.sym.cpeak_fit,
+                                      self.sp.sym.cwidth_fit, self.sp.sym.floor_fit), c="pink", lw=2)
+
+        # if peak_detection:
+        # ax.vlines(self.sp.sym.peak_freqs, self.sp.sym.vmindB, self.sp.sym.vmaxdB,
+        #           colors="red", alpha=0.5, lw=1, ls="--")
+        # if gaussfitting:
+        #     if (~isinstance(self.sp.sym.fD_fit, np.ndarray)) and (self.sp.sym.fD_fit is np.nan):
+        #         print("\n")
+        #     else:
+        #         ax.vlines(self.sp.sym.fD_fit, self.sp.sym.vmindB, self.sp.sym.vmaxdB,
+        #                   colors="pink", lw=1, ls="--")
+        #         if self.sp.sym.gaussfit_num == 1:
+        #             ax.plot(self.sp.fIQ, oddgauss(self.sp.fIQ, self.sp.sym.peak_fit,
+        #                                           self.sp.sym.width_fit, self.sp.sym.fD_fit), c="lightblue", lw=2)
+        #             ax2.plot(self.sp.fIQ, gauss(self.sp.fIQ, self.sp.sym.peak_fit,
+        #                                         self.sp.sym.width_fit, self.sp.sym.fD_fit, self.sp.vmindB),
+        #                      c="lightblue", lw=2, alpha=0.5)
+        #             ax.plot(self.sp.fIQ, oddgauss(self.sp.fIQ, self.sp.sym.peak_fit,
+        #                                           self.sp.sym.width_fit, self.sp.sym.fD_fit),
+        #                     c="green", lw=1, alpha=0.5, ls="--")
+        #             ax2.plot(self.sp.fIQ, self.sp.psdIQdB - gauss(self.sp.fIQ, self.sp.sym.peak_fit,
+        #                                                           self.sp.sym.width_fit, self.sp.sym.fD_fit,
+        #                                                           0),
+        #                      c="green", lw=1, alpha=0.5, ls="--")
+        #             ax2.plot(- self.sp.fIQ, self.sp.psdIQdB - gauss(self.sp.fIQ, self.sp.sym.peak_fit,
+        #                                                             self.sp.sym.width_fit, self.sp.sym.fD_fit,
+        #                                                             0),
+        #                      c="purple", lw=1, alpha=0.5, ls="--")
+        #         elif self.sp.sym.gaussfit_num == 2:
+        #             ax.plot(self.sp.fIQ, oddgauss2(self.sp.fIQ, self.sp.sym.peak_fit[0],
+        #                                            self.sp.sym.width_fit[0], self.sp.sym.fD_fit[0],
+        #                                            self.sp.sym.peak_fit[1],
+        #                                            self.sp.sym.width_fit[1], self.sp.sym.fD_fit[1],
+        #                                            ),
+        #                     c="green", lw=1, alpha=0.5)
+        #             ax.plot(self.sp.fIQ, oddgauss(self.sp.fIQ, self.sp.sym.peak_fit[0],
+        #                                           self.sp.sym.width_fit[0], self.sp.sym.fD_fit[0]),
+        #                     c="lightblue", lw=2, alpha=0.5)
+        #             ax2.plot(self.sp.fIQ, gauss(self.sp.fIQ, self.sp.sym.peak_fit[0],
+        #                                         self.sp.sym.width_fit[0], self.sp.sym.fD_fit[0], self.sp.vmindB),
+        #                      c="lightblue", lw=2, alpha=0.5)
+        #             ax.plot(self.sp.fIQ, oddgauss(self.sp.fIQ, self.sp.sym.peak_fit[1],
+        #                                           self.sp.sym.width_fit[1], self.sp.sym.fD_fit[1]),
+        #                     c="lightgreen", lw=2, alpha=0.5)
+        #             ax2.plot(self.sp.fIQ, gauss(self.sp.fIQ, self.sp.sym.peak_fit[1],
+        #                                         self.sp.sym.width_fit[1], self.sp.sym.fD_fit[1], self.sp.vmindB),
+        #                      c="lightgreen", lw=2, alpha=0.5)
+        #             ax2.plot(self.sp.fIQ,
+        #                      self.sp.psdIQdB
+        #                      - gauss(self.sp.fIQ, self.sp.sym.peak_fit[0],
+        #                              self.sp.sym.width_fit[0], self.sp.sym.fD_fit[0], 0)
+        #                      - gauss(self.sp.fIQ, self.sp.sym.peak_fit[1],
+        #                              self.sp.sym.width_fit[1], self.sp.sym.fD_fit[1], 0),
+        #                      c="green", lw=1, alpha=0.5, ls="--")
+        #             ax2.plot(- self.sp.fIQ,
+        #                      self.sp.psdIQdB
+        #                      - gauss(self.sp.fIQ, self.sp.sym.peak_fit[0],
+        #                              self.sp.sym.width_fit[0], self.sp.sym.fD_fit[0], 0)
+        #                      - gauss(self.sp.fIQ, self.sp.sym.peak_fit[1],
+        #                              self.sp.sym.width_fit[1], self.sp.sym.fD_fit[1], 0),
+        #                      c="purple", lw=1, alpha=0.5, ls="--")
+        #         elif self.sp.sym.gaussfit_num == 3:
+        #             ax.plot(self.sp.fIQ, oddgauss3(self.sp.fIQ, self.sp.sym.peak_fit[0],
+        #                                            self.sp.sym.width_fit[0], self.sp.sym.fD_fit[0],
+        #                                            self.sp.sym.peak_fit[1],
+        #                                            self.sp.sym.width_fit[1], self.sp.sym.fD_fit[1],
+        #                                            self.sp.sym.peak_fit[2],
+        #                                            self.sp.sym.width_fit[2], self.sp.sym.fD_fit[2],
+        #                                            ),
+        #                     c="green", lw=1, alpha=0.5)
+        #             ax.plot(self.sp.fIQ, oddgauss(self.sp.fIQ, self.sp.sym.peak_fit[0],
+        #                                           self.sp.sym.width_fit[0], self.sp.sym.fD_fit[0]),
+        #                     c="lightblue", lw=2, alpha=0.5)
+        #             ax2.plot(self.sp.fIQ, gauss(self.sp.fIQ, self.sp.sym.peak_fit[0],
+        #                                         self.sp.sym.width_fit[0], self.sp.sym.fD_fit[0], self.sp.vmindB),
+        #                      c="lightblue", lw=2, alpha=0.5)
+        #             ax.plot(self.sp.fIQ, oddgauss(self.sp.fIQ, self.sp.sym.peak_fit[1],
+        #                                           self.sp.sym.width_fit[1], self.sp.sym.fD_fit[1]),
+        #                     c="lightgreen", lw=2, alpha=0.5)
+        #             ax2.plot(self.sp.fIQ, gauss(self.sp.fIQ, self.sp.sym.peak_fit[1],
+        #                                         self.sp.sym.width_fit[1], self.sp.sym.fD_fit[1], self.sp.vmindB),
+        #                      c="lightgreen", lw=2, alpha=0.5)
+        #             ax.plot(self.sp.fIQ, oddgauss(self.sp.fIQ, self.sp.sym.peak_fit[2],
+        #                                           self.sp.sym.width_fit[2], self.sp.sym.fD_fit[2]),
+        #                     c="plum", lw=2, alpha=0.5)
+        #             ax2.plot(self.sp.fIQ, gauss(self.sp.fIQ, self.sp.sym.peak_fit[2],
+        #                                         self.sp.sym.width_fit[2], self.sp.sym.fD_fit[2], self.sp.vmindB),
+        #                      c="plum", lw=2, alpha=0.5)
+        #             ax2.plot(self.sp.fIQ,
+        #                      self.sp.psdIQdB
+        #                      - gauss(self.sp.fIQ, self.sp.sym.peak_fit[0],
+        #                              self.sp.sym.width_fit[0], self.sp.sym.fD_fit[0], 0)
+        #                      - gauss(self.sp.fIQ, self.sp.sym.peak_fit[1],
+        #                              self.sp.sym.width_fit[1], self.sp.sym.fD_fit[1], 0)
+        #                      - gauss(self.sp.fIQ, self.sp.sym.peak_fit[2],
+        #                              self.sp.sym.width_fit[2], self.sp.sym.fD_fit[2], 0),
+        #                      c="green", lw=1, alpha=0.5, ls="--")
+        #             ax2.plot(- self.sp.fIQ,
+        #                      self.sp.psdIQdB
+        #                      - gauss(self.sp.fIQ, self.sp.sym.peak_fit[0],
+        #                              self.sp.sym.width_fit[0], self.sp.sym.fD_fit[0], 0)
+        #                      - gauss(self.sp.fIQ, self.sp.sym.peak_fit[1],
+        #                              self.sp.sym.width_fit[1], self.sp.sym.fD_fit[1], 0)
+        #                      - gauss(self.sp.fIQ, self.sp.sym.peak_fit[2],
+        #                              self.sp.sym.width_fit[2], self.sp.sym.fD_fit[2], 0),
+        #                      c="purple", lw=1, alpha=0.5, ls="--")
+        #         elif self.sp.sym.gaussfit_num == 4:
+        #             ax.plot(self.sp.fIQ, oddgauss4(self.sp.fIQ, self.sp.sym.peak_fit[0],
+        #                                            self.sp.sym.width_fit[0], self.sp.sym.fD_fit[0],
+        #                                            self.sp.sym.peak_fit[1],
+        #                                            self.sp.sym.width_fit[1], self.sp.sym.fD_fit[1],
+        #                                            self.sp.sym.peak_fit[2],
+        #                                            self.sp.sym.width_fit[2], self.sp.sym.fD_fit[2],
+        #                                            self.sp.sym.peak_fit[3],
+        #                                            self.sp.sym.width_fit[3], self.sp.sym.fD_fit[3]
+        #                                            ),
+        #                     c="green", lw=2, alpha=0.5)
+        #             ax.plot(self.sp.fIQ, oddgauss(self.sp.fIQ, self.sp.sym.peak_fit[0],
+        #                                           self.sp.sym.width_fit[0], self.sp.sym.fD_fit[0]),
+        #                     c="lightblue", lw=2, alpha=0.5)
+        #             ax2.plot(self.sp.fIQ, gauss(self.sp.fIQ, self.sp.sym.peak_fit[0],
+        #                                         self.sp.sym.width_fit[0], self.sp.sym.fD_fit[0], self.sp.vmindB),
+        #                      c="lightblue", lw=2, alpha=0.5)
+        #             ax.plot(self.sp.fIQ, oddgauss(self.sp.fIQ, self.sp.sym.peak_fit[1],
+        #                                           self.sp.sym.width_fit[1], self.sp.sym.fD_fit[1]),
+        #                     c="lightgreen", lw=2, alpha=0.5)
+        #             ax2.plot(self.sp.fIQ, gauss(self.sp.fIQ, self.sp.sym.peak_fit[1],
+        #                                         self.sp.sym.width_fit[1], self.sp.sym.fD_fit[1], self.sp.vmindB),
+        #                      c="lightgreen", lw=2, alpha=0.5)
+        #             ax.plot(self.sp.fIQ, oddgauss(self.sp.fIQ, self.sp.sym.peak_fit[2],
+        #                                           self.sp.sym.width_fit[2], self.sp.sym.fD_fit[2]),
+        #                     c="plum", lw=2, alpha=0.5)
+        #             ax2.plot(self.sp.fIQ, gauss(self.sp.fIQ, self.sp.sym.peak_fit[2],
+        #                                         self.sp.sym.width_fit[2], self.sp.sym.fD_fit[2], self.sp.vmindB),
+        #                      c="plum", lw=2, alpha=0.5)
+        #             ax.plot(self.sp.fIQ, oddgauss(self.sp.fIQ, self.sp.sym.peak_fit[3],
+        #                                           self.sp.sym.width_fit[3], self.sp.sym.fD_fit[3]),
+        #                     c="lightsalmon", lw=2, alpha=0.5)
+        #             ax2.plot(self.sp.fIQ, gauss(self.sp.fIQ, self.sp.sym.peak_fit[3],
+        #                                         self.sp.sym.width_fit[3], self.sp.sym.fD_fit[3], self.sp.vmindB),
+        #                      c="lightsalmon", lw=2, alpha=0.5)
+        #             ax2.plot(self.sp.fIQ,
+        #                      self.sp.psdIQdB
+        #                      - gauss(self.sp.fIQ, self.sp.sym.peak_fit[0],
+        #                              self.sp.sym.width_fit[0], self.sp.sym.fD_fit[0], 0)
+        #                      - gauss(self.sp.fIQ, self.sp.sym.peak_fit[1],
+        #                              self.sp.sym.width_fit[1], self.sp.sym.fD_fit[1], 0)
+        #                      - gauss(self.sp.fIQ, self.sp.sym.peak_fit[2],
+        #                              self.sp.sym.width_fit[2], self.sp.sym.fD_fit[2], 0)
+        #                      - gauss(self.sp.fIQ, self.sp.sym.peak_fit[3],
+        #                              self.sp.sym.width_fit[3], self.sp.sym.fD_fit[3], 0),
+        #                      c="green", lw=1, alpha=0.5, ls="--")
+        #             # ax2.plot(- self.sp.fIQ,
+        #             #          self.sp.psdIQdB
+        #             #          - gauss(self.sp.fIQ, self.sp.sym.peak_fit[0],
+        #             #                  self.sp.sym.width_fit[0], self.sp.sym.fD_fit[0], 0)
+        #             #          - gauss(self.sp.fIQ, self.sp.sym.peak_fit[1],
+        #             #                  self.sp.sym.width_fit[1], self.sp.sym.fD_fit[1], 0)
+        #             #          - gauss(self.sp.fIQ, self.sp.sym.peak_fit[2],
+        #             #                  self.sp.sym.width_fit[2], self.sp.sym.fD_fit[2], 0)
+        #             #          - gauss(self.sp.fIQ, self.sp.sym.peak_fit[3],
+        #             #                  self.sp.sym.width_fit[3], self.sp.sym.fD_fit[3], 0),
+        #             #          c="purple", lw=1, alpha=0.5, ls="--")
+        #             ax2.plot(self.sp.fIQ, (self.sp.psdIQdB + np.flip(self.sp.psdIQdB)) / 2,
+        #                      c="purple", lw=1, alpha=0.5, ls="--")
+
+        ax.set_ylim(self.sp.sym.vmindB, self.sp.sym.vmaxdB)
+        # ax2.set_ylim(self.sp.vmindB, self.sp.vmaxdB)
+        ax.set_ylabel("(S(f) + S(-f))/2\n"
+                      "[dB]")
+        # ax2.set_ylabel("S(f) [dB]")
+        ax.set_xlabel("Frequency [Hz]")
+        ax.set_xlim(- self.sp.sym.fmax, self.sp.sym.fmax)
+
+        plot.caption(fig, title, hspace=0.1, wspace=0.1)
+        plot.capsave(fig, title, fnm, path)
+
+        if display:
+            plot.check(pause)
+        else:
+            plot.close(fig)
+
+    def spectrum_gaussfit(self, fmin=None, fmax=None,
+                          polyorder=2, prominence=3, iniwidth_asym=40e3,
+                          iniwidth_sym=100e3, maxfev=2000,
+                          display=True, pause=0):
+
+        self.sp.gauss = calc.struct()
+
+        self.spectrum_asymmetric_component(fmin=fmin, fmax=fmax, peak_detection=True, gaussfitting=True,
+                                           polyorder=polyorder, prominence=prominence,
+                                           iniwidth=iniwidth_asym, maxfev=maxfev, bydB=True,
+                                           display=True, pause=0)
+        self.spectrum_symmetric_component(fmin=fmin, fmax=fmax, polyorder=polyorder, iniwidth=iniwidth_sym,
+                                          maxfev=2000, display=True, pause=0)
+
+        if self.sp.asym.gaussfit_num == 0:
+            self.sp.gauss.cpeak, self.sp.gauss.cwidth, self.sp.gauss.floor, \
+            self.sp.gauss.peak_fit, self.sp.gauss.width_fit, self.sp.gauss.fD_fit = [np.nan]*6
+            self.sp.gauss.cpeak_err, self.sp.gauss.cwidth_err, self.sp.gauss.floor_err, \
+            self.sp.gauss.peak_fit_err, self.sp.gauss.width_fit_err, self.sp.gauss.fD_fit_err = [np.nan]*6
+
+        elif self.sp.asym.gaussfit_num == 1:
+            inip = [self.sp.sym.cpeak_fit, self.sp.sym.cwidth_fit, self.sp.sym.floor_fit,
+                    self.sp.asym.peak_fit, self.sp.asym.width_fit, self.sp.asym.fD_fit]
+            popt, pcov = curve_fit(gauss1, self.sp.sym.f, self.sp.sym.srcpsddB, p0=inip, maxfev=maxfev)
+
+            self.sp.gauss.cpeak, self.sp.gauss.cwidth, self.sp.gauss.floor, \
+            self.sp.gauss.peak_fit, self.sp.gauss.width_fit, self.sp.gauss.fD_fit = popt
+            self.sp.gauss.cpeak_err, self.sp.gauss.cwidth_err, self.sp.gauss.floor_err, \
+            self.sp.gauss.peak_fit_err, self.sp.gauss.width_fit_err, self.sp.gauss.fD_fit_err = np.sqrt(np.diag(pcov))
+
+        elif self.sp.asym.gaussfit_num == 2:
+            inip = [self.sp.sym.cpeak_fit, self.sp.sym.cwidth_fit, self.sp.sym.floor_fit,
+                    self.sp.asym.peak_fit[0], self.sp.asym.width_fit[0], self.sp.asym.fD_fit[0],
+                    self.sp.asym.peak_fit[1], self.sp.asym.width_fit[1], self.sp.asym.fD_fit[1]]
+            inip = np.array(inip).flatten(order="F").tolist()
+
+            popt, pcov = curve_fit(gauss2, self.sp.sym.f, self.sp.sym.srcpsddB, p0=inip, maxfev=maxfev)
+            self.sp.gauss.cpeak, self.sp.gauss.cwidth, self.sp.gauss.floor \
+                = popt[:3]
+            self.sp.gauss.peak_fit, self.sp.gauss.width_fit, self.sp.gauss.fD_fit \
+                = popt[3:].reshape((self.sp.asym.gaussfit_num, 3)).T
+            self.sp.gauss.cpeak_err, self.sp.gauss.cwidth_err, self.sp.gauss.floor_err \
+                = np.sqrt(np.diag(pcov[:3]))
+            self.sp.gauss.peak_fit_err, self.sp.gauss.width_fit_err, self.sp.gauss.fD_fit_err \
+                = np.sqrt(np.diag(pcov[3:])).reshape((self.sp.asym.gaussfit_num, 3)).T
+
+        elif self.sp.asym.gaussfit_num == 3:
+            inip = [self.sp.sym.cpeak_fit, self.sp.sym.cwidth_fit, self.sp.sym.floor_fit,
+                    self.sp.asym.peak_fit[0], self.sp.asym.width_fit[0], self.sp.asym.fD_fit[0],
+                    self.sp.asym.peak_fit[1], self.sp.asym.width_fit[1], self.sp.asym.fD_fit[1],
+                    self.sp.asym.peak_fit[2], self.sp.asym.width_fit[2], self.sp.asym.fD_fit[2]]
+            inip = np.array(inip).flatten(order="F").tolist()
+
+            popt, pcov = curve_fit(gauss3, self.sp.sym.f, self.sp.sym.srcpsddB, p0=inip, maxfev=maxfev)
+            self.sp.gauss.cpeak, self.sp.gauss.cwidth, self.sp.gauss.floor \
+                = popt[:3]
+            self.sp.gauss.peak_fit, self.sp.gauss.width_fit, self.sp.gauss.fD_fit \
+                = popt[3:].reshape((self.sp.asym.gaussfit_num, 3)).T
+            self.sp.gauss.cpeak_err, self.sp.gauss.cwidth_err, self.sp.gauss.floor_err \
+                = np.sqrt(np.diag(pcov[:3]))
+            self.sp.gauss.peak_fit_err, self.sp.gauss.width_fit_err, self.sp.gauss.fD_fit_err \
+                = np.sqrt(np.diag(pcov[3:])).reshape((self.sp.asym.gaussfit_num, 3)).T
+
+        elif self.sp.asym.gaussfit_num == 4:
+            inip = [self.sp.sym.cpeak_fit, self.sp.sym.cwidth_fit, self.sp.sym.floor_fit,
+                    self.sp.asym.peak_fit[0], self.sp.asym.width_fit[0], self.sp.asym.fD_fit[0],
+                    self.sp.asym.peak_fit[1], self.sp.asym.width_fit[1], self.sp.asym.fD_fit[1],
+                    self.sp.asym.peak_fit[2], self.sp.asym.width_fit[2], self.sp.asym.fD_fit[2],
+                    self.sp.asym.peak_fit[3], self.sp.asym.width_fit[3], self.sp.asym.fD_fit[3]]
+            inip = np.array(inip).flatten(order="F").tolist()
+
+            popt, pcov = curve_fit(gauss4, self.sp.sym.f, self.sp.sym.srcpsddB, p0=inip, maxfev=maxfev)
+            self.sp.gauss.cpeak, self.sp.gauss.cwidth, self.sp.gauss.floor \
+                = popt[:3]
+            self.sp.gauss.peak_fit, self.sp.gauss.width_fit, self.sp.gauss.fD_fit \
+                = popt[3:].reshape((self.sp.asym.gaussfit_num, 3)).T
+            self.sp.gauss.cpeak_err, self.sp.gauss.cwidth_err, self.sp.gauss.floor_err \
+                = np.sqrt(np.diag(pcov[:3]))
+            self.sp.gauss.peak_fit_err, self.sp.gauss.width_fit_err, self.sp.gauss.fD_fit_err \
+                = np.sqrt(np.diag(pcov[3:])).reshape((self.sp.asym.gaussfit_num, 3)).T
+
+        else:
+            exit()
+
+        figdir = "Retrieve_MWRM_spectrum_gaussfit"
+        proc.ifNotMake(figdir)
+        fnm = f"{self.sn}_{self.subsn}_{self.sp.tstart}_{self.sp.tend}_{self.diagname}_{self.chI}_{self.chQ}"
+        if fmin is not None:
+            fnm += f"_min{self.sp.asym.fmin * 1e-3}kHz"
+        if fmax is not None:
+            fnm += f"_max{self.sp.asym.fmax * 1e-3}kHz"
+        path = os.path.join(figdir, f"{fnm}.png")
+        title = f"#{self.sn}-{self.subsn} {self.sp.tstart}-{self.sp.tend}s\n" \
+                f"{self.diagname} ch:{self.chI},{self.chQ}"
+        fig, ax = plt.subplots(nrows=1, sharex=True, figsize=(5, 5), num=fnm)
+
+        ax.plot(self.sp.fIQ, self.sp.psdIQdB, ".", c="grey", ms=1)
+        ax.plot(self.sp.fIQ, symgauss(self.sp.fIQ, self.sp.gauss.cpeak,
+                                      self.sp.gauss.cwidth, self.sp.gauss.floor), c="black", alpha=0.5, lw=2)
+
+        if self.sp.asym.gaussfit_num == 1:
+            ax.plot(self.sp.fIQ, gauss(self.sp.fIQ, self.sp.gauss.peak_fit,
+                                       self.sp.gauss.width_fit, self.sp.gauss.fD_fit, self.sp.gauss.floor),
+                     c="lightblue", lw=2, alpha=0.5)
+            ax.plot(self.sp.fIQ, gauss1(self.sp.fIQ, self.sp.gauss.cpeak, self.sp.gauss.cwidth, self.sp.gauss.floor,
+                                        self.sp.gauss.peak_fit, self.sp.gauss.width_fit, self.sp.gauss.fD_fit),
+                     c="green", lw=2, alpha=0.5, ls="--")
+        elif self.sp.asym.gaussfit_num == 2:
+            ax.plot(self.sp.fIQ, gauss(self.sp.fIQ, self.sp.gauss.peak_fit[0],
+                                       self.sp.gauss.width_fit[0], self.sp.gauss.fD_fit[0], self.sp.gauss.floor),
+                     c="lightblue", lw=2, alpha=0.5)
+            ax.plot(self.sp.fIQ, gauss(self.sp.fIQ, self.sp.gauss.peak_fit[1],
+                                       self.sp.gauss.width_fit[1], self.sp.gauss.fD_fit[1], self.sp.gauss.floor),
+                     c="lightgreen", lw=2, alpha=0.5)
+            ax.plot(self.sp.fIQ, gauss2(self.sp.fIQ, self.sp.gauss.cpeak, self.sp.gauss.cwidth, self.sp.gauss.floor,
+                                        self.sp.gauss.peak_fit[0], self.sp.gauss.width_fit[0], self.sp.gauss.fD_fit[0],
+                                        self.sp.gauss.peak_fit[1], self.sp.gauss.width_fit[1], self.sp.gauss.fD_fit[1]),
+                     c="green", lw=2, alpha=0.5, ls="--")
+        elif self.sp.asym.gaussfit_num == 3:
+            ax.plot(self.sp.fIQ, gauss(self.sp.fIQ, self.sp.gauss.peak_fit[0],
+                                       self.sp.gauss.width_fit[0], self.sp.gauss.fD_fit[0], self.sp.gauss.floor),
+                    c="lightblue", lw=2, alpha=0.5)
+            ax.plot(self.sp.fIQ, gauss(self.sp.fIQ, self.sp.gauss.peak_fit[1],
+                                       self.sp.gauss.width_fit[1], self.sp.gauss.fD_fit[1], self.sp.gauss.floor),
+                    c="lightgreen", lw=2, alpha=0.5)
+            ax.plot(self.sp.fIQ, gauss(self.sp.fIQ, self.sp.gauss.peak_fit[2],
+                                       self.sp.gauss.width_fit[2], self.sp.gauss.fD_fit[2], self.sp.gauss.floor),
+                    c="plum", lw=2, alpha=0.5)
+            ax.plot(self.sp.fIQ, gauss3(self.sp.fIQ, self.sp.gauss.cpeak, self.sp.gauss.cwidth, self.sp.gauss.floor,
+                                        self.sp.gauss.peak_fit[0], self.sp.gauss.width_fit[0], self.sp.gauss.fD_fit[0],
+                                        self.sp.gauss.peak_fit[1], self.sp.gauss.width_fit[1], self.sp.gauss.fD_fit[1],
+                                        self.sp.gauss.peak_fit[2], self.sp.gauss.width_fit[2], self.sp.gauss.fD_fit[2]),
+                    c="green", lw=2, alpha=0.5, ls="--")
+        elif self.sp.asym.gaussfit_num == 4:
+            ax.plot(self.sp.fIQ, gauss(self.sp.fIQ, self.sp.gauss.peak_fit[0],
+                                       self.sp.gauss.width_fit[0], self.sp.gauss.fD_fit[0], self.sp.gauss.floor),
+                    c="lightblue", lw=2, alpha=0.5)
+            ax.plot(self.sp.fIQ, gauss(self.sp.fIQ, self.sp.gauss.peak_fit[1],
+                                       self.sp.gauss.width_fit[1], self.sp.gauss.fD_fit[1], self.sp.gauss.floor),
+                    c="lightgreen", lw=2, alpha=0.5)
+            ax.plot(self.sp.fIQ, gauss(self.sp.fIQ, self.sp.gauss.peak_fit[2],
+                                       self.sp.gauss.width_fit[2], self.sp.gauss.fD_fit[2], self.sp.gauss.floor),
+                    c="plum", lw=2, alpha=0.5)
+            ax.plot(self.sp.fIQ, gauss(self.sp.fIQ, self.sp.gauss.peak_fit[3],
+                                       self.sp.gauss.width_fit[3], self.sp.gauss.fD_fit[3], self.sp.gauss.floor),
+                    c="lightsalmon", lw=2, alpha=0.5)
+            ax.plot(self.sp.fIQ, gauss4(self.sp.fIQ, self.sp.gauss.cpeak, self.sp.gauss.cwidth, self.sp.gauss.floor,
+                                        self.sp.gauss.peak_fit[0], self.sp.gauss.width_fit[0], self.sp.gauss.fD_fit[0],
+                                        self.sp.gauss.peak_fit[1], self.sp.gauss.width_fit[1], self.sp.gauss.fD_fit[1],
+                                        self.sp.gauss.peak_fit[2], self.sp.gauss.width_fit[2], self.sp.gauss.fD_fit[2],
+                                        self.sp.gauss.peak_fit[3], self.sp.gauss.width_fit[3], self.sp.gauss.fD_fit[3]),
+                    c="green", lw=2, alpha=0.5, ls="--")
+
+        ax.set_ylim(self.sp.sym.vmindB, self.sp.sym.vmaxdB)
+        ax.set_ylabel("S(f) [dB]")
+        ax.set_xlabel("Frequency [Hz]")
+        ax.set_xlim(- self.sp.sym.fmax, self.sp.sym.fmax)
+
+        plot.caption(fig, title, hspace=0.1, wspace=0.1)
+        plot.capsave(fig, title, fnm, path)
+
+        if display:
+            plot.check(pause)
+        else:
+            plot.close(fig)
 
     def intensity(self, fmin=150e3, fmax=490e3):
 

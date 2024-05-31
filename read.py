@@ -505,18 +505,26 @@ def cxs7_Er_v3(diagnm, sn):
     return time, RR, list_dat, list_dimnms, list_valnms, list_dimunits, list_valunits
 
 
-def eg1d(diagnm, sn):
+def eg1d(diagnm, sn, sub=1):
 
-    eg = myEgdb.LoadEG(diagnm, sn)
-    dim0 = eg.dims(0)
-    list_dimnms = eg.dimnames
-    list_valnms = eg.valnames
-    list_dimunits = eg.dimunits
-    list_valunits = eg.valunits
-    list_dat = [0]*len(list_valnms)
-    for ii, valnm in enumerate(list_valnms):
-        dat = eg.trace_of(valnm, 0, [0])
-        list_dat[ii] = dat
+    eg = myEgdb.LoadEG(diagname=diagnm, sn=sn, sub=sub)
+    if eg == None:
+        dim0 = None
+        list_dat = None
+        list_dimnms = None
+        list_valnms = None
+        list_dimunits = None
+        list_valunits = None
+    else:
+        dim0 = eg.dims(0)
+        list_dimnms = eg.dimnames
+        list_valnms = eg.valnames
+        list_dimunits = eg.dimunits
+        list_valunits = eg.valunits
+        list_dat = [0]*len(list_valnms)
+        for ii, valnm in enumerate(list_valnms):
+            dat = eg.trace_of(valnm, 0, [0])
+            list_dat[ii] = dat
 
     return dim0, list_dat, list_dimnms, list_valnms, list_dimunits, list_valunits
 
@@ -524,17 +532,26 @@ def eg1d(diagnm, sn):
 def eg2d(diagnm, sn, sub=1):
 
     eg = myEgdb.LoadEG(diagname=diagnm, sn=sn, sub=sub)
-    dim0 = eg.dims(0)
-    dim1 = eg.dims(1)
-    list_dimnms = eg.dimnames
-    list_valnms = eg.valnames
-    list_dimunits = eg.dimunits
-    list_valunits = eg.valunits
-    list_dat = [0]*len(list_valnms)
-    for ii, valnm in enumerate(list_valnms):
-        dat = eg.trace_of_2d(valnm, [0, 1])
-        dat = np.reshape(dat, eg.dimsize)
-        list_dat[ii] = dat
+    if eg == None:
+        dim0 = None
+        dim1 = None
+        list_dat = None
+        list_dimnms = None
+        list_valnms = None
+        list_dimunits = None
+        list_valunits = None
+    else:
+        dim0 = eg.dims(0)
+        dim1 = eg.dims(1)
+        list_dimnms = eg.dimnames
+        list_valnms = eg.valnames
+        list_dimunits = eg.dimunits
+        list_valunits = eg.valunits
+        list_dat = [0]*len(list_valnms)
+        for ii, valnm in enumerate(list_valnms):
+            dat = eg.trace_of_2d(valnm, [0, 1])
+            dat = np.reshape(dat, eg.dimsize)
+            list_dat[ii] = dat
 
     return dim0, dim1, list_dat, list_dimnms, list_valnms, list_dimunits, list_valunits
 
