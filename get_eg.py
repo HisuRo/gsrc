@@ -150,7 +150,6 @@ def nb_all(egnb, valnm):
 
     return nbtime, valnb
 
-
 def nb_alldev(sn=174070, sub=1, tstart=3.0, tend=6.0):
 
     o = struct()
@@ -180,7 +179,6 @@ def nb_alldev(sn=174070, sub=1, tstart=3.0, tend=6.0):
     o.perp = o.nb4a + o.nb4b + o.nb5a + o.nb5b
 
     return o
-
 
 def ech(sn, tstart, tend):
 
@@ -1384,8 +1382,6 @@ class cxsmap7:
             self.Rwin.tor.avg.RLVc_polyfit, self.Rwin.tor.std.RLVc_polyfit, self.Rwin.tor.ste.RLVc_polyfit \
                 = calc.average(self.Rwin.tor.RLVc_polyfit, err=self.Rwin.tor.RLVc_polyfit_err, axis=1)
 
-
-
 class LID_cur:
 
     def __init__(self, sn=184508, sub=1):
@@ -1469,3 +1465,50 @@ class ece:
         self.diag3.calib = self.calib[:, _idx3]
         self.diag3.ADC_ch = self.ADC_ch[0][_idx3]
         self.diag3.rho_vacuum = self.rho_vacuum[0][_idx3]
+
+class gas_puf:
+
+    def __init__(self, sn=187979, sub=1, tstart=3., tend=6.):
+
+        self.diagname = "gas_puf"
+        self.sn = sn
+        self.sub = sub
+        self.ts = tstart
+        self.te = tend
+
+        self.t, list_dat, self.list_dimnms, self.list_valnms, self.list_dimunits, self.list_valunits \
+            = read.eg1d(diagnm=self.diagname, sn=sn, sub=sub)
+
+        tidxs, list_dat = proc.getTimeIdxsAndDats(self.t, self.ts, self.te, list_dat)
+
+        self.t = self.t[tidxs]
+        self.Ar35Lm, self.H235Ll, self.He35Ll, self.D235Ll, self.Ne95Lm, self.N235Lm, self.X35Lm, self.Ar55Ls, \
+        self.H255Lm, self.He55Lm, self.D255Lm, self.Ne55Ls, self.N255Ls, self.X55Ls, self.Ar95Ls, self.H295Ls, \
+        self.He95Ls, self.D295Ls, self.Ne95Ls, self.N295Ls = list_dat
+
+        self.Ar = self.Ar35Lm + self.Ar55Ls + self.Ar95Ls
+        self.H2 = self.H235Ll + self.H255Lm + self.H295Ls
+        self.He = self.He35Ll + self.He55Lm + self.He55Lm
+        self.D2 = self.D235Ll + self.D255Lm + self.D295Ls
+        self.N2 = self.N235Lm + self.N255Ls + self.N295Ls
+        self.Ne = self.Ne95Lm + self.Ne55Ls + self.Ne95Ls
+        self.X = self.X35Lm + self.X55Ls
+
+    def plot(self, axes, species=["Ar", "H2", "He", "D2", "N2", "Ne", "X"]):
+
+        for s in species:
+            if s == "Ar":
+                axes.plot(self.t, self.Ar, c="gold", label=s)
+            elif s == "H2":
+                axes.plot(self.t, self.H2, c="magenta", label=s)
+            elif s == "He":
+                axes.plot(self.t, self.He, c="dodgerblue", label=s)
+            elif s == "D2":
+                axes.plot(self.t, self.D2, c="limegreen", label=s)
+            elif s == "N2":
+                axes.plot(self.t, self.N2, c="lightpink", label=s)
+            elif s == "Ne":
+                axes.plot(self.t, self.Ne, c="lightblue", label=s)
+            elif s == "X":
+                axes.plot(self.t, self.X, c="black", label=s)
+        axes.legend()

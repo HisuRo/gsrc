@@ -2504,3 +2504,10 @@ class IQ:
         plot.caption(fig, title)
         plot.capsave(fig, title, fnm, path)
         plot.check(pause)
+
+    def read_param(self):
+
+        self.ech = get_eg.ech_v2(sn=self.sn, tstart=self.tstart, tend=self.tend)
+        self.nb = get_eg.nb_alldev(sn=self.sn, tstart=self.tstart, tend=self.tend)
+
+        self.gp = get_eg.gas_puf(sn=self.sn, sub=self.subsn, tstart=self.tstart, tend=self.tend)
