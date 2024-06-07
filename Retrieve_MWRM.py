@@ -1092,7 +1092,7 @@ class IQ:
         self.sp.fIQ, self.sp.psdIQ = welch(x=self.sp.IQraw, fs=self.Fs, window="hann",
                                            nperseg=self.sp.NFFT, noverlap=self.sp.NOV,
                                            detrend="constant", scaling="density",
-                                           average="mean")
+                                           average="mean", return_onesided=False)
         self.sp.fIQ = fft.fftshift(self.sp.fIQ)
         self.sp.psdIQ = fft.fftshift(self.sp.psdIQ)
         self.sp.psdIQdB = 10 * np.log10(self.sp.psdIQ)
@@ -1122,13 +1122,18 @@ class IQ:
         fig, ax = plt.subplots(figsize=(6, 6), num=fnm)
         ax.plot(self.sp.fIQ, self.sp.psdIQdB, c="black")
         if bgon:
-            tidx_s = np.argmin(np.abs(self.bg.t - self.sp.tstart))
-            tidx_e = np.argmin(np.abs(self.bg.t - self.sp.tend))
-            for i in range(tidx_s, tidx_e + 1):
-                ax.scatter(self.spg.f, 10 * np.log10(self.bg.psd[i]), marker=".", c="grey")
+            # tidx_s = np.argmin(np.abs(self.bg.t - self.sp.tstart))
+            # tidx_e = np.argmin(np.abs(self.bg.t - self.sp.tend))
+            tidxs, datlist = proc.getTimeIdxsAndDats(self.bg.t, self.sp.tstart, self.sp.tend, [self.bg.t, self.bg.psd])
+            self.sp.tbg, self.sp.psdbg = datlist
+            self.sp.bg, _, self.sp.bg_err = calc.average(self.sp.psdbg, axis=0)
+            self.sp.bg_dB, self.sp.bg_err_dB = calc.dB(self.sp.bg, self.sp.bg_err)
+            # for i in range(len(self.sp.tbg)):
+            #     ax.scatter(self.bg.f, 10 * np.log10(self.sp.psdbg[i]), marker=".", c="grey")
+            ax.errorbar(self.bg.f, self.sp.bg_dB, self.sp.bg_err_dB, color="grey", ecolor="lightgrey")
         ax.set_xlabel("Frequency [Hz]")
         ax.set_ylabel("PSD [dBV/$\sqrt{\\rm{Hz}}$]")
-        ax.set_ylim(self.sp.vmindB, self.sp.vmaxdB)
+        # ax.set_ylim()
 
         plot.caption(fig, title, hspace=0.1, wspace=0.1)
         plot.capsave(fig, title, fnm, path)
@@ -2287,7 +2292,7 @@ class IQ:
         else:
             plot.close(fig)
 
-    def intensity(self, fmin=150e3, fmax=490e3):
+    def intensity(self, fmin=150e3, fmax=490e3, bgon=True):
 
         self.spg.int = calc.struct()
         self.spg.int.fmin = fmin
@@ -2300,6 +2305,16 @@ class IQ:
 
         self.spg.int.Sknorm = self.spg.int.Sk / np.max(self.spg.int.Sk)
         self.spg.int.Ianorm = self.spg.int.Ia / np.max(self.spg.int.Ia)
+
+        if bgon:
+            idx_use = np.where((np.abs(self.bg.f) >= self.spg.int.fmin) & (np.abs(self.bg.f) <= self.spg.int.fmax))[0]
+            spec_Sk = self.bg.psd[:, idx_use]
+
+            self.spg.int.Sk_bg = np.sum(spec_Sk, axis=-1) * self.bg.dF
+            self.spg.int.Ia_bg = np.sqrt(self.spg.int.Sk_bg)
+
+            self.spg.int.Sknorm_bg = self.spg.int.Sk_bg / self.spg.int.Sk.max()
+            self.spg.int.Ianorm_bg = self.spg.int.Ia_bg / self.spg.int.Ia.max()
 
     def dopplershift(self, fmin=3e3, fmax=1250e3):
 
@@ -2386,7 +2401,13 @@ class IQ:
         self.mod.ets = self.mod.t[idxs_ets]
         self.mod.ets = np.reshape(self.mod.ets, (len(idxs_DiffIsNotEqualTo1) + 1, 2))
 
-    def BSBackground(self):
+    def BSBackground(self, NFFT=2**10, OVR=0.5):
+
+        self.bg = calc.struct()
+        self.bg.NFFT = NFFT
+        self.bg.OVR = OVR
+        self.bg.NOV = int(self.bg.NFFT * self.bg.OVR)
+        self.bg.dF = self.Fs / self.bg.NFFT
 
         psd_list = []
         for offTs, offTe in self.mod.ets:
@@ -2394,25 +2415,16 @@ class IQ:
             offIQ = datList[0]
 
             f, psd = welch(x=offIQ, fs=self.Fs, window="hann",
-                           nperseg=self.spg.NFFT, noverlap=self.spg.NOV,
+                           nperseg=self.bg.NFFT, noverlap=self.bg.NOV,
                            detrend="constant", scaling="density",
-                           axis=-1, average="mean")
+                           axis=-1, average="mean", return_onesided=False)
+            self.bg.f = fft.fftshift(f)
             psd = fft.fftshift(psd)
             psd_list.append(psd)
 
-        self.bg = calc.struct()
         self.bg.ets = self.mod.ets
         self.bg.t = self.mod.ets.mean(axis=-1)
         self.bg.psd = np.array(psd_list)
-
-        idx_use = np.where((np.abs(self.spg.f) >= self.spg.int.fmin) & (np.abs(self.spg.f) <= self.spg.int.fmax))[0]
-        spec_Sk = self.bg.psd[:, idx_use]
-
-        self.bg.Sk = np.sum(spec_Sk, axis=-1) * self.spg.dF
-        self.bg.Ia = np.sqrt(self.bg.Sk)
-
-        self.bg.Sknorm = self.bg.Sk / self.spg.int.Sk.max()
-        self.bg.Ianorm = self.bg.Ia / self.spg.int.Ia.max()
 
     def plot_intensity(self, bgon=False, pause=0):
 
@@ -2440,12 +2452,13 @@ class IQ:
 
         if bgon:
             self.BSmod()
+            self.BSBackground(NFFT=self.spg.NFFT, OVR=self.spg.ovr)
         self.intensity(fmin=3e3, fmax=30e3)
         ax[4].plot(self.spg.t, self.spg.int.Ia, c="blue",
                    label=f"{self.spg.int.fmin*1e-3}-{self.spg.int.fmax*1e-3} kHz")
         if bgon:
             self.BSBackground()
-            ax[4].plot(self.bg.t, self.bg.Ia, ".", c="grey", label="bg")
+            ax[4].plot(self.bg.t, self.spg.int.Ia_bg, ".", c="grey", label="bg")
         ax[4].legend(loc="upper right", bbox_to_anchor=(1.5, 1.2))
 
         self.intensity(fmin=30e3, fmax=150e3)
@@ -2453,7 +2466,7 @@ class IQ:
                    label=f"{self.spg.int.fmin * 1e-3}-{self.spg.int.fmax * 1e-3} kHz")
         if bgon:
             self.BSBackground()
-            ax[5].plot(self.bg.t, self.bg.Ia, ".", c="grey", label="bg")
+            ax[5].plot(self.bg.t, self.spg.int.Ia_bg, ".", c="grey", label="bg")
         ax[5].legend(loc="upper right", bbox_to_anchor=(1.5, 1.2))
 
         self.intensity(fmin=100e3, fmax=490e3)
@@ -2461,7 +2474,7 @@ class IQ:
                    label=f"{self.spg.int.fmin * 1e-3}-{self.spg.int.fmax * 1e-3} kHz")
         if bgon:
             self.BSBackground()
-            ax[6].plot(self.bg.t, self.bg.Ia, ".", c="grey", label="bg")
+            ax[6].plot(self.bg.t, self.spg.int.Ia_bg, ".", c="grey", label="bg")
         ax[6].legend(loc="upper right", bbox_to_anchor=(1.5, 1.2))
 
         self.intensity(fmin=20e3, fmax=200e3)
@@ -2469,7 +2482,7 @@ class IQ:
                    label=f"{self.spg.int.fmin * 1e-3}-{self.spg.int.fmax * 1e-3} kHz")
         if bgon:
             self.BSBackground()
-            ax[7].plot(self.bg.t, self.bg.Ia, ".", c="grey", label="bg")
+            ax[7].plot(self.bg.t, self.spg.int.Ia_bg, ".", c="grey", label="bg")
         ax[7].legend(loc="upper right", bbox_to_anchor=(1.5, 1.2))
 
         self.intensity(fmin=200e3, fmax=500e3)
@@ -2477,7 +2490,7 @@ class IQ:
                    label=f"{self.spg.int.fmin * 1e-3}-{self.spg.int.fmax * 1e-3} kHz")
         if bgon:
             self.BSBackground()
-            ax[8].plot(self.bg.t, self.bg.Ia, ".", c="grey", label="bg")
+            ax[8].plot(self.bg.t, self.spg.int.Ia_bg, ".", c="grey", label="bg")
         ax[8].legend(loc="upper right", bbox_to_anchor=(1.5, 1.2))
 
         ax[8].set_xlabel("Time [s]")

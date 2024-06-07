@@ -142,8 +142,8 @@ def getTimeIdxAndDats(time, time_at, datList):
     return idx, datList_at
 
 
-def getTimeIdxsAndDats(time, startTime, endTime, datList):
-    idxs = np.argwhere((time >= startTime) & (time <= endTime)).T[0]
+def getTimeIdxsAndDats(time, startTime, endTime, datList, decimate=1):
+    idxs = np.argwhere((time >= startTime) & (time <= endTime)).T[0][::decimate]
     if idxs[0] > 0:
         idxs = np.insert(idxs, 0, idxs[0] - 1)
     if idxs[-1] < len(time) - 1:

@@ -94,24 +94,25 @@ def rho_comb_R(egcombR, freq, tstart, tend):
     return combRtime, rhocombR, rhocombR_avg, rhocombR_std
 
 
-def wavenumber_combR(egcombR, freq, tstart, tend):
+def wavenumber_comb(egcomb, freq, tstart, tend):
 
     wavenm = 'k_perp each time  ' + freq
     dwavenm = 'delta k_perp error estimation  ' + freq
 
-    combRtime = egcombR.dims(0)
-    idx_time = np.where((combRtime >= tstart) & (combRtime <= tend))
-    combRtime = combRtime[idx_time]
+    combtime = egcomb.dims(0)
+    idx_time = np.where((combtime >= tstart) & (combtime <= tend))
+    combtime = combtime[idx_time]
 
-    wavenum_combR = egcombR.trace_of(wavenm, dim=0, other_idxs=[0])
-    wavenum_combR = wavenum_combR[idx_time]
-    dwavenum_combR = egcombR.trace_of(dwavenm, dim=0, other_idxs=[0])
-    dwavenum_combR = dwavenum_combR[idx_time]
+    wavenum_comb = egcomb.trace_of(wavenm, dim=0, other_idxs=[0])
+    wavenum_comb = wavenum_comb[idx_time]
+    dwavenum_comb = egcomb.trace_of(dwavenm, dim=0, other_idxs=[0])
+    dwavenum_comb = dwavenum_comb[idx_time]
 
-    wavenum_combR_avg = np.average(wavenum_combR)
-    wavenum_combR_err = np.sqrt(np.sum((dwavenum_combR / 2)**2 + (wavenum_combR - wavenum_combR_avg)**2)/(len(wavenum_combR) - 1))
+    wavenum_comb_avg = np.average(wavenum_comb)
+    wavenum_comb_err = np.sqrt(np.sum((dwavenum_comb / 2)**2 +
+                                      (wavenum_comb - wavenum_comb_avg)**2)/(len(wavenum_comb) - 1))
 
-    return combRtime, wavenum_combR, dwavenum_combR, wavenum_combR_avg, wavenum_combR_err
+    return combtime, wavenum_comb, dwavenum_comb, wavenum_comb_avg, wavenum_comb_err
 
 
 def Vp_comb_R(egcombR, freq, tstart, tend):
@@ -251,6 +252,24 @@ def wp(sn=174070, sub=1, tstart=3.0, tend=6.0, decimate=20):
     o.beta_vmec = egwp.trace_of(name="<beta-vmec>", dim=0, other_idxs=[0])[idx_ts: idx_te+1: decimate]
 
     return o
+
+class diamag:
+
+    def __init__(self, sn=174070, sub=1, tstart=3.0, tend=6.0, decimate=20):
+
+        self.diagname = "wp"
+        self.sn = sn
+        self.sub = sub
+        self.ts = tstart
+        self.te = tend
+        self.dec = decimate
+        self.t, list_dat, self.list_dimnms, self.list_valnms, self.list_dimunits, self.list_valunits \
+            = read.eg1d(diagnm=self.diagname, sn=self.sn, sub=self.sub)
+
+        _idx, list_dat = proc.getTimeIdxsAndDats(self.t, self.ts, self.te, list_dat, decimate=self.dec)
+        self.t = self.t[_idx]
+        self.wp, self.beta_dia, self.beta_vmec = list_dat
+
 
 def nel(sn=174070, sub=1, tstart=3.0, tend=6.0, decimate=10):
 
