@@ -8,6 +8,10 @@ from nasu import calc
 import copy
 
 
+def connect_list_to_str(list, by="_"):
+    return by.join(map(str, list))
+
+
 def makefftsampleidxs(tdat, tout, NFFT, NEns, NOV):
     # idxs_tout = ((tout - 10 * (subsn - 1)) / dT + 0.5).astype(int)
     idxs_tout = np.argmin(np.abs(np.tile(tdat, (len(tout), 1)) - np.reshape(tout, (len(tout), 1))), axis=-1)

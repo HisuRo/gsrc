@@ -30,19 +30,32 @@ def expand_by1dim(array, Nexp=1, axis=-1):
     return np.transpose(np.tile(array, idx_tile), idx_trans)
 
 
-def average(dat, err=None, axis=-1):
+def average(dat, err=None, axis=-1, skipnan=False):
 
     if err is None:
-        avg = np.average(dat, axis=axis)
-        std = np.std(dat, axis=axis, ddof=1)
-        ste = std / np.sqrt(dat.shape[axis])
+        if skipnan:
+            avg = np.nanmean(dat, axis=axis)
+            std = np.nanstd(dat, axis=axis, ddof=1)
+            ste = std / np.sqrt(dat.shape[axis])
+        else:
+            avg = np.average(dat, axis=axis)
+            std = np.std(dat, axis=axis, ddof=1)
+            ste = std / np.sqrt(dat.shape[axis])
     else:
-        err_sq = err ** 2
-        w = 1. / err_sq
-        avg = np.average(dat, axis=axis, weights=1./err_sq)
-        std = np.sqrt(np.var(dat, axis=axis) + np.average(err_sq, axis=axis))
-        ste = np.sqrt(np.sum((dat - expand_by1dim(avg, dat.shape[axis], axis=axis))**2 * w, axis=axis) \
-        / ((dat.shape[axis] - 1) * np.sum(w, axis=axis)) + 1./np.sum(w, axis=axis))
+        if skipnan:
+            err_sq = err ** 2
+            w = 1. / err_sq
+            avg = np.nansum(dat * w, axis=axis) / np.nansum(w, axis=axis)
+            std = np.sqrt(np.nanvar(dat, axis=axis) + np.nanmean(err_sq, axis=axis))
+            ste = np.sqrt(np.nansum((dat - expand_by1dim(avg, dat.shape[axis], axis=axis)) ** 2 * w, axis=axis) \
+                          / ((dat.shape[axis] - 1) * np.nansum(w, axis=axis)) + 1. / np.nansum(w, axis=axis))
+        else:
+            err_sq = err ** 2
+            w = 1. / err_sq
+            avg = np.average(dat, axis=axis, weights=1./err_sq)
+            std = np.sqrt(np.var(dat, axis=axis) + np.average(err_sq, axis=axis))
+            ste = np.sqrt(np.sum((dat - expand_by1dim(avg, dat.shape[axis], axis=axis))**2 * w, axis=axis) \
+            / ((dat.shape[axis] - 1) * np.sum(w, axis=axis)) + 1./np.sum(w, axis=axis))
 
     return avg, std, ste
 
@@ -136,39 +149,40 @@ def sqrt_AndErr(x, x_err):
 #     return dat_Ref, err_Ref
 #
 #
-# def timeAverageDatByRefs_v2(timeDat, dat, timeRef, err=np.array([False])):
-#     dtDat = timeDat[1] - timeDat[0]
-#     dtRef = timeRef[1] - timeRef[0]
-#     dNDatRef = int(dtRef / dtDat + 0.5)
-#     timeRef_ext = repeat_and_add_lastdim(timeRef, len(timeDat))
-#     idxDatAtRef = np.argsort(np.abs(timeDat - timeRef_ext))[:, :dNDatRef]
-#
-#     datAtRef = dat[idxDatAtRef]
-#     dat_Ref = np.nanmean(datAtRef, axis=1)
-#
-#     if err.all():
-#         errAtRef = err[idxDatAtRef]
-#         err_Ref = np.sqrt(np.nanvar(datAtRef, axis=1) + np.nanmean(errAtRef ** 2, axis=1))
-#     else:
-#         err_Ref = np.nanstd(datAtRef, axis=1, ddof=1)
-#
-#     return dat_Ref, err_Ref
-#
-#
-# def timeAverageDatListByRefs(timeDat, datList, timeRef, errList=None):
-#     datRefList = [0] * len(datList)
-#     errRefList = [0] * len(datList)
-#
-#     for ii, dat in enumerate(datList):
-#         if errList is None:
-#             datRef, errRef = timeAverageDatByRefs_v2(timeDat, dat, timeRef)
-#         else:
-#             err = errList[ii]
-#             datRef, errRef = timeAverageDatByRefs_v2(timeDat, dat, timeRef, err)
-#         datRefList[ii] = datRef
-#         errRefList[ii] = errRef
-#
-#     return datRefList, errRefList
+def timeAverageDatByRefs_v2(timeDat, dat, timeRef, err=None, skipnan=False):
+    dtDat = timeDat[1] - timeDat[0]
+    dtRef = timeRef[1] - timeRef[0]
+    dNDatRef = int(dtRef / dtDat + 0.5)
+    timeRef_ext = repeat_and_add_lastdim(timeRef, len(timeDat))
+    idxDatAtRef = np.argsort(np.abs(timeDat - timeRef_ext))[:, :dNDatRef]
+
+    datAtRef = dat[idxDatAtRef]
+    if err is not None:
+        errAtRef = err[idxDatAtRef]
+    else:
+        errAtRef = None
+
+    dat_Ref, std_Ref, err_Ref = average(datAtRef, err=errAtRef, skipnan=skipnan)
+
+    return dat_Ref, std_Ref, err_Ref
+
+
+def timeAverageDatListByRefs(timeDat, datList, timeRef, errList=None, skipnan=False):
+    datRefList = [0] * len(datList)
+    stdRefList = [0] * len(datList)
+    errRefList = [0] * len(datList)
+
+    for ii, dat in enumerate(datList):
+        if errList is None:
+            datRef, stdRef, errRef = timeAverageDatByRefs_v2(timeDat, dat, timeRef, skipnan=skipnan)
+        else:
+            err = errList[ii]
+            datRef, stdRef, errRef = timeAverageDatByRefs_v2(timeDat, dat, timeRef, err, skipnan=skipnan)
+        datRefList[ii] = datRef
+        stdRefList[ii] = stdRef
+        errRefList[ii] = errRef
+
+    return datRefList, stdRefList, errRefList
 
 
 
@@ -905,7 +919,7 @@ def power_spectre_2s_v2(tt, xx, NFFT, window, OVR):
     return tisp[0], freq, psd[0], psd_std[0], psd_err[0]
 
 
-def lowpass(x, samplerate, fp, fs, gpass, gstop):
+def lowpass(x, samplerate, fp, fs, gpass=3, gstop=16):
     fn = samplerate / 2                           #ナイキスト周波数
     wp = fp / fn                                  #ナイキスト周波数で通過域端周波数を正規化
     ws = fs / fn                                  #ナイキスト周波数で阻止域端周波数を正規化
@@ -3570,3 +3584,20 @@ def gyroradius(T_keV, B_T, kind="electron", A=1, Z=1, T_err=None):
         o.gyroradius_err = o.vT_err / o.gyrofreq_rads
 
     return o
+
+
+def moving_average(data, window_size, mode="same"):
+    # window_size must be odd number.
+    # mode = "same", "valid"
+
+    if mode == "same":
+        cumsum = np.insert(np.cumsum(np.append(np.insert(data, 0, [0] * ((window_size - 1)//2)),
+                                               [0] * ((window_size - 1)//2))), 0, 0)
+    elif mode == "valid":
+        cumsum = np.insert(np.cumsum(data), 0, 0)
+    else:
+        print("please input correct mode. 'same' or 'valid'")
+        exit()
+    moving_average = (cumsum[window_size:] - cumsum[:-window_size]) / window_size
+
+    return moving_average

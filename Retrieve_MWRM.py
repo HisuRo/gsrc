@@ -56,6 +56,12 @@ def gauss4(x, a0, b0, d, a1, b1, c1, a2, b2, c2, a3, b3, c3, a4, b4, c4):
     return gauss(x, a0, b0, 0, d) + gauss(x, a1, b1, c1, 0) + \
            gauss(x, a2, b2, c2, 0) + gauss(x, a3, b3, c3, 0) + gauss(x, a4, b4, c4, 0)
 
+def cauchy_lorentz(x, a, b, c, d):
+    return a * b**2 / (b**2 + (x - c)**2) + d
+
+def gauss_and_lorentz(x, ag, bg, cg, al, bl, cl, d):
+    return gauss(x, ag, bg, cg, 0) + cauchy_lorentz(x, al, bl, cl, 0) + d
+
 class single:
 
     def __init__(self, sn=187570, subsn=1, tstart=3., tend=6., diagname="MWRM-PXI", ch=1):
@@ -131,7 +137,8 @@ class single:
 
 class IQ:
 
-    def __init__(self, sn=187570, subsn=1, tstart=3., tend=6., diagname="MWRM-PXI", chI=11, chQ=12, phase_unwrap=True):
+    def __init__(self, sn=187570, subsn=1, tstart=3., tend=6.,
+                 diagname="MWRM-PXI", chI=11, chQ=12, phase_unwrap=True):
 
         self.sn = sn
         self.subsn = subsn
@@ -172,8 +179,8 @@ class IQ:
         dirname = "Retrieve_MWRM"
 
     def specgram(self, NFFT=2**10, ovr=0.5, window="hann", dT=5e-3,
-                 cmap="viridis", magnify=True, fmin=False, fmax=False, pause=0,
-                 display=True, detrend="constant"):
+                 cmap="viridis", magnify=True, fmin=None, fmax=None, pause=0,
+                 display=True, detrend="linear", subtract_phaseline=False):
 
         self.spg = calc.struct()
 
@@ -188,31 +195,39 @@ class IQ:
         self.spg.Nsp = self.size // self.spg.NSamp
         self.spg.cmap = cmap
 
-        self.spg.t = self.t[:self.spg.Nsp * self.spg.NSamp].reshape((self.spg.Nsp, self.spg.NSamp)).mean(axis=-1)
+        self.spg.tarray = self.t[:self.spg.Nsp * self.spg.NSamp].reshape((self.spg.Nsp, self.spg.NSamp))
+        self.spg.t = self.spg.tarray.mean(axis=-1)
         self.spg.IQarray = self.IQ[:self.spg.Nsp * self.spg.NSamp].reshape((self.spg.Nsp, self.spg.NSamp))
         self.spg.f, self.spg.psd = welch(x=self.spg.IQarray, fs=self.Fs, window="hann",
                                          nperseg=self.spg.NFFT, noverlap=self.spg.NOV,
                                          return_onesided=False,
                                          detrend=detrend, scaling="density",
                                          axis=-1, average="mean")
-        # self.spg.f, self.spg.lindetpsd = welch(x=self.spg.IQarray, fs=self.Fs, window="hann",
-        #                                        nperseg=self.spg.NFFT, noverlap=self.spg.NOV,
-        #                                        return_onesided=False,
-        #                                        detrend="linear", scaling="density",
-        #                                        axis=-1, average="mean")
-        self.spg.f = fft.fftshift(self.spg.f)
         self.spg.psd = fft.fftshift(self.spg.psd, axes=-1)
         self.spg.psddB = 10 * np.log10(self.spg.psd)
-        # self.spg.lindetpsd = fft.fftshift(self.spg.lindetpsd, axes=-1)
-        # self.spg.lindetpsddB = 10 * np.log10(self.spg.lindetpsd)
+        # if subtract_phaseline:
+        #     self.spg.phase_array = np.unwrap(np.angle(self.spg.IQarray))
+        #     self.spg.amp_array = np.abs(self.spg.IQarray)
+        #     o = calc.polyN_LSM_der(self.spg.tarray, self.spg.phase_array, polyN=1)
+        #     self.spg.dphase_array = self.spg.phase_array - o.yHut
+        #     self.spg.IQarray_subphi = self.spg.amp_array * np.exp(1.j * self.spg.dphase_array)
+        #     self.spg.f, self.spg.psd_subphi = welch(x=self.spg.IQarray_subphi, fs=self.Fs, window="hann",
+        #                                             nperseg=self.spg.NFFT, noverlap=self.spg.NOV,
+        #                                             return_onesided=False,
+        #                                             detrend=detrend, scaling="density",
+        #                                             axis=-1, average="mean")
+        #     self.spg.psd_subphi = fft.fftshift(self.spg.psd_subphi, axes=-1)
+        #     self.spg.psddB_subphi = 10 * np.log10(self.spg.psd_subphi)
+
+        self.spg.f = fft.fftshift(self.spg.f)
         self.spg.dF = self.Fs / self.spg.NFFT
 
         if magnify:
-            if fmin:
+            if fmin is not None:
                 self.spg.fmin = fmin
             else:
                 self.spg.fmin = self.spg.dF
-            if fmax:
+            if fmax is not None:
                 self.spg.fmax = fmax
             else:
                 self.spg.fmax = self.Fs / 2
@@ -223,24 +238,41 @@ class IQ:
         self.spg.vmin = self.spg.psd[:, _idx].min()
         self.spg.vmindB = 10 * np.log10(self.spg.vmin)
 
+        self.spg.psddB_diff = np.diff(self.spg.psddB, axis=-1)
+
         if not display:
             matplotlib.use('Agg')
 
-        figdir = "Retrieve_MWRM"
+        if subtract_phaseline:
+            figdir = "Retrieve_MWRM_subphi"
+        else:
+            figdir = "Retrieve_MWRM"
         proc.ifNotMake(figdir)
-        fnm = f"{self.sn}_{self.subsn}_{self.tstart}_{self.tend}_{self.diagname}_{self.chI}_{self.chQ}"
-        if fmin:
-            fnm += f"_min{fmin*1e-3}kHz"
-        if fmax:
-            fnm += f"_max{fmax*1e-3}kHz"
-        path = os.path.join(figdir, f"{fnm}.png")
-        title = f"#{self.sn}-{self.subsn} {self.tstart}-{self.tend}s\n" \
-                f"{self.diagname} ch:{self.chI},{self.chQ}"
+        if subtract_phaseline:
+            fnm_base = f"{self.sn}_{self.subsn}_{self.tstart}_{self.tend}_{self.diagname}_{self.chI}_{self.chQ}_subphi"
+        else:
+            fnm_base = f"{self.sn}_{self.subsn}_{self.tstart}_{self.tend}_{self.diagname}_{self.chI}_{self.chQ}"
+        if fmin is not None:
+            fnm_base += f"_min{fmin*1e-3}kHz"
+        if fmax is not None:
+            fnm_base += f"_max{fmax*1e-3}kHz"
+        path = os.path.join(figdir, f"{fnm_base}.png")
+        if subtract_phaseline:
+            title = f"#{self.sn}-{self.subsn} {self.tstart}-{self.tend}s\n" \
+                    f"{self.diagname} ch:{self.chI},{self.chQ}\n" \
+                    f"subtract phase line"
+        else:
+            title = f"#{self.sn}-{self.subsn} {self.tstart}-{self.tend}s\n" \
+                    f"{self.diagname} ch:{self.chI},{self.chQ}"
+
         fig, axs = plt.subplots(nrows=3, sharex=True,
                                 figsize=(5, 10), gridspec_kw={'height_ratios': [1, 1, 3]},
-                                num=fnm)
+                                num=fnm_base)
 
-        axs[0].plot(self.t, self.I, c="black", lw=0.1)
+        if subtract_phaseline:
+            axs[0].plot(self.t, self.I_subphi, c="black", lw=0.1)
+        else:
+            axs[0].plot(self.t, self.I, c="black", lw=0.1)
         axs[0].set_ylabel("I [V]")
         if magnify:
             p2p = self.I.max() - self.I.min()
@@ -248,7 +280,10 @@ class IQ:
         else:
             axs[0].set_ylim(float(self.Iprms["RangeLow"][0]), float(self.Iprms["RangeHigh"][0]))
 
-        axs[1].plot(self.t, self.Q, c="black", lw=0.1)
+        if subtract_phaseline:
+            axs[1].plot(self.t, self.Q_subphi, c="black", lw=0.1)
+        else:
+            axs[1].plot(self.t, self.Q, c="black", lw=0.1)
         if magnify:
             p2p = self.Q.max() - self.Q.min()
             axs[1].set_ylim(self.Q.min() - p2p * 0.05, self.Q.max() + p2p * 0.05)
@@ -256,10 +291,16 @@ class IQ:
             axs[1].set_ylim(float(self.Qprms["RangeLow"][0]), float(self.Qprms["RangeHigh"][0]))
         axs[1].set_ylabel("Q [V]")
 
-        axs[2].pcolormesh(np.append(self.spg.t - 0.5 * self.spg.dT, self.spg.t[-1] + 0.5 * self.spg.dT),
-                          np.append(self.spg.f - 0.5 * self.spg.dF, self.spg.f[-1] + 0.5 * self.spg.dF),
-                          self.spg.psddB.T,
-                          cmap=self.spg.cmap, vmin=self.spg.vmindB, vmax=self.spg.vmaxdB)
+        if subtract_phaseline:
+            axs[2].pcolormesh(np.append(self.spg.t - 0.5 * self.spg.dT, self.spg.t[-1] + 0.5 * self.spg.dT),
+                              np.append(self.spg.f - 0.5 * self.spg.dF, self.spg.f[-1] + 0.5 * self.spg.dF),
+                              self.spg.psddB_subphi.T,
+                              cmap=self.spg.cmap, vmin=self.spg.vmindB, vmax=self.spg.vmaxdB)
+        else:
+            axs[2].pcolormesh(np.append(self.spg.t - 0.5 * self.spg.dT, self.spg.t[-1] + 0.5 * self.spg.dT),
+                              np.append(self.spg.f - 0.5 * self.spg.dF, self.spg.f[-1] + 0.5 * self.spg.dF),
+                              self.spg.psddB.T,
+                              cmap=self.spg.cmap, vmin=self.spg.vmindB, vmax=self.spg.vmaxdB)
         if magnify:
             axs[2].set_ylim(- self.spg.fmax, self.spg.fmax)
         axs[2].set_ylabel("Frequency [Hz]")
@@ -267,12 +308,42 @@ class IQ:
         axs[2].set_xlim(self.tstart, self.tend)
 
         plot.caption(fig, title, hspace=0.1, wspace=0.1)
-        plot.capsave(fig, title, fnm, path)
+        plot.capsave(fig, title, fnm_base, path)
 
         if display:
             plot.check(pause)
         else:
             plot.close(fig)
+
+        fig2dir = "Retrieve_MWRM_diff"
+        proc.ifNotMake(fig2dir)
+        fnm = f"{fnm_base}_diff"
+        if fmin is not None:
+            fnm += f"_min{fmin * 1e-3}kHz"
+        if fmax is not None:
+            fnm += f"_max{fmax * 1e-3}kHz"
+        path = os.path.join(fig2dir, f"{fnm}.png")
+        title = f"#{self.sn}-{self.subsn} {self.tstart}-{self.tend}s\n" \
+                f"{self.diagname} ch:{self.chI},{self.chQ}"
+        fig2, ax2 = plt.subplots(nrows=1, num=fnm, figsize=(5, 5))
+
+        ax2.pcolormesh(np.append(self.spg.t - 0.5 * self.spg.dT, self.spg.t[-1] + 0.5 * self.spg.dT),
+                       self.spg.f,
+                       self.spg.psddB_diff.T,
+                       cmap="coolwarm")
+        if magnify:
+            ax2.set_ylim(- self.spg.fmax, self.spg.fmax)
+        ax2.set_ylabel("Frequency [Hz]")
+        ax2.set_xlabel("Time [s]")
+        ax2.set_xlim(self.tstart, self.tend)
+
+        plot.caption(fig2, title, hspace=0.1, wspace=0.1)
+        plot.capsave(fig2, title, fnm, path)
+
+        if display:
+            plot.check(pause)
+        else:
+            plot.close(fig2)
 
     def specgram_asymmetric_component(self, fmin=None, fmax=None,
                                       peak_detection=True, gaussfitting=True,
@@ -472,19 +543,19 @@ class IQ:
                                cmap=self.spg.asym.cmap, vmin=self.spg.asym.vmindB, vmax=self.spg.asym.vmaxdB)
             ax.fill_between(self.spg.t, -self.spg.asym.fmin, self.spg.asym.fmin, color="white", alpha=0.3)
         cbar = plt.colorbar(im)
-        cbar.set_label("S(f) - S(-f) [dB]")
+        cbar.set_label("S(f) / S(-f) [dB]")
         if peak_detection:
             # for i in range(len(self.spg.t)):
             #     ax.scatter([self.spg.t[i]] * self.spg.asym.peak_nums[i], self.spg.asym.peak_freqs[i],
             #                s=1, c="red", alpha=0.5)
-            ax.plot(self.spg.t, self.spg.asym.peak_freqs, ".", ms=3, c="red", alpha=0.5)
+            ax.plot(self.spg.t, self.spg.asym.peak_freqs, ".", ms=3, c="green", alpha=0.5)
         if gaussfitting:
             # for i in range(len(self.spg.t)):
             #     if (~isinstance(self.spg.asym.fD_fit[i], np.ndarray)) and (self.spg.asym.fD_fit[i] is np.nan):
             #         continue
             #     ax.scatter([self.spg.t[i]]*self.spg.asym.gaussfit_num[i], self.spg.asym.fD_fit[i],
             #                 s=1, c="pink", alpha=0.5)
-            ax.plot(self.spg.t, self.spg.asym.fD_fit, ".", ms=2, c="pink")
+            ax.plot(self.spg.t, self.spg.asym.fD_fit, ".", ms=2, c="purple")
         ax.set_ylim(- self.spg.asym.fmax, self.spg.asym.fmax)
         ax.set_ylabel("Frequency [Hz]")
         ax.set_xlabel("Time [s]")
@@ -498,10 +569,9 @@ class IQ:
         else:
             plot.close(fig)
 
-
     def specgram_amp(self, NFFT=2**10, ovr=0.5, window="hann", dT=5e-3,
                      cmap="viridis", magnify=True,
-                     fmin=False, fmax=False, logfreq=False,
+                     fmin=None, fmax=None, logfreq=False,
                      pause=0, display=True, detrend="constant"):
 
         self.spg.amp = calc.struct()
@@ -534,14 +604,14 @@ class IQ:
         self.spg.amp.psddB = 10 * np.log10(self.spg.amp.psd)
         # self.spg.amp.lindetpsd = self.spg.amp.lindetpsd
         # self.spg.amp.lindetpsddB = 10 * np.log10(self.spg.amp.lindetpsd)
-        self.spg.amp.dF = self.dT * self.spg.amp.NFFT
+        self.spg.amp.dF = self.Fs / self.spg.amp.NFFT
 
         if magnify:
-            if fmin:
+            if fmin is not None:
                 self.spg.amp.fmin = fmin
             else:
                 self.spg.amp.fmin = self.spg.amp.dF
-            if fmax:
+            if fmax is not None:
                 self.spg.amp.fmax = fmax
             else:
                 self.spg.amp.fmax = self.Fs / 2
@@ -634,7 +704,7 @@ class IQ:
         self.spg.phase.psddB = 10 * np.log10(self.spg.phase.psd)
         # self.spg.phase.lindetpsd = self.spg.phase.lindetpsd
         # self.spg.phase.lindetpsddB = 10 * np.log10(self.spg.phase.lindetpsd)
-        self.spg.phase.dF = self.dT * self.spg.phase.NFFT
+        self.spg.phase.dF = self.Fs / self.spg.phase.NFFT
 
         if magnify:
             if fmin:
@@ -801,6 +871,7 @@ class IQ:
                           np.append(self.cog.f - 0.5 * self.cog.dF, self.cog.f[-1] + 0.5 * self.cog.dF),
                           self.cog.psddB.T,
                           cmap=self.cog.cmap, vmin=self.cog.vmindB, vmax=self.cog.vmaxdB)
+        axs[2].fill_between(self.cog.t, -self.cog.fmin, self.cog.fmin, color = "white")
         axs[2].plot(self.cog.t, self.cog.fd, color="red", lw=0.1)
         if magnify:
             axs[2].set_ylim(- self.cog.fmax, self.cog.fmax)
@@ -827,8 +898,8 @@ class IQ:
         self.pp.fd = o.fd
         self.pp.fdstd = o.fdstd
 
-    def gaussfit(self, numgauss=1, fmin=1e3, fmax=500e3, p0_list=[(1, 1, 1)]):
-        calc.shifted_gauss()
+    # def gaussfit(self, numgauss=1, fmin=1e3, fmax=500e3, p0_list=[(1, 1, 1)]):
+    #     calc.shifted_gauss()
 
     def specgram_pp(self, NFFT=2 ** 7, ovr=0.5, window="hann", dT=2e-2,
                      cmap="viridis", magnify=True,
@@ -1071,7 +1142,9 @@ class IQ:
         ani.save(path)
         plt.show(ani)
 
-    def spectrum(self, tstart=4.9, tend=5.0, NFFT=2**10, ovr=0.5, window="hann", pause=0, display=True, bgon=False):
+    def spectrum(self, tstart=4.9, tend=5.0, NFFT=2**10, ovr=0.5, window="hann", detrend="constant",
+                 fmin=None, fmax=None,
+                 pause=0, display=True, bgon=False):
 
         self.sp = calc.struct()
         self.sp.tstart = tstart
@@ -1091,11 +1164,21 @@ class IQ:
         self.sp.t = (self.sp.tstart + self.sp.tend) / 2
         self.sp.fIQ, self.sp.psdIQ = welch(x=self.sp.IQraw, fs=self.Fs, window="hann",
                                            nperseg=self.sp.NFFT, noverlap=self.sp.NOV,
-                                           detrend="constant", scaling="density",
+                                           detrend=detrend, scaling="density",
                                            average="mean", return_onesided=False)
         self.sp.fIQ = fft.fftshift(self.sp.fIQ)
         self.sp.psdIQ = fft.fftshift(self.sp.psdIQ)
         self.sp.psdIQdB = 10 * np.log10(self.sp.psdIQ)
+
+        if fmin is not None:
+            self.sp.fmin = fmin
+        else:
+            self.sp.fmin = self.sp.dF
+        if fmax is not None:
+            self.sp.fmax = fmax
+        else:
+            self.sp.fmax = self.Fs / 2
+
         self.sp.vmindB = np.min(self.sp.psdIQdB)
         self.sp.vmaxdB = np.max(self.sp.psdIQdB)
 
@@ -1107,6 +1190,8 @@ class IQ:
                                          nperseg=self.sp.NFFT, noverlap=self.sp.NOV,
                                          detrend="constant", scaling="density",
                                          average="mean")
+        self.sp.psdIdB = 10 * np.log10(self.sp.psdI)
+        self.sp.psdQdB = 10 * np.log10(self.sp.psdQ)
 
         if not display:
             matplotlib.use('Agg')
@@ -1114,7 +1199,13 @@ class IQ:
         figdir = "Retrieve_MWRM_spectrum"
         proc.ifNotMake(figdir)
 
-        fnm = f"{self.sn}_{self.subsn}_{self.sp.t}_{self.diagname}_{self.chI}_{self.chQ}_IQsp"
+        fnm_base = f"{self.sn}_{self.subsn}_{self.sp.tstart}_{self.sp.tend}_{self.diagname}_{self.chI}_{self.chQ}"
+        if fmin is not None:
+            fnm_base += f"_min{fmin * 1e-3}kHz"
+        if fmax is not None:
+            fnm_base += f"_max{fmax * 1e-3}kHz"
+
+        fnm = f"{fnm_base}_IQsp"
         path = os.path.join(figdir, f"{fnm}.png")
         title = f"#{self.sn}-{self.subsn} {self.sp.t}s\n" \
                 f"({self.sp.tstart}-{self.sp.tend}s)\n" \
@@ -1122,17 +1213,18 @@ class IQ:
         fig, ax = plt.subplots(figsize=(6, 6), num=fnm)
         ax.plot(self.sp.fIQ, self.sp.psdIQdB, c="black")
         if bgon:
-            # tidx_s = np.argmin(np.abs(self.bg.t - self.sp.tstart))
-            # tidx_e = np.argmin(np.abs(self.bg.t - self.sp.tend))
+            self.BSBackground(self.sp.NFFT, self.sp.ovr)
             tidxs, datlist = proc.getTimeIdxsAndDats(self.bg.t, self.sp.tstart, self.sp.tend, [self.bg.t, self.bg.psd])
             self.sp.tbg, self.sp.psdbg = datlist
             self.sp.bg, _, self.sp.bg_err = calc.average(self.sp.psdbg, axis=0)
             self.sp.bg_dB, self.sp.bg_err_dB = calc.dB(self.sp.bg, self.sp.bg_err)
+            self.sp.snr = self.sp.psdIQdB - self.sp.bg_dB
             # for i in range(len(self.sp.tbg)):
             #     ax.scatter(self.bg.f, 10 * np.log10(self.sp.psdbg[i]), marker=".", c="grey")
             ax.errorbar(self.bg.f, self.sp.bg_dB, self.sp.bg_err_dB, color="grey", ecolor="lightgrey")
         ax.set_xlabel("Frequency [Hz]")
         ax.set_ylabel("PSD [dBV/$\sqrt{\\rm{Hz}}$]")
+        ax.set_xlim(- self.sp.fmax, self.sp.fmax)
         # ax.set_ylim()
 
         plot.caption(fig, title, hspace=0.1, wspace=0.1)
@@ -1143,18 +1235,19 @@ class IQ:
         else:
             plot.close(fig)
 
-        fnm2 = f"{self.sn}_{self.subsn}_{self.sp.tstart}_{self.sp.tend}_{self.diagname}_{self.chI}_{self.chQ}"
+        fnm2 = f"{fnm_base}_eachsp"
         path2 = os.path.join(figdir, f"{fnm2}.png")
         title2 = f"#{self.sn}-{self.subsn} {self.sp.t}s\n" \
                  f"({self.sp.tstart}-{self.sp.tend}s)\n" \
                  f"{self.diagname} ch:{self.chI},{self.chQ}"
         fig2, ax2 = plt.subplots(figsize=(6, 6), num=fnm2)
-        ax2.plot(self.sp.fI, 10 * np.log10(self.sp.psdI), c="blue")
-        ax2.plot(self.sp.fQ, 10 * np.log10(self.sp.psdQ), c="orange")
+        ax2.plot(self.sp.fI, self.sp.psdIdB, c="blue")
+        ax2.plot(self.sp.fQ, self.sp.psdQdB, c="orange")
         ax2.legend(["I", "Q"])
         ax2.set_xscale("log")
         ax2.set_xlabel("Frequency [Hz]")
         ax2.set_ylabel("PSD [dBV/$\sqrt{\\rm{Hz}}$]")
+        ax2.set_xlim(self.sp.fmin, self.sp.fmax)
 
         plot.caption(fig2, title2, hspace=0.1, wspace=0.1)
         plot.capsave(fig2, title2, fnm2, path2)
@@ -1163,6 +1256,30 @@ class IQ:
             plot.check(pause)
         else:
             plot.close(fig2)
+
+        if bgon:
+            fnm3 = f"{fnm_base}_SNR"
+            path3 = os.path.join(figdir, f"{fnm3}.png")
+            title3 = f"#{self.sn}-{self.subsn} {self.sp.t}s\n" \
+                     f"({self.sp.tstart}-{self.sp.tend}s)\n" \
+                     f"{self.diagname} ch:{self.chI},{self.chQ}"
+            fig3, ax3 = plt.subplots(1, num=fnm3)
+
+            ax3.plot(self.sp.fIQ, self.sp.snr, c="black")
+            ax3.set_xlabel("Frequency [Hz]")
+            ax3.set_ylabel("S/N [dB]")
+            ax3.set_ylim(bottom=0)
+            ax3.set_xlim(- self.sp.fmax, self.sp.fmax)
+
+            plot.caption(fig3, title3, hspace=0.1, wspace=0.1)
+            plot.capsave(fig3, title3, fnm3, path3)
+
+            if display:
+                plot.check(pause)
+            else:
+                plot.close(fig3)
+
+        return self.sp
 
     def spectrum_asymmetric_component(self, fmin=None, fmax=None,
                                       peak_detection=True, gaussfitting=True,
@@ -1795,9 +1912,9 @@ class IQ:
             plot.close(fig)
 
     def spectrum_symmetric_component(self, fmin=None, fmax=None,
-                                      polyorder=2, iniwidth=100e3,
-                                      maxfev=2000,
-                                      display=True, pause=0):
+                                     polyorder=2, iniwidth=100e3,
+                                     maxfev=2000,
+                                     display=True, pause=0):
 
         self.sp.sym = calc.struct()
         self.sp.sym.iniwidth = iniwidth
@@ -2126,6 +2243,26 @@ class IQ:
         else:
             plot.close(fig)
 
+    def spectrum_fit_by(self, function=gauss, fmin=None, fmax=None, usedB=True, p0=None, maxfev=2000):
+
+        self.sp.fit = calc.struct()
+        self.sp.fit.fmin = fmin
+        self.sp.fit.fmax = fmax
+        self.sp.fit.function = function
+
+        _idx = np.where((np.abs(self.sp.fIQ) > self.sp.fit.fmin)
+                        & (np.abs(self.sp.fIQ) < self.sp.fit.fmax))[0]
+        self.sp.fit.f = self.sp.fIQ[_idx]
+        if usedB:
+            self.sp.fit.psddB = self.sp.psdIQdB[_idx]
+            self.sp.fit.popt, self.sp.fit.pcov = curve_fit(function, self.sp.fit.f, self.sp.fit.psddB,
+                                                           p0=p0, maxfev=maxfev)
+        else:
+            self.sp.fit.psd = self.sp.psdIQ[_idx]
+            self.sp.fit.popt, self.sp.fit.pcov = curve_fit(function, self.sp.fit.f, self.sp.fit.psd,
+                                                           p0=p0, maxfev=maxfev)
+
+
     def spectrum_gaussfit(self, fmin=None, fmax=None,
                           polyorder=2, prominence=3, iniwidth_asym=40e3,
                           iniwidth_sym=100e3, maxfev=2000,
@@ -2292,6 +2429,8 @@ class IQ:
         else:
             plot.close(fig)
 
+    # def spectrum_cauchyfit(self):
+
     def intensity(self, fmin=150e3, fmax=490e3, bgon=True):
 
         self.spg.int = calc.struct()
@@ -2315,6 +2454,95 @@ class IQ:
 
             self.spg.int.Sknorm_bg = self.spg.int.Sk_bg / self.spg.int.Sk.max()
             self.spg.int.Ianorm_bg = self.spg.int.Ia_bg / self.spg.int.Ia.max()
+
+            for et in self.bg.ets:
+                ts, te = et
+                tssp = self.spg.t - self.spg.dT / 2
+                tesp = self.spg.t + self.spg.dT / 2
+                idx_nan = np.where(((tssp<te)&(tssp>ts))|((tesp>ts)&(tesp<te))|((tssp<ts)&(tesp>te)))[0]
+                self.spg.int.Sk[idx_nan] = np.nan
+                self.spg.int.Ia[idx_nan] = np.nan
+                self.spg.int.Sknorm[idx_nan] = np.nan
+                self.spg.int.Ianorm[idx_nan] = np.nan
+
+        return self.spg.int
+
+    def ref_to_tsmap(self, Rat=4.38, rho_cut=1.0, include_grad=True, use_nefit=True, skipnan=False, bgon=False):
+
+        self.tsmap = get_eg.tsmap(self.sn, self.subsn, self.tstart, self.tend, rho_cut=rho_cut)
+        if include_grad:
+            self.tsmap.calcgrad()
+        self.tsmap.R_window(Rat=Rat, include_grad=include_grad)
+        datlist = [self.spg.int.Sk, self.spg.int.Ia, self.spg.int.Sknorm, self.spg.int.Ianorm]
+        avglist, stdlist, errlist = calc.timeAverageDatListByRefs(self.spg.t, datlist, self.tsmap.t, skipnan=skipnan)
+        self.tsmap.Sk, self.tsmap.Ia, self.tsmap.Sknorm, self.tsmap.Ianorm = avglist
+        self.tsmap.Sk_err, self.tsmap.Ia_err, self.tsmap.Sknorm_err, self.tsmap.Ianorm_err = stdlist
+
+        if use_nefit:
+            self.tsmap.Sknesq = self.tsmap.Sk / ((self.tsmap.Rwin.avg.ne_fit)**2)
+            self.tsmap.Sknesq_err = self.tsmap.Sknesq \
+                                    * np.sqrt((self.tsmap.Sk_err/self.tsmap.Sk)**2
+                                              + (2 * self.tsmap.Rwin.std.ne_fit / self.tsmap.Rwin.avg.ne_fit)**2)
+            self.tsmap.Iane = self.tsmap.Ia / self.tsmap.Rwin.avg.ne_fit
+            self.tsmap.Iane_err = self.tsmap.Iane \
+                                    * np.sqrt((self.tsmap.Ia_err / self.tsmap.Ia) ** 2
+                                              + (self.tsmap.Rwin.std.ne_fit / self.tsmap.Rwin.avg.ne_fit) ** 2)
+
+            if bgon:
+                self.tsmap.ne_bg = interp1d(self.tsmap.t, self.tsmap.Rwin.avg.ne_fit)(self.bg.t)
+                self.tsmap.ne_bg_err = interp1d(self.tsmap.t, self.tsmap.Rwin.std.ne_fit)(self.bg.t)
+
+                self.tsmap.Sknesq_bg = self.spg.int.Sk_bg / ((self.tsmap.ne_bg) ** 2)
+                self.tsmap.Sknesq_bg_err = self.tsmap.Sknesq_bg \
+                                        * np.sqrt((2 * self.tsmap.ne_bg_err / self.tsmap.ne_bg) ** 2)
+                self.tsmap.Iane_bg = self.spg.int.Ia_bg / self.tsmap.ne_bg
+                self.tsmap.Iane_bg_err = self.tsmap.Iane_bg \
+                                      * np.sqrt((self.tsmap.ne_bg_err / self.tsmap.ne_bg) ** 2)
+
+        else:
+            self.tsmap.Sknesq = self.tsmap.Sk / ((self.tsmap.Rwin.avg.ne_polyfit)**2)
+            self.tsmap.Sknesq_err = self.tsmap.Sknesq \
+                                    * np.sqrt((self.tsmap.Sk_err/self.tsmap.Sk)**2
+                                              + (2 * self.tsmap.Rwin.std.ne_polyfit / self.tsmap.Rwin.avg.ne_polyfit)**2)
+            self.tsmap.Iane = self.tsmap.Ia / self.tsmap.Rwin.avg.ne_polyfit
+            self.tsmap.Iane_err = self.tsmap.Iane \
+                                    * np.sqrt((self.tsmap.Ia_err / self.tsmap.Ia) ** 2
+                                              + (self.tsmap.Rwin.std.ne_polyfit / self.tsmap.Rwin.avg.ne_polyfit) ** 2)
+
+            if bgon:
+                self.tsmap.ne_bg = interp1d(self.tsmap.t, self.tsmap.Rwin.avg.ne_polyfit)(self.bg.t)
+                self.tsmap.ne_bg_err = interp1d(self.tsmap.t, self.tsmap.Rwin.std.ne_polyfit)(self.bg.t)
+
+                self.tsmap.Sknesq_bg = self.spg.int.Sk_bg / ((self.tsmap.ne_bg) ** 2)
+                self.tsmap.Sknesq_bg_err = self.tsmap.Sknesq_bg \
+                                        * np.sqrt((2 * self.tsmap.ne_bg_err / self.tsmap.ne_bg) ** 2)
+                self.tsmap.Iane_bg = self.spg.int.Ia_bg / self.tsmap.ne_bg
+                self.tsmap.Iane_bg_err = self.tsmap.Iane_bg \
+                                      * np.sqrt((self.tsmap.ne_bg_err / self.tsmap.ne_bg) ** 2)
+
+        return self.tsmap
+
+    def ref_to_fir_nel(self, Rfir=4.1, bgon=False):
+        Rfirs = np.array([3.309, 3.399, 3.489, 3.579,
+                          3.669, 3.759, 3.849, 3.939,
+                          4.029, 4.119, 4.209, 4.299, 4.389])
+
+        self.fir = get_eg.fir_nel(self.sn, self.subsn, self.tstart, self.tend)
+        self.fir.ref_to(self.spg.t)
+        idx_dat = np.argmin(np.abs(Rfirs - Rfir))
+        datlist = [self.fir.ref.avg.nl3309, self.fir.ref.avg.nl3399, self.fir.ref.avg.nl3489, self.fir.ref.avg.nl3579,
+                   self.fir.ref.avg.nl3669, self.fir.ref.avg.nl3759, self.fir.ref.avg.nl3849, self.fir.ref.avg.nl3939,
+                   self.fir.ref.avg.nl4029, self.fir.ref.avg.nl4119, self.fir.ref.avg.nl4209, self.fir.ref.avg.nl4299,
+                   self.fir.ref.avg.nl4389]
+        self.spg.nel = datlist[idx_dat]
+        self.spg.int.Ianel = self.spg.int.Ia / self.spg.nel
+        self.spg.int.Sknelsq = self.spg.int.Sk / (self.spg.nel**2)
+
+        if bgon:
+            self.spg.nel_bg = interp1d(self.spg.t, self.spg.nel, bounds_error=False, fill_value="extrapolate")(self.bg.t)
+
+            self.spg.int.Sknelsq_bg = self.spg.int.Sk_bg / ((self.spg.nel_bg) ** 2)
+            self.spg.int.Ianel_bg = self.spg.int.Ia_bg / self.spg.nel_bg
 
     def dopplershift(self, fmin=3e3, fmax=1250e3):
 

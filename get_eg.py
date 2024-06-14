@@ -1,14 +1,16 @@
 import numpy as np
 from scipy.interpolate import interp1d
+from scipy.interpolate import griddata
 import seaborn as sns
 import os
 import gc
 
 import matplotlib.pyplot as plt
 from mpl_toolkits import mplot3d
+from matplotlib import cm
 
 from nasu.myEgdb import LoadEG
-from nasu import read, calc, getShotInfo, proc
+from nasu import read, calc, getShotInfo, proc, myEgdb, plot
 
 
 ee = 1.602176634  # [10^-19 C]
@@ -143,7 +145,6 @@ def nb(egnb, valnm, tstart, tend):
 
     return nbtime, valnb
 
-
 def nb_all(egnb, valnm):
 
     nbtime = egnb.dims(0)
@@ -270,7 +271,6 @@ class diamag:
         self.t = self.t[_idx]
         self.wp, self.beta_dia, self.beta_vmec = list_dat
 
-
 def nel(sn=174070, sub=1, tstart=3.0, tend=6.0, decimate=10):
 
     egnel = LoadEG(diagname="fir_nel", sn=sn, sub=sub)
@@ -297,6 +297,99 @@ def nel(sn=174070, sub=1, tstart=3.0, tend=6.0, decimate=10):
     o.nl4389 = egnel.trace_of(name="nL(4389)", dim=0, other_idxs=[0])[idx_ts: idx_te + 1: decimate]
 
     return o
+
+class fir_nel:
+
+    def __init__(self, sn=174070, sub=1, tstart=3.0, tend=6.0):
+
+        self.sn = sn
+        self.sub = sub
+        self.tstart = tstart
+        self.tend = tend
+
+        self.t, list_dat, self.list_dimnms, self.list_valnms, self.list_dimunits, self.list_valunits \
+            = read.eg1d(diagnm="fir_nel", sn=self.sn, sub=self.sub)
+
+        tidxs, list_dat = proc.getTimeIdxsAndDats(self.t, self.tstart, self.tend, list_dat)
+        self.t = self.t[tidxs]
+
+        self.nebar, self.peak, self.nl3309, self.nl3399, self.nl3489, self.nl3579, self.nl3669, self.nl3759, \
+        self.nl3849, self.nl3939, self.nl4029, self.nl4119, self.nl4209, self.nl4299, self.nl4389 = list_dat
+
+    def plot_sightline(self, tat=4.5, pause=0, diag = 'tsmesh', type = "dat"):
+
+        phi_at = 0.
+
+        eg_tsmesh = myEgdb.LoadEGSimple(diag, self.sn, type=type)
+
+        times = eg_tsmesh.dims(0)
+        Rs = eg_tsmesh.dims(1)
+        Zs = eg_tsmesh.dims(2)
+        phis = eg_tsmesh.dims(3)
+
+        idx_t = np.argmin(np.abs(times - tat))
+        idx_phi = np.argmin(np.abs(phis - phi_at))
+
+        reffs = np.zeros((len(Zs), len(Rs)))
+        for ii, Z in enumerate(Zs):
+            reffs[ii] = eg_tsmesh.trace_of('reff', 1, [idx_t, ii, idx_phi])
+
+        grid_Rs, grid_Zs = np.meshgrid(Rs, Zs)
+
+        figdir = f"fir_sightline"
+        proc.ifNotMake(figdir)
+        fname = f"{self.sn}_{self.sub}_{tat}"
+        title = f"#{self.sn}-{self.sub} {tat} s"
+        path = os.path.join(figdir, f"{fname}.png")
+
+        fig, ax = plt.subplots(1, num=fname, figsize=(4, 8))
+        cs = plt.contour(grid_Rs, grid_Zs, reffs, levels=[0.1 * i - 1. for i in range(21)],
+                          cmap=cm.get_cmap('cool'))
+        R_fir = [3.309, 3.399, 3.489, 3.579, 3.669, 3.759, 3.849, 3.939, 4.029, 4.119, 4.209, 4.299, 4.389]
+        ax.vlines(R_fir, Zs.min(), Zs.max(), ls="--", colors="black")
+        plt.axhline(0, ls="--", c="grey")
+        plt.clabel(cs, inline=True, fontsize=10, fmt='%1.2f')
+
+        ax.set_xlim(3.2, 4.5)
+        ax.set_aspect("equal")
+        ax.set_xlabel("R [m]")
+        ax.set_ylabel("Z [m]")
+        ax.set_title("reff [m]")
+
+        plot.caption(fig, title)
+        plot.capsave(fig, title, fname, path)
+        plot.check(pause)
+
+    def ref_to(self, time_ref):
+
+        self.ref = struct()
+        self.ref.t = time_ref
+
+        self.ref.avg = struct()
+        self.ref.std = struct()
+        self.ref.ste = struct()
+
+        list_dat = [self.nebar, self.peak, self.nl3309, self.nl3399, self.nl3489, self.nl3579, self.nl3669, self.nl3759,
+                    self.nl3849, self.nl3939, self.nl4029, self.nl4119, self.nl4209, self.nl4299, self.nl4389]
+        datRefList, stdRefList, errRefList = calc.timeAverageDatListByRefs(self.t, list_dat, time_ref)
+
+        self.ref.avg.nebar, self.ref.avg.peak, self.ref.avg.nl3309, self.ref.avg.nl3399, self.ref.avg.nl3489, \
+        self.ref.avg.nl3579, self.ref.avg.nl3669, self.ref.avg.nl3759, self.ref.avg.nl3849, self.ref.avg.nl3939, \
+        self.ref.avg.nl4029, self.ref.avg.nl4119, self.ref.avg.nl4209, self.ref.avg.nl4299, self.ref.avg.nl4389 \
+            = datRefList
+        self.ref.std.nebar, self.ref.std.peak, self.ref.std.nl3309, self.ref.std.nl3399, self.ref.std.nl3489, \
+        self.ref.std.nl3579, self.ref.std.nl3669, self.ref.std.nl3759, self.ref.std.nl3849, self.ref.std.nl3939, \
+        self.ref.std.nl4029, self.ref.std.nl4119, self.ref.std.nl4209, self.ref.std.nl4299, self.ref.std.nl4389 \
+            = stdRefList
+        self.ref.ste.nebar, self.ref.ste.peak, self.ref.ste.nl3309, self.ref.ste.nl3399, self.ref.ste.nl3489, \
+        self.ref.ste.nl3579, self.ref.ste.nl3669, self.ref.ste.nl3759, self.ref.ste.nl3849, self.ref.ste.nl3939, \
+        self.ref.ste.nl4029, self.ref.ste.nl4119, self.ref.ste.nl4209, self.ref.ste.nl4299, self.ref.ste.nl4389 \
+            = errRefList
+
+        return self.ref
+
+
+
 
 class lhdgauss_ray_mwrm:
 
@@ -428,13 +521,14 @@ class lhdgauss_ray_mwrm:
 
 class tsmap:
 
-    def __init__(self, sn=184508, sub=1, tstart=3., tend=6., tsfit_errfactor=2.):
+    def __init__(self, sn=184508, sub=1, tstart=3., tend=6., tsfit_errfactor=2., rho_cut=1.2):
 
         self.sn = sn
         self.sub = sub
         self.tstart = tstart
         self.tend = tend
         self.tsfit_errfactor = tsfit_errfactor
+        self.rho_cut = rho_cut
 
         EG = LoadEG(diagname="tsmap_calib", sn=sn, sub=sub)
 
@@ -510,7 +604,7 @@ class tsmap:
         self.Te_fit, self.Te_fit_err, self.ne_fit, self.ne_fit_err, self.Br, self.Bz, self.Bphi = _datlist
         self.R = self.R[_Ridx]
 
-        self.reffa99[np.abs(self.reffa99) > 1.05] = np.nan
+        self.reffa99[np.abs(self.reffa99) > self.rho_cut] = np.nan
         _Ridxs = ~np.isnan(self.reffa99).any(axis=0)
         self.R = self.R[_Ridxs]
         _datlist = [self.reff, self.reffa99, self.Te, self.dTe, self.ne_calFIR, self.dne_calFIR,
@@ -652,10 +746,24 @@ class tsmap:
         levels = np.arange(rhomin, rhomax+drho, drho)
         tg, Rg = np.meshgrid(self.t, self.R)
         fnm=f"#{self.sn}-{self.sub}_{self.tstart}-{self.tend}s_{Rmin}-{Rmax}m"
-        plt.figure(num=fnm)
+        plt.subplots(num=fnm)
         cp = plt.contour(tg, Rg, self.reffa99.T, levels=levels)
         plt.clabel(cp, inline=True, fontsize=10)
         plt.title('reff/a99')
+        plt.xlabel('Time [s]')
+        plt.ylabel('R [m]')
+        plt.xlim(self.tstart, self.tend)
+        plt.ylim(Rmin, Rmax)
+        plt.show()
+
+    def plot_reff(self, Rmin=3.5, Rmax=4.7, reffmin=0, reffmax=0.8, dreff=0.1):
+        levels = np.arange(reffmin, reffmax+dreff, dreff)
+        tg, Rg = np.meshgrid(self.t, self.R)
+        fnm=f"#{self.sn}-{self.sub}_{self.tstart}-{self.tend}s_{Rmin}-{Rmax}m"
+        plt.subplots(num=fnm)
+        cp = plt.contour(tg, Rg, self.reff.T, levels=levels)
+        plt.clabel(cp, inline=True, fontsize=10)
+        plt.title('reff [m]')
         plt.xlabel('Time [s]')
         plt.ylabel('R [m]')
         plt.xlim(self.tstart, self.tend)
@@ -903,10 +1011,13 @@ class tsmap:
 
 class cxsmap7:
 
-    def __init__(self, sn=184508, sub=1):
+    def __init__(self, sn=184508, sub=1, tstart=3, tend=6, reff_cut=0.7):
 
         self.sn = sn
         self.sub = sub
+        self.ts = tstart
+        self.te = tend
+        self.reff_cut = reff_cut
 
         EG = LoadEG(diagname="cxsmap7", sn=sn, sub=sub)
 
@@ -969,8 +1080,8 @@ class cxsmap7:
         self.tor.t1 = EG.trace_of_2d('t1', [0, 1])
 
         self.pol.Ti[self.pol.Ti == 0.] = np.nan
-        self.pol.reff[np.abs(self.pol.reff) > 0.63] = np.nan
-        self.tor.reff[np.abs(self.tor.reff) > 0.63] = np.nan
+        self.pol.reff[np.abs(self.pol.reff) > self.reff_cut] = np.nan
+        self.tor.reff[np.abs(self.tor.reff) > self.reff_cut] = np.nan
 
         varlist_pol = [self.pol.Ti, self.pol.Tier, self.pol.Vc, self.pol.Ver, self.pol.inc, self.pol.icer,
                        self.pol.Vr, self.pol.reff, self.pol.a99,
@@ -1001,6 +1112,10 @@ class cxsmap7:
         for i in range(len(varlist_tor)):
             varlist_tor[i] = varlist_tor[i][tidxs]
 
+        _, varlist_pol = proc.getTimeIdxsAndDats(self.t, self.ts, self.te, varlist_pol)
+        tidxs, varlist_tor = proc.getTimeIdxsAndDats(self.t, self.ts, self.te, varlist_tor)
+        self.t = self.t[tidxs]
+
         Rpolidxs = ~np.isnan(varlist_pol[7]).any(axis=0)
         Rtoridxs = ~np.isnan(varlist_tor[7]).any(axis=0)
         self.pol.R = self.pol.R[Rpolidxs]
@@ -1028,8 +1143,11 @@ class cxsmap7:
         self.pol.a99 = self.pol.a99[:, 0]
         self.tor.a99 = self.tor.a99[:, 0]
 
-        self.pol.TeTi = self.pol.Te / self.pol.Ti
-        self.tor.TeTi = self.tor.Te / self.tor.Ti
+        self.pol.rho_cut = reff_cut / self.pol.a99
+        self.tor.rho_cut = reff_cut / self.tor.a99
+
+        # self.pol.TeTi = self.pol.Te / self.pol.Ti
+        # self.tor.TeTi = self.tor.Te / self.tor.Ti
 
         self.Bax, self.Rax, self.Bq, self.gamma, self.datetime, self.cycle = getShotInfo.info(self.sn)
 
@@ -1179,6 +1297,45 @@ class cxsmap7:
             self.at.tor.LVc_polyfit, self.at.tor.LVc_polyfit_err, \
             self.at.tor.RLVc_polyfit, self.at.tor.RLVc_polyfit_err = datlist_at
 
+    def calc_teti(self, use_tsfit=True):
+
+        self.tsmap = tsmap(self.sn, self.sub, self.ts, self.te, rho_cut=1.2)
+        self.tsmap.calcgrad()
+
+        self.tsmap.pol = struct()
+        self.tsmap.tor = struct()
+
+        if use_tsfit:
+            self.tsmap.pol.Te_intp = griddata((np.repeat(self.tsmap.t, len(self.tsmap.R)), np.tile(self.tsmap.R, len(self.tsmap.t))),
+                                              self.tsmap.Te_fit.ravel(), (self.t[:, None], self.pol.R[None, :]),
+                                              method='linear', fill_value=np.nan)
+            self.tsmap.pol.Te_intp_err = griddata((np.repeat(self.tsmap.t, len(self.tsmap.R)), np.tile(self.tsmap.R, len(self.tsmap.t))),
+                                                  self.tsmap.Te_fit_err.ravel(), (self.t[:, None], self.pol.R[None, :]),
+                                                  method='linear', fill_value=np.nan)
+            self.tsmap.tor.Te_intp = griddata((np.repeat(self.tsmap.t, len(self.tsmap.R)), np.tile(self.tsmap.R, len(self.tsmap.t))),
+                                              self.tsmap.Te_fit.ravel(), (self.t[:, None], self.tor.R[None, :]),
+                                              method='linear', fill_value=np.nan)
+            self.tsmap.tor.Te_intp_err = griddata((np.repeat(self.tsmap.t, len(self.tsmap.R)), np.tile(self.tsmap.R, len(self.tsmap.t))),
+                                                  self.tsmap.Te_fit_err.ravel(), (self.t[:, None], self.tor.R[None, :]),
+                                                  method='linear', fill_value=np.nan)
+        else:
+            self.tsmap.pol.Te_intp = griddata((np.repeat(self.tsmap.t, len(self.tsmap.R)), np.tile(self.tsmap.R, len(self.tsmap.t))),
+                                              self.tsmap.Te_polyfit.ravel(), (self.t[:, None], self.pol.R[None, :]),
+                                              method='linear', fill_value=np.nan)
+            self.tsmap.pol.Te_intp_err = griddata((np.repeat(self.tsmap.t, len(self.tsmap.R)), np.tile(self.tsmap.R, len(self.tsmap.t))),
+                                                  self.tsmap.Te_polyfit_err.ravel(), (self.t[:, None], self.pol.R[None, :]),
+                                                  method='linear', fill_value=np.nan)
+            self.tsmap.tor.Te_intp = griddata((np.repeat(self.tsmap.t, len(self.tsmap.R)), np.tile(self.tsmap.R, len(self.tsmap.t))),
+                                              self.tsmap.Te_polyfit.ravel(), (self.t[:, None], self.tor.R[None, :]),
+                                              method='linear', fill_value=np.nan)
+            self.tsmap.tor.Te_intp_err = griddata((np.repeat(self.tsmap.t, len(self.tsmap.R)), np.tile(self.tsmap.R, len(self.tsmap.t))),
+                                                  self.tsmap.Te_polyfit_err.ravel(), (self.t[:, None], self.tor.R[None, :]),
+                                                  method='linear', fill_value=np.nan)
+        self.pol.teti, self.pol.teti_err = calc.Tratio(self.tsmap.pol.Te_intp, self.pol.Ti,
+                                                       self.tsmap.pol.Te_intp_err, self.pol.Tier)
+        self.tor.teti, self.tor.teti_err = calc.Tratio(self.tsmap.tor.Te_intp, self.tor.Ti,
+                                                       self.tsmap.tor.Te_intp_err, self.tor.Tier)
+
     def t_window(self, tstart=4.4, tend=4.5):
 
         self.twin = struct()
@@ -1193,13 +1350,13 @@ class cxsmap7:
                    self.pol.p0, self.pol.pf, self.pol.ip, self.pol.ipf,
                    self.pol.Br, self.pol.Bz, self.pol.Bphi, self.pol.dVdreff,
                    self.pol.Te, self.pol.ne, self.pol.t1,
-                   self.pol.reffa99, self.pol.TeTi,
+                   self.pol.reffa99,
                    self.tor.Ti, self.tor.Tier, self.tor.Vc, self.tor.Ver, self.tor.inc, self.tor.icer,
                    self.tor.Vr, self.tor.reff,
                    self.tor.p0, self.tor.pf, self.tor.ip, self.tor.ipf,
                    self.tor.Br, self.tor.Bz, self.tor.Bphi, self.tor.dVdreff,
                    self.tor.Te, self.tor.ne, self.tor.t1,
-                   self.tor.reffa99, self.tor.TeTi]
+                   self.tor.reffa99]
         _idxs, datlist_win = proc.getTimeIdxsAndDats(self.t, self.twin.tstart, self.twin.tend, datlist)
         self.twin.t, self.twin.pol.Ti, self.twin.pol.Tier, self.twin.pol.Vc, self.twin.pol.Ver, \
         self.twin.pol.inc, self.twin.pol.icer, \
@@ -1207,14 +1364,14 @@ class cxsmap7:
         self.twin.pol.p0, self.twin.pol.pf, self.twin.pol.ip, self.twin.pol.ipf, \
         self.twin.pol.Br, self.twin.pol.Bz, self.twin.pol.Bphi, self.twin.pol.dVdreff, \
         self.twin.pol.Te, self.twin.pol.ne, self.twin.pol.t1, \
-        self.twin.pol.reffa99, self.twin.pol.TeTi, \
+        self.twin.pol.reffa99, \
         self.twin.tor.Ti, self.twin.tor.Tier, self.twin.tor.Vc, self.twin.tor.Ver, \
         self.twin.tor.inc, self.twin.tor.icer, \
         self.twin.tor.Vr, self.twin.tor.reff, \
         self.twin.tor.p0, self.twin.tor.pf, self.twin.tor.ip, self.twin.tor.ipf, \
         self.twin.tor.Br, self.twin.tor.Bz, self.twin.tor.Bphi, self.twin.tor.dVdreff, \
         self.twin.tor.Te, self.twin.tor.ne, self.twin.tor.t1, \
-        self.twin.tor.reffa99, self.twin.tor.TeTi = datlist_win
+        self.twin.tor.reffa99 = datlist_win
 
         self.twin.pol.avg = struct()
         self.twin.pol.std = struct()
@@ -1241,7 +1398,7 @@ class cxsmap7:
         self.twin.tor.avg.Vc, self.twin.tor.std.Vc, self.twin.tor.ste.Vc \
             = calc.average(self.twin.tor.Vc, err=self.twin.tor.Ver, axis=0)
 
-    def R_window(self, Rat=4.1, dR=0.106, include_outerside=False, include_grad=False):
+    def R_window(self, Rat=4.1, dR=0.106, include_outerside=False, include_grad=False, include_teti=False):
 
         self.Rwin = struct()
         self.Rwin.pol = struct()
@@ -1256,7 +1413,7 @@ class cxsmap7:
                    self.pol.p0, self.pol.pf, self.pol.ip, self.pol.ipf,
                    self.pol.Br, self.pol.Bz, self.pol.Bphi, self.pol.dVdreff,
                    self.pol.Te, self.pol.ne, self.pol.t1,
-                   self.pol.reffa99, self.pol.TeTi]
+                   self.pol.reffa99]
         _idxs, datlist_win = proc.getXIdxsAndYs_2dalongLastAxis(xx=self.pol.R, x_start=self.Rwin.Rin, x_end=self.Rwin.Rout,
                                                                 Ys_list=datlist, include_outerside=include_outerside)
         self.Rwin.pol.Ti, self.Rwin.pol.Tier, self.Rwin.pol.Vc, self.Rwin.pol.Ver, \
@@ -1265,7 +1422,7 @@ class cxsmap7:
         self.Rwin.pol.p0, self.Rwin.pol.pf, self.Rwin.pol.ip, self.Rwin.pol.ipf, \
         self.Rwin.pol.Br, self.Rwin.pol.Bz, self.Rwin.pol.Bphi, self.Rwin.pol.dVdreff, \
         self.Rwin.pol.Te, self.Rwin.pol.ne, self.Rwin.pol.t1, \
-        self.Rwin.pol.reffa99, self.Rwin.pol.TeTi = datlist_win
+        self.Rwin.pol.reffa99 = datlist_win
         self.Rwin.pol.R = self.pol.R[_idxs]
 
         datlist = [self.tor.Ti, self.tor.Tier, self.tor.Vc, self.tor.Ver, self.tor.inc, self.tor.icer,
@@ -1273,7 +1430,7 @@ class cxsmap7:
                    self.tor.p0, self.tor.pf, self.tor.ip, self.tor.ipf,
                    self.tor.Br, self.tor.Bz, self.tor.Bphi, self.tor.dVdreff,
                    self.tor.Te, self.tor.ne, self.tor.t1,
-                   self.tor.reffa99, self.tor.TeTi]
+                   self.tor.reffa99]
         _idxs, datlist_win = proc.getXIdxsAndYs_2dalongLastAxis(xx=self.tor.R, x_start=self.Rwin.Rin,
                                                                 x_end=self.Rwin.Rout,
                                                                 Ys_list=datlist, include_outerside=include_outerside)
@@ -1283,7 +1440,7 @@ class cxsmap7:
         self.Rwin.tor.p0, self.Rwin.tor.pf, self.Rwin.tor.ip, self.Rwin.tor.ipf, \
         self.Rwin.tor.Br, self.Rwin.tor.Bz, self.Rwin.tor.Bphi, self.Rwin.tor.dVdreff, \
         self.Rwin.tor.Te, self.Rwin.tor.ne, self.Rwin.tor.t1, \
-        self.Rwin.tor.reffa99, self.Rwin.tor.TeTi = datlist_win
+        self.Rwin.tor.reffa99 = datlist_win
         self.Rwin.tor.R = self.tor.R[_idxs]
 
         if include_grad:
@@ -1328,6 +1485,21 @@ class cxsmap7:
             self.Rwin.tor.dVcdreff_polyfit, self.Rwin.tor.dVcdreff_polyfit_err, \
             self.Rwin.tor.LVc_polyfit, self.Rwin.tor.LVc_polyfit_err, \
             self.Rwin.tor.RLVc_polyfit, self.Rwin.tor.RLVc_polyfit_err = datlist_win
+
+        if include_teti:
+            datlist = [self.pol.teti, self.pol.teti_err]
+            _idxs, datlist_win = proc.getXIdxsAndYs_2dalongLastAxis(xx=self.pol.R, x_start=self.Rwin.Rin,
+                                                                    x_end=self.Rwin.Rout,
+                                                                    Ys_list=datlist,
+                                                                    include_outerside=include_outerside)
+            self.Rwin.pol.teti, self.Rwin.pol.teti_err = datlist_win
+
+            datlist = [self.tor.teti, self.tor.teti_err]
+            _idxs, datlist_win = proc.getXIdxsAndYs_2dalongLastAxis(xx=self.tor.R, x_start=self.Rwin.Rin,
+                                                                    x_end=self.Rwin.Rout,
+                                                                    Ys_list=datlist,
+                                                                    include_outerside=include_outerside)
+            self.Rwin.tor.teti, self.Rwin.tor.teti_err = datlist_win
 
         self.Rwin.pol.reffin = np.ravel(self.Rwin.pol.reff[:, 0])
         self.Rwin.pol.reffout = np.ravel(self.Rwin.pol.reff[:, -1])
@@ -1400,6 +1572,12 @@ class cxsmap7:
                 = calc.average(self.Rwin.tor.LVc_polyfit, err=self.Rwin.tor.LVc_polyfit_err, axis=1)
             self.Rwin.tor.avg.RLVc_polyfit, self.Rwin.tor.std.RLVc_polyfit, self.Rwin.tor.ste.RLVc_polyfit \
                 = calc.average(self.Rwin.tor.RLVc_polyfit, err=self.Rwin.tor.RLVc_polyfit_err, axis=1)
+
+        if include_teti:
+            self.Rwin.pol.avg.teti, self.Rwin.pol.std.teti, self.Rwin.pol.ste.teti \
+                = calc.average(self.Rwin.pol.teti, err=self.Rwin.pol.teti_err, axis=1)
+            self.Rwin.tor.avg.teti, self.Rwin.tor.std.teti, self.Rwin.tor.ste.teti \
+                = calc.average(self.Rwin.tor.teti, err=self.Rwin.tor.teti_err, axis=1)
 
 class LID_cur:
 
