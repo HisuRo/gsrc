@@ -2,14 +2,30 @@ import numpy as np
 from scipy.interpolate import interp1d
 from scipy import signal, fft
 import os
+import inspect
+
+import sys
+import time
 
 import gc
 from nasu import calc
 import copy
 
 
-def connect_list_to_str(list, by="_"):
-    return by.join(map(str, list))
+def interleave_lists(list1, list2):
+    # interleave : to combine different things so that parts of one thing are put between parts of another thing
+    interleaved_list = []
+    for item1, item2 in zip(list1, list2):
+        interleaved_list.append(item1)
+        interleaved_list.append(item2)
+    # list1 または list2 の長さが異なる場合、残りの要素を追加
+    longer_list = list1 if len(list1) > len(list2) else list2
+    interleaved_list.extend(longer_list[len(list2):] if len(list1) > len(list2) else longer_list[len(list1):])
+    return interleaved_list
+
+
+def connect_list_to_str(list, by="_", format_str="{:.0f}"):
+    return by.join(map(lambda x: format_str.format(x), list))
 
 
 def makefftsampleidxs(tdat, tout, NFFT, NEns, NOV):
@@ -358,3 +374,25 @@ def pad_lists_to_ndarray(lists):
     max_length = max(len(lst) for lst in lists)
     padded_array = np.array([np.pad(lst, (0, max_length - len(lst)), constant_values=np.nan) for lst in lists])
     return padded_array
+
+
+def get_current_file_and_line():
+    # inspect.stack()は、現在のコールスタックを返します
+    stack = inspect.stack()
+    # stack[1]にはこの関数を呼び出したコードのフレームが格納されています
+    frame = stack[1]
+    # frame[1]はファイル名、frame[2]は行番号を表します
+    filename = frame.filename
+    lineno = frame.lineno
+    return filename, lineno
+
+
+def progress_bar():
+    bar_length = 20
+    for i in range(101):
+        progress = "[" + "=" * (i // (100 // bar_length)) + " " * (bar_length - i // (100 // bar_length)) + "]"
+        sys.stdout.write(f"\rProgress: {i}% {progress}")
+        sys.stdout.flush()
+        time.sleep(0.1)
+
+    print("\nDone!")

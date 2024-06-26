@@ -1,10 +1,15 @@
 import numpy as np
+from numpy.lib.stride_tricks import sliding_window_view
 from scipy import signal, fft, interpolate, optimize
 import gc
 import matplotlib.pyplot as plt
 from nasu import proc, plot, getShotInfo, myEgdb, read
 import os
 import sys
+import inspect
+import traceback
+import time
+
 
 
 ee = 1.602176634E-19   # [C]
@@ -30,32 +35,45 @@ def expand_by1dim(array, Nexp=1, axis=-1):
     return np.transpose(np.tile(array, idx_tile), idx_trans)
 
 
-def average(dat, err=None, axis=-1, skipnan=False):
+def average(dat, err=None, axis=None, skipnan=False):
+
+    if axis is None:
+        datsize = dat.size
+    else:
+        datsize = dat.shape[axis]
 
     if err is None:
         if skipnan:
             avg = np.nanmean(dat, axis=axis)
             std = np.nanstd(dat, axis=axis, ddof=1)
-            ste = std / np.sqrt(dat.shape[axis])
+            ste = std / np.sqrt(datsize)
         else:
             avg = np.average(dat, axis=axis)
             std = np.std(dat, axis=axis, ddof=1)
-            ste = std / np.sqrt(dat.shape[axis])
+            ste = std / np.sqrt(datsize)
     else:
         if skipnan:
             err_sq = err ** 2
             w = 1. / err_sq
             avg = np.nansum(dat * w, axis=axis) / np.nansum(w, axis=axis)
             std = np.sqrt(np.nanvar(dat, axis=axis) + np.nanmean(err_sq, axis=axis))
-            ste = np.sqrt(np.nansum((dat - expand_by1dim(avg, dat.shape[axis], axis=axis)) ** 2 * w, axis=axis) \
-                          / ((dat.shape[axis] - 1) * np.nansum(w, axis=axis)) + 1. / np.nansum(w, axis=axis))
+            if axis is None:
+                ste = np.sqrt(np.nansum((dat - avg) ** 2 * w, axis=axis) \
+                              / ((datsize - 1) * np.nansum(w, axis=axis)) + 1. / np.nansum(w, axis=axis))
+            else:
+                ste = np.sqrt(np.nansum((dat - expand_by1dim(avg, datsize, axis=axis)) ** 2 * w, axis=axis) \
+                              / ((datsize - 1) * np.nansum(w, axis=axis)) + 1. / np.nansum(w, axis=axis))
         else:
             err_sq = err ** 2
             w = 1. / err_sq
             avg = np.average(dat, axis=axis, weights=1./err_sq)
             std = np.sqrt(np.var(dat, axis=axis) + np.average(err_sq, axis=axis))
-            ste = np.sqrt(np.sum((dat - expand_by1dim(avg, dat.shape[axis], axis=axis))**2 * w, axis=axis) \
-            / ((dat.shape[axis] - 1) * np.sum(w, axis=axis)) + 1./np.sum(w, axis=axis))
+            if axis is None:
+                ste = np.sqrt(np.sum((dat - avg) ** 2 * w, axis=axis) \
+                              / ((datsize - 1) * np.sum(w, axis=axis)) + 1. / np.sum(w, axis=axis))
+            else:
+                ste = np.sqrt(np.sum((dat - expand_by1dim(avg, datsize, axis=axis))**2 * w, axis=axis) \
+                / ((datsize - 1) * np.sum(w, axis=axis)) + 1./np.sum(w, axis=axis))
 
     return avg, std, ste
 
@@ -162,7 +180,7 @@ def timeAverageDatByRefs_v2(timeDat, dat, timeRef, err=None, skipnan=False):
     else:
         errAtRef = None
 
-    dat_Ref, std_Ref, err_Ref = average(datAtRef, err=errAtRef, skipnan=skipnan)
+    dat_Ref, std_Ref, err_Ref = average(datAtRef, err=errAtRef, axis=-1, skipnan=skipnan)
 
     return dat_Ref, std_Ref, err_Ref
 
@@ -655,8 +673,8 @@ def dB(spec, spec_err):
     return spec_db, spec_err_db
 
 
-def toZeroMeanTimeSliceEnsemble(xx, NFFT, NEns, NOV, existtime=False, time=None, tout=None):
-    xens = toTimeSliceEnsemble(xx, NFFT, NEns, NOV, existtime=False, time=None, tout=None)
+def toZeroMeanTimeSliceEnsemble(xx, NFFT, NEns, NOV, time=None, tout=None):
+    xens = toTimeSliceEnsemble(xx, NFFT, NEns, NOV, time=time, tout=tout)
     xensAvg = np.average(xens, axis=-1)
     xensAvg = repeat_and_add_lastdim(xensAvg, NFFT)
     xens -= xensAvg
@@ -673,11 +691,11 @@ def toZeroMeanTimeSliceEnsemble(xx, NFFT, NEns, NOV, existtime=False, time=None,
 #     return idxs_samp
 
 
-def toTimeSliceEnsemble(xx, NFFT, NEns, NOV, existtime=False, time=None, tout=None):  # time, tout: 1darray
+def toTimeSliceEnsemble(xx, NFFT, NEns, NOV, time=None, tout=None):  # time, tout: 1darray
 
     print(f'Overlap ratio: {NOV / NFFT * 100:.0f}%\n')
 
-    if existtime:
+    if time is not None:
         if len(xx) != len(time):
             print('The number of samples is improper. \n')
             sys.exit()
@@ -760,7 +778,7 @@ def CVForBiSpecAna(NFFTs, NEns, NOVs):
     return CV_ND2ND1, CV_ND3
 
 
-def getWindowAndCoefs(NFFT, window, NEns, NOV):
+def getWindowAndCoefs(NFFT, window, NEns):
 
     win, enbw, CG = get_window(NFFT, window)
     CV = get_CV(NEns)
@@ -1286,6 +1304,7 @@ def get_Sxx(fft_x, CV):
 
     return Sxx_avg, Sxx_std, Sxx_err
 
+
 def get_psd(fft_x, CV, dt, NFFT, enbw, CG):
 
     Sxx_ave, Sxx_std, Sxx_err = get_Sxx(fft_x, CV)
@@ -1445,14 +1464,14 @@ def cross_cor(sig, ref, tsig, tref, mode="full"):
     return lags, CCF, CCC
 
 
-def cross_cor_v2(sig, ref, dt):
+def cross_cor_v2(sig, ref, dt, mode="same"):
 
     sig_norm = (sig - sig.mean()) / sig.std(ddof=1)
     ref_norm = (ref - ref.mean()) / ref.std(ddof=1)
 
     length = len(ref_norm)
-    CCF = signal.correlate(sig_norm, ref_norm, mode="full", method="fft") / length
-    idxs_lags = signal.correlation_lags(len(sig_norm), len(ref_norm), mode="full")
+    CCF = signal.correlate(sig_norm, ref_norm, mode=mode, method="fft") / length
+    idxs_lags = signal.correlation_lags(len(sig_norm), len(ref_norm), mode=mode)
     lags = idxs_lags * dt
 
     o = struct()
@@ -1467,14 +1486,29 @@ def cross_cor_v2(sig, ref, dt):
     return o
 
 
+def interpolate_nan(array):
+    nans, x = np.isnan(array), lambda z: z.nonzero()[0]
+    array[nans] = np.interp(x(nans), x(~nans), array[~nans])
+    return array
+
+
 def delay_by_CCC(lags, CCC):
     return lags[np.nanargmax(CCC)],
 
 
-def delay_by_ccf(lags, ccf):
-    corrmax = np.nanmax(ccf)
-    delay = lags[np.nanargmax(ccf)]
-    return delay, corrmax
+def delay_by_ccf(lags, ccf, window_len):
+
+    ccf_ma = moving_average(ccf, window_len, mode="same")
+
+    idx_max = np.nanargmax(ccf_ma)
+    idx_min = np.nanargmin(ccf_ma)
+
+    Cmax = ccf[idx_max]
+    Cmin = ccf[idx_min]
+    delay_max = lags[idx_max]
+    delay_min = lags[idx_min]
+
+    return idx_max, idx_min, Cmax, Cmin, delay_max, delay_min
 
 
 def get_dat_for_cross_correlation_around_tat(tt, sig, ref, tat, Nsample=10000):
@@ -1505,16 +1539,24 @@ def cross_correlation_analysis(sig, ref, tsig, tref, mode="full", delay_by_ccc_a
     return lags, ccf, ccc, ccc_amp, delay
 
 
-def cross_correlation_analysis_v2(sig, ref, dt):
+def cross_correlation_analysis_v2(sig, ref, dt, window_len=5, mode="ccf"):
+    # mode = "envelope", "ccf"
 
     cc = cross_cor_v2(sig, ref, dt)
+    idx0 = np.argmin(np.abs(cc.lags - 0))
+    cc.cc0 = cc.ccf[idx0]
+
     if np.iscomplexobj(cc.ccf):
-        ccf_amp = np.abs(cc.ccf)
+        cc.ccf_env = np.abs(cc.ccf)
     else:
-        ccf_amp = envelope(cc.ccf)
+        cc.ccf_env = envelope(cc.ccf)
 
-    delay, corrmax = delay_by_ccf(cc.lags, ccf_amp)
-
+    if mode == "envelope":
+        idx_max, idx_min, cc.cmax, cc.cmin, cc.delay_max, cc.delay_min \
+            = delay_by_ccf(cc.lags, cc.ccf_env, window_len=window_len)
+    elif mode == "ccf":
+        idx_max, idx_min, cc.cmax, cc.cmin, cc.delay_max, cc.delay_min \
+            = delay_by_ccf(cc.lags, cc.ccf, window_len=window_len)
 
     # try:
     #     lags_inc = np.mean(np.diff(cc.lags))
@@ -1538,19 +1580,7 @@ def cross_correlation_analysis_v2(sig, ref, dt):
     #     peakcorr, delay, sigma, bg = [np.nan]*4
     #     print('error in curve fit ... skipping this set')
 
-    o = struct()
-    o.sig = sig
-    o.ref = ref
-    o.dt = dt
-    o.sig_norm = cc.sig_norm
-    o.ref_norm = cc.ref_norm
-    o.lags = cc.lags
-    o.ccf = cc.ccf
-    o.ccf_amp = ccf_amp
-    o.delay = delay
-    o.corrmax = corrmax
-
-    return o
+    return cc
 
 
 def cross_correlation_analysis_temporal(sig, ref, tt, Nsample=10000, mode="full", delay_by_ccc_amp=False):
@@ -1832,8 +1862,12 @@ def cross_spectrogram_2s(tt, xx, yy, NFFT=2**10, NEns=20, window='hann', OVR=0.5
     tsp = time_for_spectrogram(tt, idxs)
     xens = xx[idxs]
     yens = yy[idxs]
+    xens_avg = proc.repeat_and_add_lastdim(np.average(xens, axis=-1), NFFT)
+    yens_avg = proc.repeat_and_add_lastdim(np.average(yens, axis=-1), NFFT)
+    xens = xens - xens_avg
+    yens = yens - yens_avg
 
-    win, enbw, CG, CV = getWindowAndCoefs(NFFT, window, NEns, NOV)
+    win, enbw, CG, CV = getWindowAndCoefs(NFFT, window, NEns)
 
     dt = tt[1] - tt[0]
     freq = get_freq_for_spectrum(NFFT, dt)
@@ -1861,6 +1895,7 @@ def cross_spectrogram_2s(tt, xx, yy, NFFT=2**10, NEns=20, window='hann', OVR=0.5
     o.CV = CV
     o.dt = dt
     o.tsp = tsp
+    o.dtsp = tsp[1] - tsp[0]
     o.freq = freq
     o.Sxx_avg = Sxx_avg
     o.Sxx_std = Sxx_std
@@ -2101,7 +2136,7 @@ def biCoherenceSq(BSpec, BSpecStd, X1, X2, X3, NFFTs, NEns, NOVs):
 
 def biCoherenceSq_v2(BSpec, BSpecStd, X1, X2, X3, NEns):
 
-    CV = 1. / np.sqrt(NEns)
+    CV = 1. / NEns
 
     X2X1 = np.matmul(X2, X1)
     X2X1AbsSq = np.abs(X2X1) ** 2
@@ -2178,8 +2213,7 @@ def makeIdxsForAutoBiSpectrum(NFFT):
     return idxMx3, idxNan
 
 
-def makeIdxsForCrossBiSpectrum(NFFTs):
-    NFFTx, NFFTy, NFFTz = NFFTs
+def makeIdxsForCrossBiSpectrum(NFFTx, NFFTy, NFFTz):
 
     idxf0x = NFFTx // 2
     idxf0y = NFFTy // 2
@@ -2192,7 +2226,7 @@ def makeIdxsForCrossBiSpectrum(NFFTs):
     coefMx3 = coefMx1 + coefMx2
     idxMx3 = coefMx3 + idxf0z
     idxNan = np.where(((idxMx3 < 0) | (idxMx3 >= NFFTz)))
-    idxMx3[idxNan] = False
+    idxMx3[idxNan] = 0
 
     del idxMx1
     del idxMx2
@@ -2318,38 +2352,69 @@ def crossBiSpecAna_v2(freqs, XX0, YY0, ZZ0, NFFTs, NEns, NOVs, iscomplex=False):
     return biCohSq, biCohSqErr, biPhs, biPhsErr
 
 
-def crossBiSpecAna_v3(times, dats, Nffts=[2**10, 2**10, 2**10], ovr=0.5, window="hann", Nens=20, iscomplex=False):  # not completed
+def cross_bispectrum(freqx, freqy, XX0, YY0, ZZ0, NFFTx, NFFTy, NFFTz, NEns,
+                     Fsx, Fsy, Fsz, flimx=None, flimy=None):
 
-    tx, ty, tz = times
-    x, y, z = dats
-    NFFTx, NFFTy, NFFTz = Nffts
-    NOVx, NOVy, NOVz = int(Nffts * ovr)
+    idxMxz, _ = makeIdxsForCrossBiSpectrum(NFFTx, NFFTy, NFFTz)
 
-    Nspx, Nsampx, Ndatx = Nspectra_v2(tx, NFFTx, Nens, NOVx)
-    Nspy, Nsampy, Ndaty = Nspectra_v2(ty, NFFTy, Nens, NOVy)
-    Nspz, Nsampz, Ndatz = Nspectra_v2(tz, NFFTz, Nens, NOVz)
-    tx = tx[:Ndat]
-    ty = ty[:Ndat]
-    tz = tz[:Ndat]
-    x = x[:Ndat]
-    y = y[:Ndat]
-    z = z[:Ndat]
-
-    idxs = make_idxs_for_spectrogram_v2(NFFT, NEns, NOV, Nsp)
-    tisp = time_for_spectrogram(ti, idxs)
-    xens = xx[idxs]
-
-    freq, fft_x = fourier_components_2s(xens, dt, NFFT, win)
-
-
-    idxMxz, idxNan = makeIdxsForCrossBiSpectrum(NFFTs)
+    freq1 = np.tile(freqx, (NFFTy, 1))
+    freq2 = np.tile(freqy, (NFFTx, 1)).T
 
     XX = np.reshape(XX0, (NEns, 1, NFFTx))
     YY = np.reshape(YY0, (NEns, NFFTy, 1))
     ZZ = ZZ0[:, idxMxz]
 
-    BSpec, BSpecStd, BSpecReStd, BSpecImStd = biSpectrum(XX, YY, ZZ)
+    # limitation
+    if flimx is not None:
+        fidx_x = np.where(np.abs(freqx) < flimx)[0]
+        freqx = freqx[fidx_x]
+        freq1 = freq1[:, fidx_x]
+        freq2 = freq2[:, fidx_x]
+        XX = XX[:, :, fidx_x]
+        ZZ = ZZ[:, :, fidx_x]
+    if flimy is not None:
+        fidx_y = np.where(np.abs(freqy) < flimy)[0]
+        freqy = freqy[fidx_y]
+        freq1 = freq1[fidx_y, :]
+        freq2 = freq2[fidx_y, :]
+        YY = YY[:, fidx_y, :]
+        ZZ = ZZ[:, fidx_y, :]
 
+    # symmetry
+    iscomplex = np.iscomplex(XX).any()
+
+    if (XX0 == YY0).all():
+        fidx_x = np.where(freqx >= - 0.5 * 0.5 * Fsx)[0]
+        fidx_y = np.where(freqy <= 0.5 * 0.5 * Fsy)[0]
+        if not iscomplex:
+            fidx_x = np.where(freqx >= 0)[0]
+            fidx_y = np.where(freqy <= 0.5 * 0.5 * Fsy)[0]
+            if (XX0 == ZZ0).all():
+                fidx_y = np.where((freqy <= 0.5 * 0.5 * Fsy)&(freqy >= 0.5 * 0.5 * Fsy))[0]
+
+        freqx = freqx[fidx_x]
+        freqy = freqy[fidx_y]
+        freq1 = freq1[:, fidx_x]
+        freq1 = freq1[fidx_y, :]
+        freq2 = freq2[:, fidx_x]
+        freq2 = freq2[fidx_y, :]
+        XX = XX[:, :, fidx_x]
+        YY = YY[:, fidx_y, :]
+        ZZ = ZZ[:, :, fidx_x]
+        ZZ = ZZ[:, fidx_y, :]
+
+    # assign nan value
+    if (XX0 == YY0).all():
+        idxNan = np.where((np.abs(freq2 + freq1) > Fsz / 2) | (freq2 > freq1))
+        if not iscomplex:
+            idxNan = np.where((np.abs(freq2 + freq1) > Fsz / 2) | (freq2 > freq1) | (freq2 < - freq1))
+            if (XX0 == ZZ0).all():
+                idxNan = np.where((np.abs(freq2 + freq1) > Fsz / 2) | (freq2 > freq1)
+                                  | (freq2 < - freq1) | (freq2 < - 0.5 * freq1))
+    else:
+        idxNan = np.where(np.abs(freq2 + freq1) > Fsz / 2)
+
+    BSpec, BSpecStd, BSpecReStd, BSpecImStd = biSpectrum(XX, YY, ZZ)
     biCohSq, biCohSqErr = biCoherenceSq_v2(BSpec, BSpecStd, XX, YY, ZZ, NEns)
     biPhs, biPhsErr = biPhase_v2(BSpec, BSpecReStd, BSpecImStd, NEns)
 
@@ -2358,28 +2423,95 @@ def crossBiSpecAna_v3(times, dats, Nffts=[2**10, 2**10, 2**10], ovr=0.5, window=
     biPhs[idxNan] = np.nan
     biPhsErr[idxNan] = np.nan
 
-    # symmetry
-    freq1 = np.tile(freqx, (NFFTy, 1))
-    freq2 = np.tile(freqy, (NFFTx, 1)).T
-
-    if (XX0 == YY0).all():
-        if iscomplex:
-            idxNan2 = np.where(freq2 > freq1)
-        else:
-            idxNan2 = np.where((freq2 > freq1) | (freq1 < 0) | (freq2 < - freq1))
-    else:
-        if iscomplex:
-            idxNan2 = []
-        else:
-            idxNan2 = np.where((freq1 < 0) | (freq2 < 0))
-
-    biCohSq[idxNan2] = np.nan
-    biCohSqErr[idxNan2] = np.nan
-    biPhs[idxNan2] = np.nan
-    biPhsErr[idxNan2] = np.nan
+    return freqx, freqy, biCohSq, biCohSqErr, biPhs, biPhsErr
 
 
-    return biCohSq, biCohSqErr, biPhs, biPhsErr
+def cross_bispectral_analysis(xx, yy, zz, dtx, dty, dtz,
+                              NFFTx, NFFTy, NFFTz, flimx=None, flimy=None,
+                              OVR=0.5, window="hann"):
+
+    o = struct()
+
+    o.NFFTx = NFFTx
+    o.NFFTy = NFFTy
+    o.NFFTz = NFFTz
+    o.OVR = OVR
+    o.window = window
+
+    o.NOVx = int(NFFTx * OVR)
+    o.NOVy = int(NFFTy * OVR)
+    o.NOVz = int(NFFTz * OVR)
+
+    o.Tx = NFFTx * dtx  # Analysis time
+    o.Ty = NFFTy * dty  # Analysis time
+    o.Tz = NFFTz * dtz  # Analysis time
+    if o.Tx != o.Ty or o.Tx != o.Tz or o.Tz != o.Tx:
+        filename, lineno = proc.get_current_file_and_line()
+        print(f"file: {filename}, line: {lineno}")
+        print('Frequency bin widths are different. \n')
+        exit()
+
+    # Bi-Spectral Analysis
+    xidxs = sliding_window_view(np.arange(xx.size), NFFTx)[::NFFTx - o.NOVx]
+    o.NEns = xidxs.shape[-2]
+    o.xens = xx[xidxs]
+    o.xens = o.xens - o.xens.mean(axis=-1, keepdims=True)
+    o.winx, o.enbwx, o.CGx, o.CVx = getWindowAndCoefs(NFFTx, window, o.NEns)
+    o.freqx, o.XX = fourier_components_2s(o.xens, dtx, NFFTx, o.winx)
+
+    yidxs = sliding_window_view(np.arange(yy.size), NFFTy)[::NFFTy - o.NOVy]
+    o.yens = yy[yidxs]
+    o.yens = o.yens - o.yens.mean(axis=-1, keepdims=True)
+    o.winy, o.enbwy, o.CGy, o.CVy = getWindowAndCoefs(NFFTy, window, o.NEns)
+    o.freqy, o.YY = fourier_components_2s(o.yens, dty, NFFTy, o.winy)
+
+    zidxs = sliding_window_view(np.arange(zz.size), NFFTz)[::NFFTz - o.NOVz]
+    o.zens = zz[zidxs]
+    o.zens = o.zens - o.zens.mean(axis=-1, keepdims=True)
+    o.winz, o.enbwz, o.CGz, o.CVz = getWindowAndCoefs(NFFTz, window, o.NEns)
+    _, o.ZZ = fourier_components_2s(o.zens, dtz, NFFTz, o.winz)
+
+    o.freqx = o.freqx.astype(np.float32)
+    o.freqy = o.freqy.astype(np.float32)
+    o.XX = o.XX.astype(np.complex64)
+    o.YY = o.YY.astype(np.complex64)
+    o.ZZ = o.ZZ.astype(np.complex64)
+    o.freqx, o.freqy, o.biCohSq, o.biCohSqErr, o.biPhs, o.biPhsErr \
+        = cross_bispectrum(o.freqx, o.freqy, o.XX, o.YY, o.ZZ,
+                           NFFTx, NFFTy, NFFTz, o.NEns,
+                           1./dtx, 1./dty, 1./dtz, flimx=flimx, flimy=flimy)
+    o.biCohSqRer = o.biCohSqErr / o.biCohSq
+
+    return o
+
+
+def auto_bispectral_analysis(xx, dt, NFFT, OVR=0.5, window="hann", NEns=20):  # not completed
+
+    o = struct()
+
+    o.xx = xx
+    o.dt = dt
+    o.NFFT = NFFT
+    o.OVR = OVR
+    o.window = window
+    o.NEns = NEns
+
+    o.NOV = int(NFFT * OVR)
+
+    o.T = NFFT * dt  # Analysis time
+
+    # Bi-Spectral Analysis
+    o.xens = np.lib.stride_tricks.sliding_window_view(xx, window_shape=NFFT)[::NFFT - o.NOV]
+    o.xens = o.xens - o.xens.mean(axis=-1, keepdims=True)
+    o.win, o.enbw, o.CG, o.CV = getWindowAndCoefs(NFFT, window, NEns)
+    o.freq, o.XX = fourier_components_2s(o.xens, dt, NFFT, o.win)
+
+    o.biCohSq, o.biCohSqErr, o.biPhs, o.biPhsErr = cross_bispectrum(o.freq, o.freq, o.XX, o.XX, o.XX,
+                                                                    NFFT, NFFT, NFFT, NEns,
+                                                                    iscomplex=np.iscomplex(xx).any())
+    o.biCohSqRer = o.biCohSqErr / o.biCohSq
+
+    return o
 
 
 def autoBiSpecAna_v2(freq, X0, NFFT, NEns, NOV, iscomplex=False):
@@ -2426,15 +2558,25 @@ def average_bicoherence_at_f3(freq1, freq2, bicoherence):
     return freq3, bicoh_f3
 
 
-def average_bicoherence_at_f3_withErr(freq1, freq2, bicoherence, bicoherence_Err):
+def total_bicoherence(freq1, freq2, bicoherence):
     N1 = len(freq1)
     N2 = len(freq2)
     dfreq = freq1[1] - freq1[0]
     idxs = np.arange((N1 + N2) - 1) - (N1 - 1)
     freq3 = dfreq * idxs
     bicoh_f3 = np.array([np.nanmean(np.diagonal(bicoherence, offset=i)) for i in idxs])
-    bicoh_f3_err = np.array([np.sqrt(np.nanvar(np.diagonal(bicoherence, offset=i)) +
-                                     np.nanmean(np.diagonal(bicoherence_Err**2, offset=i))) for i in idxs])
+    return freq3, bicoh_f3
+
+
+def average_bicoherence_at_f3_withErr(freq1, freq2, bicoherence, bicoherence_Err):
+    N1 = len(freq1)
+    N2 = len(freq2)
+    dfreq = freq1[1] - freq1[0]
+    idxs = np.arange((N1 + N2) - 5) - (N1 - 3)
+    freq3 = dfreq * idxs
+    bicoh_f3 = np.array([np.nanmean(np.diagonal(np.flipud(bicoherence), offset=i)) for i in idxs])
+    bicoh_f3_err = np.array([np.sqrt(np.nanvar(np.diagonal(np.flipud(bicoherence), offset=i)) +
+                                     np.nanmean(np.diagonal(np.flipud(bicoherence_Err)**2, offset=i))) for i in idxs])
     return freq3, bicoh_f3, bicoh_f3_err
 
 
@@ -3601,3 +3743,35 @@ def moving_average(data, window_size, mode="same"):
     moving_average = (cumsum[window_size:] - cumsum[:-window_size]) / window_size
 
     return moving_average
+
+
+def divide(nu, de, n_err=None, d_err=None):
+
+    quo = nu / de
+    if n_err is None:
+        if d_err is None:
+            quo_err = None
+        else:
+            quo_err = np.abs(d_err/de * quo)
+    else:
+        if d_err is None:
+            quo_err = np.abs(n_err/nu * quo)
+        else:
+            quo_err = np.abs(np.sqrt((n_err/nu)**2 + (d_err/de)**2) * quo)
+
+    return quo, quo_err
+
+
+def multiple(A, B, A_err=None, B_err=None):
+    pro = A * B
+    if A_err is None:
+        if B_err is None:
+            pro_err = None
+        else:
+            pro_err = np.abs(B_err / B * pro)
+    else:
+        if B_err is None:
+            pro_err = np.abs(A_err / A * pro)
+        else:
+            pro_err = np.abs(np.sqrt((A_err / A)**2 + (B_err / B)**2) * pro)
+    return pro, pro_err

@@ -840,7 +840,8 @@ def LHD_IQ_et_v3(sn, subsn, diagname, chs, et):
     Idat, Iprms = LHDR.RetrieveData_et(diagname, sn, subsn, chs[0], et)
     Qdat, Qprms = LHDR.RetrieveData_et(diagname, sn, subsn, chs[1], et)
     tdat, tprms = LHDR.RetrieveTime(diagname, sn, subsn, chs[0])
-    tdat = tdat[(tdat >= et[0]) & (tdat <= et[1])]
+    tsidx = np.argmin(np.abs(tdat - et[0]))
+    tdat = tdat[tsidx: tsidx + Idat.size]
 
     dT = parse('{:f}{:S}', tprms['ClockCycle'][0])[0]
     tsize = len(tdat)
