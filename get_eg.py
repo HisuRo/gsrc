@@ -10,10 +10,7 @@ from mpl_toolkits import mplot3d
 from matplotlib import cm
 
 from nasu.myEgdb import LoadEG
-from nasu import read, calc, getShotInfo, proc, myEgdb, plot
-
-
-ee = 1.602176634  # [10^-19 C]
+from nasu import read, calc, getShotInfo, proc, myEgdb, plot, const
 
 
 class struct:
@@ -622,9 +619,9 @@ class tsmap:
 
         self.B = np.sqrt(self.Br ** 2 + self.Bz ** 2 + self.Bphi ** 2)
 
-        self.pe = ee * self.Te * self.ne_calFIR  # [kPa]
+        self.pe = const.ee * self.Te * self.ne_calFIR  # [kPa]
         self.pe_err = np.sqrt((self.dTe/self.Te)**2 + (self.dne_calFIR/self.ne_calFIR)**2) * self.pe
-        self.pe_fit = ee * self.Te_fit * self.ne_fit  # [kPa]
+        self.pe_fit = const.ee * self.Te_fit * self.ne_fit  # [kPa]
         self.pe_fit_err = np.sqrt((self.Te_fit_err / self.Te_fit) ** 2 +
                                   (self.ne_fit_err / self.ne_fit) ** 2) * self.pe_fit
 
@@ -1596,13 +1593,13 @@ class cxsmap7:
                    self.pol.p0, self.pol.pf, self.pol.ip, self.pol.ipf,
                    self.pol.Br, self.pol.Bz, self.pol.Bphi, self.pol.dVdreff,
                    self.pol.Te, self.pol.ne, self.pol.t1,
-                   self.pol.reffa99, self.pol.TeTi,
+                   self.pol.reffa99,
                    self.tor.Ti, self.tor.Tier, self.tor.Vc, self.tor.Ver, self.tor.inc, self.tor.icer,
                    self.tor.Vr, self.tor.reff, self.tor.a99,
                    self.tor.p0, self.tor.pf, self.tor.ip, self.tor.ipf,
                    self.tor.Br, self.tor.Bz, self.tor.Bphi, self.tor.dVdreff,
                    self.tor.Te, self.tor.ne, self.tor.t1,
-                   self.tor.reffa99, self.tor.TeTi]
+                   self.tor.reffa99]
 
         _, datlist_at = proc.getTimeIdxAndDats(self.t, time, datlist)
         self.at.t, \
@@ -1611,13 +1608,13 @@ class cxsmap7:
         self.at.pol.p0, self.at.pol.pf, self.at.pol.ip, self.at.pol.ipf, \
         self.at.pol.Br, self.at.pol.Bz, self.at.pol.Bphi, self.at.pol.dVdreff, \
         self.at.pol.Te, self.at.pol.ne, self.at.pol.t1, \
-        self.at.pol.reffa99, self.at.pol.TeTi, \
+        self.at.pol.reffa99, \
         self.at.tor.Ti, self.at.tor.Tier, self.at.tor.Vc, self.at.tor.Ver, self.at.tor.inc, self.at.tor.icer, \
         self.at.tor.Vr, self.at.tor.reff, self.at.tor.a99, \
         self.at.tor.p0, self.at.tor.pf, self.at.tor.ip, self.at.tor.ipf, \
         self.at.tor.Br, self.at.tor.Bz, self.at.tor.Bphi, self.at.tor.dVdreff, \
         self.at.tor.Te, self.at.tor.ne, self.at.tor.t1, \
-        self.at.tor.reffa99, self.at.tor.TeTi = datlist_at
+        self.at.tor.reffa99 = datlist_at
 
         if include_grad:
             datlist = [self.pol.Ti_polyfit, self.pol.Ti_polyfit_err,

@@ -24,8 +24,13 @@ def interleave_lists(list1, list2):
     return interleaved_list
 
 
-def connect_list_to_str(list, by="_", format_str="{:.0f}"):
-    return by.join(map(lambda x: format_str.format(x), list))
+def connect_list_to_str(list, by="_", format_str=None):
+    # for instance, format_str="{:.0f}"
+    if format_str is None:
+        connected_str = by.join(map(str, list))
+    else:
+        connected_str = by.join(map(lambda x: format_str.format(x), list))
+    return connected_str
 
 
 def makefftsampleidxs(tdat, tout, NFFT, NEns, NOV):

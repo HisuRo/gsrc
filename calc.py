@@ -3,20 +3,12 @@ from numpy.lib.stride_tricks import sliding_window_view
 from scipy import signal, fft, interpolate, optimize
 import gc
 import matplotlib.pyplot as plt
-from nasu import proc, plot, getShotInfo, myEgdb, read
+from nasu import proc, plot, getShotInfo, myEgdb, read, const
 import os
 import sys
 import inspect
 import traceback
 import time
-
-
-
-ee = 1.602176634E-19   # [C]
-me = 9.1093837E-31     # [kg]
-mp = 1.672621898e-27  # (kg)
-eps0 = 8.85418782E-12  # [m^-3 kg^-1 s^4 A^2]
-mu0 = 4*np.pi*1.E-7    # [m kg s^-2 A^-2]
 
 
 class struct:
@@ -326,8 +318,8 @@ def MakeLLSMFitProfilesFromTS(sn, startTime, endTime, Nfit, poly):
                                                          dat_Te_grad, err_Te_grad, Rax)
     dat_etae, err_etae = eta(dat_LTe, err_LTe, dat_Lne, err_Lne)
 
-    omega_ce = ee * B / me
-    tmp = 1e19 * ee ** 2 / (eps0 * me)
+    omega_ce = const.ee * B / const.me
+    tmp = 1e19 * const.ee ** 2 / (const.eps0 * const.me)
     omega_pe, omega_pe_err = sqrt_AndErr(dat_ne * tmp, err_ne * tmp)
     omega_L = 0.5 * (-omega_ce + np.sqrt(omega_ce ** 2 + 4 * omega_pe ** 2))
     omega_L_err = np.abs(0.5 * 0.5 * 1 / np.sqrt(omega_ce ** 2 + 4 * omega_pe ** 2) * 4 * 2 * omega_pe * omega_pe_err)
@@ -1433,44 +1425,42 @@ def calib_dbs9O(chDiag, pathCalib, Idat, Qdat):
     return Idat, Qdat
 
 
-def cross_cor(sig, ref, tsig, tref, mode="full"):
-    # ref moves along sig when calculating correlation
-    # ref should be smaller than or equal to sig
-
-    if len(ref) > len(sig):
-        print("ref should be smaller than or equal to sig")
-        sys.exit()
-
-    dt = tref[1] - tref[0]
-
-    # CCF
-    length = len(ref)
-    CCF = signal.correlate(sig, ref, mode=mode) / length
-    idxs_lags = signal.correlation_lags(len(sig), len(ref), mode=mode)
-    lags = idxs_lags * dt
-
-    dt_tsig0_tref0 = tref[0] - tsig[0]
-    lags = lags - dt_tsig0_tref0
-
-    # CCC
-    Cref0 = np.sum(ref**2) / length
-    Csig0 = np.zeros(len(lags))
-    for j ,i in enumerate(idxs_lags):
-        idxs_tmp = np.arange(i, i+length)
-        idxs_tmp = np.delete(idxs_tmp, np.where((idxs_tmp < 0) | (idxs_tmp > len(sig) - 1)))
-        Csig0[j] = np.sum(sig[idxs_tmp]**2) / length
-    CCC = CCF / np.sqrt(Csig0 * Cref0)
-
-    return lags, CCF, CCC
+def interpolate_nan(array):
+    nans, x = np.isnan(array), lambda z: z.nonzero()[0]
+    array[nans] = np.interp(x(nans), x(~nans), array[~nans])
+    return array
 
 
-def cross_cor_v2(sig, ref, dt, mode="same"):
+def cross_correlation_analysis(sig, ref, dt, window_len=1, mode="ccc"):
+    # mode = "envelope", "ccc"
+    # cc.delay (or cc.lags): sig's delay (or lag) time to ref
 
-    sig_norm = (sig - sig.mean()) / sig.std(ddof=1)
-    ref_norm = (ref - ref.mean()) / ref.std(ddof=1)
+    cc = cross_correlation(sig, ref, dt, mode="full")
+    idx0 = np.argmin(np.abs(cc.lags - 0))
+    cc.ccc0 = cc.ccc[idx0]
+
+    if np.iscomplexobj(cc.ccc):
+        cc.ccc_env = np.abs(cc.ccc)
+    else:
+        cc.ccc_env = envelope(cc.ccc)
+
+    if mode == "envelope":
+        cc.idx_max, cc.idx_min, cc.ccc_max, cc.ccc_min, cc.delay_max, cc.delay_min \
+            = delay_by_ccc(cc.lags, cc.ccc_env, window_len=window_len)
+    elif mode == "ccc":
+        cc.idx_max, cc.idx_min, cc.ccc_max, cc.ccc_min, cc.delay_max, cc.delay_min \
+            = delay_by_ccc(cc.lags, cc.ccc, window_len=window_len)
+
+    return cc
+
+
+def cross_correlation(sig, ref, dt, mode="same"):
+
+    sig_norm = (sig - sig.mean()) / sig.std()
+    ref_norm = (ref - ref.mean()) / ref.std()
 
     length = len(ref_norm)
-    CCF = signal.correlate(sig_norm, ref_norm, mode=mode, method="fft") / length
+    ccc = signal.correlate(sig_norm, ref_norm, mode=mode, method="fft") / length
     idxs_lags = signal.correlation_lags(len(sig_norm), len(ref_norm), mode=mode)
     lags = idxs_lags * dt
 
@@ -1480,107 +1470,26 @@ def cross_cor_v2(sig, ref, dt, mode="same"):
     o.dt = dt
     o.sig_norm = sig_norm
     o.ref_norm = ref_norm
-    o.lags = lags
-    o.ccf = CCF
+    o.lags = lags   # sig's lag time to ref
+    o.ccc = ccc
 
     return o
 
 
-def interpolate_nan(array):
-    nans, x = np.isnan(array), lambda z: z.nonzero()[0]
-    array[nans] = np.interp(x(nans), x(~nans), array[~nans])
-    return array
+def delay_by_ccc(lags, ccc, window_len=1):
 
+    ccc_ma = moving_average(ccc, window_len, mode="same")
 
-def delay_by_CCC(lags, CCC):
-    return lags[np.nanargmax(CCC)],
+    idx_max = np.nanargmax(ccc_ma)
+    idx_min = np.nanargmin(ccc_ma)
 
-
-def delay_by_ccf(lags, ccf, window_len):
-
-    ccf_ma = moving_average(ccf, window_len, mode="same")
-
-    idx_max = np.nanargmax(ccf_ma)
-    idx_min = np.nanargmin(ccf_ma)
-
-    Cmax = ccf[idx_max]
-    Cmin = ccf[idx_min]
+    ccc_max = ccc[idx_max]
+    ccc_min = ccc[idx_min]
     delay_max = lags[idx_max]
     delay_min = lags[idx_min]
 
-    return idx_max, idx_min, Cmax, Cmin, delay_max, delay_min
+    return idx_max, idx_min, ccc_max, ccc_min, delay_max, delay_min
 
-
-def get_dat_for_cross_correlation_around_tat(tt, sig, ref, tat, Nsample=10000):
-
-    idx_at = np.argmin(np.abs(tt - tat))
-    sig_tlim = sig[idx_at - Nsample: idx_at + Nsample]
-    tsig_tlim = tt[idx_at - Nsample: idx_at + Nsample]
-    ref_tlim = ref[idx_at - Nsample // 2: idx_at + Nsample // 2]
-    tref_tlim = tt[idx_at - Nsample // 2: idx_at + Nsample // 2]
-
-    return tsig_tlim, sig_tlim, tref_tlim, ref_tlim
-
-
-def cross_correlation_analysis(sig, ref, tsig, tref, mode="full", delay_by_ccc_amp=False):
-
-    lags, ccf, ccc = cross_cor(sig, ref, tsig, tref, mode=mode)
-    if np.iscomplexobj(ccc):
-        ccc_amp = np.abs(ccc)
-    else:
-        ccc_amp = envelope(ccc)
-
-    if delay_by_ccc_amp:
-        delay = delay_by_CCC(lags, ccc_amp)
-    else:
-        delay = delay_by_CCC(lags, ccc)
-
-
-    return lags, ccf, ccc, ccc_amp, delay
-
-
-def cross_correlation_analysis_v2(sig, ref, dt, window_len=5, mode="ccf"):
-    # mode = "envelope", "ccf"
-
-    cc = cross_cor_v2(sig, ref, dt)
-    idx0 = np.argmin(np.abs(cc.lags - 0))
-    cc.cc0 = cc.ccf[idx0]
-
-    if np.iscomplexobj(cc.ccf):
-        cc.ccf_env = np.abs(cc.ccf)
-    else:
-        cc.ccf_env = envelope(cc.ccf)
-
-    if mode == "envelope":
-        idx_max, idx_min, cc.cmax, cc.cmin, cc.delay_max, cc.delay_min \
-            = delay_by_ccf(cc.lags, cc.ccf_env, window_len=window_len)
-    elif mode == "ccf":
-        idx_max, idx_min, cc.cmax, cc.cmin, cc.delay_max, cc.delay_min \
-            = delay_by_ccf(cc.lags, cc.ccf, window_len=window_len)
-
-    # try:
-    #     lags_inc = np.mean(np.diff(cc.lags))
-    #     _ik = signal.argrelextrema(ccf_amp, np.less)[0]
-    #     # _ik = np.argmax(ccf_amp)
-    #     if len(_ik) >= 2:
-    #         _iu1 = _ik[np.min(np.where(cc.lags[_ik] > 0))]
-    #         _il1 = _ik[np.min(np.where(cc.lags[_ik] > 0))-1]
-    #         if cc.lags[_iu1]-cc.lags[_il1] < 7.5:
-    #             _il1 = int(_il1 - 15/lags_inc)
-    #             _iu1 = int(_iu1 + 15/lags_inc)
-    #     else:
-    #         _iu1 = len(cc.lags)
-    #         _il1 = 0
-    #     walag = np.average(cc.lags, weights=ccf_amp)
-    #     inip = [np.max(ccf_amp), walag, walag, 0.]
-    #     popt, pcov = optimize.curve_fit(CCFfit, cc.lags[_il1:_iu1],
-    #                                     cc.ccf[_il1:_iu1], p0=inip)
-    #     sigma = popt[-1]
-    # except RuntimeError:
-    #     peakcorr, delay, sigma, bg = [np.nan]*4
-    #     print('error in curve fit ... skipping this set')
-
-    return cc
 
 
 def cross_correlation_analysis_temporal(sig, ref, tt, Nsample=10000, mode="full", delay_by_ccc_amp=False):
@@ -1613,6 +1522,17 @@ def cross_correlation_analysis_temporal(sig, ref, tt, Nsample=10000, mode="full"
     return np.array(tout), lags, np.array(ccf_list), np.array(ccc_list), np.array(ccc_amp_list), np.array(lag_list)
 
 
+def get_dat_for_cross_correlation_around_tat(tt, sig, ref, tat, Nsample=10000):
+
+    idx_at = np.argmin(np.abs(tt - tat))
+    sig_tlim = sig[idx_at - Nsample: idx_at + Nsample]
+    tsig_tlim = tt[idx_at - Nsample: idx_at + Nsample]
+    ref_tlim = ref[idx_at - Nsample // 2: idx_at + Nsample // 2]
+    tref_tlim = tt[idx_at - Nsample // 2: idx_at + Nsample // 2]
+
+    return tsig_tlim, sig_tlim, tref_tlim, ref_tlim
+
+
 def corrcoef_series(time, sig1, sig2, Nsamp):
 
     Ncorr = len(time) - Nsamp + 1
@@ -1633,6 +1553,30 @@ def corrcoef_series(time, sig1, sig2, Nsamp):
     corrcoef = sig12_cov / np.sqrt(sig1_var * sig2_var)
 
     return time_cor, corrcoef
+
+
+
+# try:
+#     lags_inc = np.mean(np.diff(cc.lags))
+#     _ik = signal.argrelextrema(ccf_amp, np.less)[0]
+#     # _ik = np.argmax(ccf_amp)
+#     if len(_ik) >= 2:
+#         _iu1 = _ik[np.min(np.where(cc.lags[_ik] > 0))]
+#         _il1 = _ik[np.min(np.where(cc.lags[_ik] > 0))-1]
+#         if cc.lags[_iu1]-cc.lags[_il1] < 7.5:
+#             _il1 = int(_il1 - 15/lags_inc)
+#             _iu1 = int(_iu1 + 15/lags_inc)
+#     else:
+#         _iu1 = len(cc.lags)
+#         _il1 = 0
+#     walag = np.average(cc.lags, weights=ccf_amp)
+#     inip = [np.max(ccf_amp), walag, walag, 0.]
+#     popt, pcov = optimize.curve_fit(CCFfit, cc.lags[_il1:_iu1],
+#                                     cc.ccf[_il1:_iu1], p0=inip)
+#     sigma = popt[-1]
+# except RuntimeError:
+#     peakcorr, delay, sigma, bg = [np.nan]*4
+#     print('error in curve fit ... skipping this set')
 
 
 def cross_spectre_2s(x, y, Fs, NEns, NFFT, window, NOV):
@@ -3416,16 +3360,16 @@ def turnLastDimToDiagMat(array):
 def EMwaveInPlasma(freqin, ne, B):
 
     e = 1.602176634e-19
-    me = 9.1093837e-31
-    eps0 = 8.85418782e-12
+    const.me = 9.1093837e-31
+    const.eps0 = 8.85418782e-12
 
     o = struct()
     o.fin = freqin
     o.ne = ne
     o.B = B
 
-    o.omgp = np.sqrt(ne * e ** 2 / (eps0 * me))
-    o.omgc = e * B / me
+    o.omgp = np.sqrt(ne * e ** 2 / (const.eps0 * const.me))
+    o.omgc = e * B / const.me
     o.omguh = np.sqrt(o.omgp ** 2 + o.omgc ** 2)
     o.omgL = 0.5 * (-o.omgc + np.sqrt(o.omgc ** 2 + 4 * o.omgp ** 2))
     o.omgR = 0.5 * (o.omgc + np.sqrt(o.omgc ** 2 + 4 * o.omgp ** 2))
@@ -3706,11 +3650,11 @@ def gyroradius(T_keV, B_T, kind="electron", A=1, Z=1, T_err=None):
 
     o = struct()
     if kind == "electron":
-        o.m = me
-        o.q = ee
+        o.m = const.me
+        o.q = const.ee
     elif kind == "ion":
-        o.m = mp * A
-        o.q = Z * ee
+        o.m = const.mp * A
+        o.q = Z * const.ee
     else:
         print("Please input correct kind name.")
         exit()

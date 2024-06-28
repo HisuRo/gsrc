@@ -214,6 +214,7 @@ class IQ:
                                          axis=-1, average="mean")
 
         self.spg.psd = fft.fftshift(self.spg.psd, axes=-1)
+        self.spg.psdamp = np.sqrt(self.spg.psd)
         self.spg.psddB = 10 * np.log10(self.spg.psd)
         if sub_phi:
             self.phase_ma = calc.moving_average(self.phaseIQ, window_size=self.spg.NFFT + 1, mode="same")
@@ -3419,17 +3420,36 @@ class twinIQ:
         if Rat is not None:
             self.iq1.ref_to_tsmap(Rat=Rat, skipnan=bgon1, bgon=bgon1)
             self.iq2.ref_to_tsmap(Rat=Rat, skipnan=bgon2, bgon=bgon2)
-            self.cc = calc.cross_correlation_analysis_v2(calc.interpolate_nan(self.iq1.tsmap.Iane),
-                                                         calc.interpolate_nan(self.iq2.tsmap.Iane), dT,
-                                                         window_len=window_len)
+            self.cc = calc.cross_correlation_analysis(calc.interpolate_nan(self.iq1.tsmap.Iane),
+                                                      calc.interpolate_nan(self.iq2.tsmap.Iane), dT,
+                                                      window_len=window_len)
         elif Rfir is not None:
             self.iq1.ref_to_fir_nel(Rfir=Rfir, bgon=bgon1)
             self.iq2.ref_to_fir_nel(Rfir=Rfir, bgon=bgon2)
-            self.cc = calc.cross_correlation_analysis_v2(calc.interpolate_nan(self.iq1.spg.int.Ianel),
-                                                         calc.interpolate_nan(self.iq2.spg.int.Ianel), dT,
-                                                         window_len=window_len)
+            self.cc = calc.cross_correlation_analysis(calc.interpolate_nan(self.iq1.spg.int.Ianel),
+                                                      calc.interpolate_nan(self.iq2.spg.int.Ianel), dT,
+                                                      window_len=window_len)
+        # cc.delay or cc.lags: iq1's delay or lag time to iq2
         else:
             exit()
+
+    def Sf_corrcoef(self, NFFT1=2**10, NFFT2=2**10, dT=2e-3, smoothing=True):
+
+        self.iq1.specgram(NFFT=NFFT1, dT=dT, pause=0.1, display=False, sub_phi=False)
+        self.iq2.specgram(NFFT=NFFT2, dT=dT, pause=0.1, display=False, sub_phi=False)
+
+        if smoothing:
+            self.iq1.specgram_smooth(twin_size=1, fwin_size=10, mode="gauss", sub_phi=False, display=False)
+            self.iq2.specgram_smooth(twin_size=1, fwin_size=10, mode="gauss", sub_phi=False, display=False)
+
+        stacked_psdamp = np.hstack((self.iq1.spg.psdamp, self.iq2.spg.psdamp))
+        if smoothing:
+            stacked_psdamp = np.hstack((np.sqrt(self.iq1.spg.psd_smooth), np.sqrt(self.iq2.spg.psd_smooth)))
+        corr_mat = np.corrcoef(stacked_psdamp, rowvar=False)
+        self.corr_iq1psdamp = corr_mat[:NFFT1, :NFFT1]
+        self.corr_iq2psdamp = corr_mat[NFFT2:, NFFT2:]
+        self.corr_iq12psdamp = corr_mat[:NFFT1, NFFT2:]
+
 
 def cross_spectrogram(iq1, iq2, NFFT=2**10, window="hann", NEns=20, OVR=0.5, mode="ampIQ",
                       fmin=None, fmax=None,
