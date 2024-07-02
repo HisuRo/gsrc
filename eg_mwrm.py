@@ -3,7 +3,7 @@
 by Tatsuhiro Nasu
 """
 
-from nasu import get_eg, myEgdb
+from nasu import get_eg, myEgdb, proc, const, calc
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -64,6 +64,38 @@ class comb_R:
             self.chs[i].RAY_OUT.a99 = self.eg_RAY_OUT.trace_of(name=f'a99 {self.chs[i].freq:0.3f} [GHz]', dim=0, other_idxs=[0])
             self.chs[i].RAY_OUT.rho = self.eg_RAY_OUT.trace_of(name=f'reff/a99 {self.chs[i].freq:0.3f} [GHz]', dim=0, other_idxs=[0])
             self.chs[i].RAY_OUT.B = self.eg_RAY_OUT.trace_of(name=f'B  {self.chs[i].freq:0.3f} [GHz]', dim=0, other_idxs=[0])
+
+    def t_window_RAY_OUT(self, tstart, tend):
+
+        for i in range(len(self.chs)):
+
+            self.chs[i].RAY_OUT.twin = struct()
+            self.chs[i].RAY_OUT.twin.ts = tstart
+            self.chs[i].RAY_OUT.twin.te = tend
+
+
+            datlist = [self.chs[i].RAY_OUT.time, self.chs[i].RAY_OUT.kp, self.chs[i].RAY_OUT.kp_error,
+                       self.chs[i].RAY_OUT.reff, self.chs[i].RAY_OUT.a99, self.chs[i].RAY_OUT.rho,
+                       self.chs[i].RAY_OUT.B]
+            _, datlist = proc.getTimeIdxsAndDats(self.chs[i].RAY_OUT.time, self.chs[i].RAY_OUT.twin.ts,
+                                                 self.chs[i].RAY_OUT.twin.te, datlist)
+
+            self.chs[i].RAY_OUT.twin.time, self.chs[i].RAY_OUT.twin.kp, self.chs[i].RAY_OUT.twin.kp_error, \
+            self.chs[i].RAY_OUT.twin.reff, self.chs[i].RAY_OUT.twin.a99, self.chs[i].RAY_OUT.twin.rho, \
+            self.chs[i].RAY_OUT.twin.B = datlist
+
+            self.chs[i].RAY_OUT.twin.avg = struct()
+            self.chs[i].RAY_OUT.twin.std = struct()
+            self.chs[i].RAY_OUT.twin.ste = struct()
+
+            self.chs[i].RAY_OUT.twin.avg.kp, self.chs[i].RAY_OUT.twin.std.kp, self.chs[i].RAY_OUT.twin.ste.kp \
+                = calc.average(self.chs[i].RAY_OUT.twin.kp, self.chs[i].RAY_OUT.twin.kp_error)
+            self.chs[i].RAY_OUT.twin.avg.reff, self.chs[i].RAY_OUT.twin.std.reff, self.chs[i].RAY_OUT.twin.ste.reff \
+                = calc.average(self.chs[i].RAY_OUT.twin.reff)
+            self.chs[i].RAY_OUT.twin.avg.a99, self.chs[i].RAY_OUT.twin.std.a99, self.chs[i].RAY_OUT.twin.ste.a99 \
+                = calc.average(self.chs[i].RAY_OUT.twin.a99)
+            self.chs[i].RAY_OUT.twin.avg.rho, self.chs[i].RAY_OUT.twin.std.rho, self.chs[i].RAY_OUT.twin.ste.rho \
+                = calc.average(self.chs[i].RAY_OUT.twin.rho)
 
     def read_param(self):
 
@@ -634,6 +666,7 @@ class highK:
         self.chs = [self.ch1, self.ch2, self.ch3]
 
         for i in range(len(self.chs)):
+
             self.chs[i].Iamp = struct()
             self.chs[i].t = egs[i].dims(dim=0)
             self.chs[i].Iamp.lowf = egs[i].trace_of(name=f"Amplitude (3-30kHz)", dim=0, other_idxs=[0])
@@ -647,6 +680,29 @@ class highK:
             self.chs[i].fq = egs[i].trace_of(name="\\fq", dim=0, other_idxs=[0])
             self.chs[i].kp = egs[i].trace_of(name=f'wavenumber', dim=0, other_idxs=[0])
             self.chs[i].mod = egs[i].trace_of(name="modulation signal", dim=0, other_idxs=[0])
+
+    def t_window_rho_k(self, tstart, tend):
+
+        for i in range(len(self.chs)):
+
+            self.chs[i].twin = struct()
+            self.chs[i].twin.ts = tstart
+            self.chs[i].twin.te = tend
+
+            datlist = [self.chs[i].t, self.chs[i].rho, self.chs[i].a99, self.chs[i].kp]
+            _, datlist = proc.getTimeIdxsAndDats(self.chs[i].t, self.chs[i].twin.ts, self.chs[i].twin.te, datlist)
+            self.chs[i].twin.t, self.chs[i].twin.rho, self.chs[i].twin.a99, self.chs[i].twin.kp = datlist
+
+            self.chs[i].twin.avg = struct()
+            self.chs[i].twin.std = struct()
+            self.chs[i].twin.ste = struct()
+
+            self.chs[i].twin.avg.rho, self.chs[i].twin.std.rho, self.chs[i].twin.ste.rho \
+                = calc.average(self.chs[i].twin.rho)
+            self.chs[i].twin.avg.a99, self.chs[i].twin.std.a99, self.chs[i].twin.ste.a99 \
+                = calc.average(self.chs[i].twin.a99)
+            self.chs[i].twin.avg.kp, self.chs[i].twin.std.kp, self.chs[i].twin.ste.kp \
+                = calc.average(self.chs[i].twin.kp)
 
     def read_param(self):
 

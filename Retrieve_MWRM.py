@@ -1,4 +1,4 @@
-from nasu import read, plot, proc, calc, get_eg
+from nasu import read, plot, proc, calc, get_eg, eg_mwrm
 import matplotlib.pyplot as plt
 from matplotlib.animation import ArtistAnimation
 import matplotlib
@@ -1034,6 +1034,47 @@ class IQ:
         else:
             plot.close(fig)
             matplotlib.use(original_backend)
+
+    def calc_vperp(self, diag="comb_R", ch=1):
+
+        # diag = highK, comb_R, comb_U
+
+        if diag == "comb_R":
+
+            self.lay = eg_mwrm.comb_R(self.sn, self.subsn)
+            self.lay.t_window_RAY_OUT(self.tstart, self.tend)
+            self.lay_freq = self.lay.chs[ch - 1].freq
+            self.tkp = self.lay.chs[ch - 1].RAY_OUT.twin.time
+            self.kp = self.lay.chs[ch - 1].RAY_OUT.twin.kp * 1e2
+            self.kp_err = self.lay.chs[ch - 1].RAY_OUT.twin.kp_error * 1e2
+            self.kp_avg = self.lay.chs[ch - 1].RAY_OUT.twin.avg.kp * 1e2
+            self.kp_std = self.lay.chs[ch - 1].RAY_OUT.twin.std.kp * 1e2
+            self.kp_ste = self.lay.chs[ch - 1].RAY_OUT.twin.ste.kp * 1e2
+
+            self.cog.fd_avg, self.cog.fd_std, self.cog.fd_ste \
+                = calc.timeAverageDatByRefs_v2(self.cog.t, self.cog.fd, self.tkp)
+
+            self.cog.vp, self.cog.vp_err \
+                = calc.divide(2 * np.pi * self.cog.fd_avg, self.kp, 2 * np.pi * self.cog.fd_std, self.kp_err)
+            self.cog.vp_fast, self.cog.vp_fast_err \
+                = calc.divide(2 * np.pi * self.cog.fd, self.kp_avg, d_err=self.kp_std)
+
+        elif diag == "highK":
+
+            self.lay = eg_mwrm.highK(self.sn, self.subsn)
+            self.lay.t_window_rho_k(self.tstart, self.tend)
+            self.tkp = self.lay.chs[ch-1].twin.t
+            self.kp_avg = self.lay.chs[ch - 1].twin.avg.kp * 1e2
+            self.kp_std = self.lay.chs[ch - 1].twin.std.kp * 1e2
+            self.kp_ste = self.lay.chs[ch - 1].twin.ste.kp * 1e2
+
+            self.cog.vp_fast, self.cog.vp_fast_err \
+                = calc.divide(2 * np.pi * self.cog.fd, self.kp_avg, d_err=self.kp_std)
+
+        else:
+            print("未実装!!")
+            exit()
+
 
     def pulsepair(self, ovr=0.5, dT=1e-4):
         self.pp = calc.struct()
@@ -3374,30 +3415,63 @@ class twinIQ:
 
 
 
-        figdir = os.path.join(self.dirbase, "bicoherence_fz")
-        proc.ifNotMake(figdir)
-        path = os.path.join(figdir, f"{fname}.png")
-
-        fig, ax = plt.subplots(1)
-        l = ax.errorbar(self.cbsp.freqz, self.cbsp.biCohSq_fz, self.cbsp.biCohSqErr_fz,
-                        fmt=".-", ecolor="grey")
-
-        ax.set_ylabel("bicoherence^2 average")
-        ax.set_xlabel("Frequency 2 [Hz]")
-        ax.set_title(axtitle)
-        ax.set_ylim(0, 3. / np.sqrt(self.cbsp.NEns))
-
-        plot.caption(fig, self.figtitle)
-        plot.capsave(fig, self.figtitle, fname, path)
-        if display:
-            plot.check(pause)
-        else:
-            plot.close(fig)
+        # figdir = os.path.join(self.dirbase, "bicoherence_fz")
+        # proc.ifNotMake(figdir)
+        # path = os.path.join(figdir, f"{fname}.png")
+        #
+        # fig, ax = plt.subplots(1)
+        # l = ax.errorbar(self.cbsp.freqz, self.cbsp.biCohSq_fz, self.cbsp.biCohSqErr_fz,
+        #                 fmt=".-", ecolor="grey")
+        #
+        # ax.set_ylabel("bicoherence^2 average")
+        # ax.set_xlabel("Frequency 2 [Hz]")
+        # ax.set_title(axtitle)
+        # ax.set_ylim(0, 3. / np.sqrt(self.cbsp.NEns))
+        #
+        # plot.caption(fig, self.figtitle)
+        # plot.capsave(fig, self.figtitle, fname, path)
+        # if display:
+        #     plot.check(pause)
+        # else:
+        #     plot.close(fig)
 
 
 
         if not display:
             matplotlib.use(original_backend)
+
+        return self.cbsp
+
+    def total_bicoherence(self, freq):
+
+        self.cbsp.freq3, self.cbsp.bicohsq_f3, self.cbsp.N_components = calc.total_bicoherence(self.cbsp.freqx, self.cbsp.freqy, self.cbsp.biCohSq)
+        self.cbsp.bicohsq_f3_std = self.cbsp.N_components / self.cbsp.NEns
+
+    def bispectrum_at_f3(self, f3_at=100e3, tstart=4, tend=5, NFFT1=2**10, OVR=0.5,
+                         window="hann", mode="IQ",
+                         fmax1=None, fmax2=None, display=True, pause=0.):
+
+        if mode == "IQ":
+            self.iq1.spectrum(tstart, tend, NFFT1, OVR, window, display=False, bgon=False)
+            NFFT2 = int(self.iq1.dT / self.iq2.dT + 0.5) * NFFT1
+            self.iq2.spectrum(tstart, tend, NFFT2, OVR, window, display=False, bgon=False)
+
+            _, datlist = proc.getTimeIdxsAndDats(self.iq1.t, tstart, tend,
+                                                 [self.iq1.IQ])
+            IQraw1 = datlist[0]
+            _, datlist = proc.getTimeIdxsAndDats(self.iq2.t, tstart, tend,
+                                                 [self.iq2.IQ])
+            IQraw2 = datlist[0]
+
+            self.cbsp = calc.cross_bispectral_analysis_at_f3(f3_at, IQraw1, IQraw1, IQraw2,
+                                                             self.iq1.dT, self.iq1.dT, self.iq2.dT,
+                                                             NFFT1, NFFT1, NFFT2,
+                                                             flimx=fmax1, flimy=fmax2,
+                                                             OVR=OVR, window=window)
+
+        else:
+            print("未実装!")
+            exit()
 
         return self.cbsp
 

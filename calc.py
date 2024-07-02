@@ -2031,7 +2031,7 @@ def pulsepair(t, iq, Nsample=100, ovr=0.5):
 
 def nonaveragedBiSpectrum(X1, X2, X3):
 
-    X2X1 = np.matmul(X2, X1)
+    X2X1 = X2 * X1
     X3Conj = np.conjugate(X3)
     X2X1X3Conj = X2X1 * X3Conj
 
@@ -2056,7 +2056,7 @@ def biCoherenceSq(BSpec, BSpecStd, X1, X2, X3, NFFTs, NEns, NOVs):
 
     CV_X2X1, CV_X3 = CVForBiSpecAna(NFFTs, NEns, NOVs)
 
-    X2X1 = np.matmul(X2, X1)
+    X2X1 = X2 * X1
     X2X1AbsSq = np.abs(X2X1) ** 2
     X2X1AbsSqAvg = np.average(X2X1AbsSq, axis=0)
     X2X1AbsSqStd = np.std(X2X1AbsSq, axis=0, ddof=1)
@@ -2082,7 +2082,7 @@ def biCoherenceSq_v2(BSpec, BSpecStd, X1, X2, X3, NEns):
 
     CV = 1. / NEns
 
-    X2X1 = np.matmul(X2, X1)
+    X2X1 = X2 * X1
     X2X1AbsSq = np.abs(X2X1) ** 2
     X2X1AbsSqAvg = np.average(X2X1AbsSq, axis=0)
     X2X1AbsSqStd = np.std(X2X1AbsSq, axis=0, ddof=1)
@@ -2304,8 +2304,8 @@ def cross_bispectrum(freqx, freqy, XX0, YY0, ZZ0, NFFTx, NFFTy, NFFTz, NEns,
     freq1 = np.tile(freqx, (NFFTy, 1))
     freq2 = np.tile(freqy, (NFFTx, 1)).T
 
-    XX = np.reshape(XX0, (NEns, 1, NFFTx))
-    YY = np.reshape(YY0, (NEns, NFFTy, 1))
+    XX = np.tile(freqx, (NFFTy, 1))
+    YY = np.tile(freqy, (NFFTx, 1)).T
     ZZ = ZZ0[:, idxMxz]
 
     # limitation
@@ -2370,6 +2370,66 @@ def cross_bispectrum(freqx, freqy, XX0, YY0, ZZ0, NFFTx, NFFTy, NFFTz, NEns,
     return freqx, freqy, biCohSq, biCohSqErr, biPhs, biPhsErr
 
 
+def cross_bispectrum_at_f3(f3_at, freqx, freqy, freqz, XX0, YY0, ZZ0, NFFTx, NFFTy, NFFTz, NEns,
+                           Fsx, Fsy, Fsz, flimx=None, flimy=None):
+
+    idxMxz, _ = makeIdxsForCrossBiSpectrum(NFFTx, NFFTy, NFFTz)
+    freq3 = freqz[idxMxz]
+
+    XX = XX0
+    YY = YY0
+    ZZ = ZZ0[:, idxMxz]
+
+
+    # limitation
+    if flimx is not None:
+        fidx_x = np.where(np.abs(freqx) < flimx)[0]
+        freqx = freqx[fidx_x]
+        freq3 = freq3[:, fidx_x]
+        XX = XX[:, fidx_x]
+        ZZ = ZZ[:, :, fidx_x]
+    if flimy is not None:
+        fidx_y = np.where(np.abs(freqy) < flimy)[0]
+        freqy = freqy[fidx_y]
+        freq3 = freq3[fidx_y, :]
+        YY = YY[:, fidx_y]
+        ZZ = ZZ[:, fidx_y, :]
+
+    # symmetry
+    iscomplex = np.iscomplex(XX).any()
+
+    if (XX0 == YY0).all():
+        fidx_x = np.where(freqx >= - 0.5 * 0.5 * Fsx)[0]
+        fidx_y = np.where(freqy <= 0.5 * 0.5 * Fsy)[0]
+        if not iscomplex:
+            fidx_x = np.where(freqx >= 0)[0]
+            fidx_y = np.where(freqy <= 0.5 * 0.5 * Fsy)[0]
+            if (XX0 == ZZ0).all():
+                fidx_y = np.where((freqy <= 0.5 * 0.5 * Fsy)&(freqy >= 0.5 * 0.5 * Fsy))[0]
+
+        freqx = freqx[fidx_x]
+        freqy = freqy[fidx_y]
+        freq3 = freq3[:, fidx_x]
+        freq3 = freq3[fidx_y, :]
+        XX = XX[:, fidx_x]
+        YY = YY[:, fidx_y]
+        ZZ = ZZ[:, :, fidx_x]
+        ZZ = ZZ[:, fidx_y, :]
+
+    f3_at = freqz[np.argmin(np.abs(freqz - f3_at))]
+    idxs_f3_at = np.where(freq3 == f3_at)
+
+    XX = XX[:, idxs_f3_at[1]]
+    YY = YY[:, idxs_f3_at[0]]
+    ZZ = ZZ[:, idxs_f3_at[0], idxs_f3_at[1]]
+
+    BSpec, BSpecStd, BSpecReStd, BSpecImStd = biSpectrum(XX, YY, ZZ)
+    biCohSq, biCohSqErr = biCoherenceSq_v2(BSpec, BSpecStd, XX, YY, ZZ, NEns)
+    biPhs, biPhsErr = biPhase_v2(BSpec, BSpecReStd, BSpecImStd, NEns)
+
+    return f3_at, biCohSq, biCohSqErr, biPhs, biPhsErr
+
+
 def cross_bispectral_analysis(xx, yy, zz, dtx, dty, dtz,
                               NFFTx, NFFTy, NFFTz, flimx=None, flimy=None,
                               OVR=0.5, window="hann"):
@@ -2425,6 +2485,69 @@ def cross_bispectral_analysis(xx, yy, zz, dtx, dty, dtz,
                            NFFTx, NFFTy, NFFTz, o.NEns,
                            1./dtx, 1./dty, 1./dtz, flimx=flimx, flimy=flimy)
     o.biCohSqRer = o.biCohSqErr / o.biCohSq
+
+    return o
+
+
+def cross_bispectral_analysis_at_f3(f3_at, xx, yy, zz, dtx, dty, dtz,
+                                    NFFTx, NFFTy, NFFTz, flimx=None, flimy=None,
+                                    OVR=0.5, window="hann"):
+
+    o = struct()
+
+    o.NFFTx = NFFTx
+    o.NFFTy = NFFTy
+    o.NFFTz = NFFTz
+    o.OVR = OVR
+    o.window = window
+
+    o.NOVx = int(NFFTx * OVR)
+    o.NOVy = int(NFFTy * OVR)
+    o.NOVz = int(NFFTz * OVR)
+
+    o.Tx = NFFTx * dtx  # Analysis time
+    o.Ty = NFFTy * dty  # Analysis time
+    o.Tz = NFFTz * dtz  # Analysis time
+    if o.Tx != o.Ty or o.Tx != o.Tz or o.Tz != o.Tx:
+        filename, lineno = proc.get_current_file_and_line()
+        print(f"file: {filename}, line: {lineno}")
+        print('Frequency bin widths are different. \n')
+        exit()
+
+    # Bi-Spectral Analysis
+    xidxs = sliding_window_view(np.arange(xx.size), NFFTx)[::NFFTx - o.NOVx]
+    o.NEns = xidxs.shape[-2]
+    o.xens = xx[xidxs]
+    o.xens = o.xens - o.xens.mean(axis=-1, keepdims=True)
+    o.winx, o.enbwx, o.CGx, o.CVx = getWindowAndCoefs(NFFTx, window, o.NEns)
+    o.freqx, o.XX = fourier_components_2s(o.xens, dtx, NFFTx, o.winx)
+
+    yidxs = sliding_window_view(np.arange(yy.size), NFFTy)[::NFFTy - o.NOVy]
+    o.yens = yy[yidxs]
+    o.yens = o.yens - o.yens.mean(axis=-1, keepdims=True)
+    o.winy, o.enbwy, o.CGy, o.CVy = getWindowAndCoefs(NFFTy, window, o.NEns)
+    o.freqy, o.YY = fourier_components_2s(o.yens, dty, NFFTy, o.winy)
+
+    zidxs = sliding_window_view(np.arange(zz.size), NFFTz)[::NFFTz - o.NOVz]
+    o.zens = zz[zidxs]
+    o.zens = o.zens - o.zens.mean(axis=-1, keepdims=True)
+    o.winz, o.enbwz, o.CGz, o.CVz = getWindowAndCoefs(NFFTz, window, o.NEns)
+    o.freqz, o.ZZ = fourier_components_2s(o.zens, dtz, NFFTz, o.winz)
+
+    o.freqx = o.freqx.astype(np.float32)
+    o.freqy = o.freqy.astype(np.float32)
+    o.freqz = o.freqz.astype(np.float32)
+    o.XX = o.XX.astype(np.complex64)
+    o.YY = o.YY.astype(np.complex64)
+    o.ZZ = o.ZZ.astype(np.complex64)
+    o.f3_at, o.biCohSq, o.biCohSqErr, o.biPhs, o.biPhsErr \
+        = cross_bispectrum_at_f3(f3_at, o.freqx, o.freqy, o.freqz, o.XX, o.YY, o.ZZ,
+                                 NFFTx, NFFTy, NFFTz, o.NEns,
+                                 1./dtx, 1./dty, 1./dtz, flimx=flimx, flimy=flimy)
+    o.biCohSq_total = np.sum(o.biCohSq)
+    o.biCohSq_stastd = o.biCohSq.size / o.NEns
+    o.biPhs_avg = np.average(o.biPhs)
+    o.biPhs_avg_err = np.sqrt(np.average(o.biPhsErr**2))
 
     return o
 
@@ -2508,8 +2631,11 @@ def total_bicoherence(freq1, freq2, bicoherence):
     dfreq = freq1[1] - freq1[0]
     idxs = np.arange((N1 + N2) - 1) - (N1 - 1)
     freq3 = dfreq * idxs
-    bicoh_f3 = np.array([np.nanmean(np.diagonal(bicoherence, offset=i)) for i in idxs])
-    return freq3, bicoh_f3
+    bicoh_f3 = np.array([np.nansum(np.diagonal(bicoherence, offset=i)) for i in idxs])
+    countarray = bicoherence
+    countarray[~np.isnan(countarray)] = 1
+    N_components = np.array([np.nansum(np.diagonal(countarray, offset=i)) for i in idxs])
+    return freq3, bicoh_f3, N_components
 
 
 def average_bicoherence_at_f3_withErr(freq1, freq2, bicoherence, bicoherence_Err):

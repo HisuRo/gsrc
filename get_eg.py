@@ -385,9 +385,6 @@ class fir_nel:
 
         return self.ref
 
-
-
-
 class lhdgauss_ray_mwrm:
 
     def __init__(self, sn=184508, sub=1, num=7):
@@ -2023,7 +2020,8 @@ class cxsmap7:
             self.Rwin.tor.avg.teti, self.Rwin.tor.std.teti, self.Rwin.tor.ste.teti \
                 = calc.average(self.Rwin.tor.teti, err=self.Rwin.tor.teti_err, axis=1)
 
-    def tR_window(self, tstart=4.4, tend=4.5, Rat=4.1, dR=0.106, include_outerside=False, include_grad=False, include_teti=False):
+    def tR_window(self, tstart=4.4, tend=4.5, Rat=4.1, dR=0.106,
+                  include_outerside=False, include_grad=False, include_teti=False):
 
         self.tRwin = struct()
         self.tRwin.pol = struct()
@@ -2292,7 +2290,6 @@ class cxsmap7:
             self.tRwin.tor.avg.teti, self.tRwin.tor.std.teti, self.tRwin.tor.ste.teti \
                 = calc.average(self.tRwin.tor.teti, err=self.tRwin.tor.teti_err)
 
-
 class LID_cur:
 
     def __init__(self, sn=184508, sub=1):
@@ -2557,8 +2554,6 @@ class ece:
             = calc.average(self.Rwin.Te_tscal, err=self.Rwin.Te_tscal_err, axis=1)
 
         return self.Rwin
-
-
 
 class gas_puf:
 
