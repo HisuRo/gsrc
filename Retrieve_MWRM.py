@@ -3234,7 +3234,7 @@ class twinIQ:
 
         if mode == "IQ":
             self.iq1.spectrum(tstart, tend, NFFT1, OVR, window, display=False, bgon=False)
-            NFFT2 = int(self.iq1.dT / self.iq2.dT + 0.5) * NFFT1
+            NFFT2 = int(self.iq1.dT * NFFT1 / self.iq2.dT + 0.5)
             self.iq2.spectrum(tstart, tend, NFFT2, OVR, window, display=False, bgon=False)
 
             self.cbsp = calc.cross_bispectral_analysis(self.iq1.sp.IQraw, self.iq1.sp.IQraw, self.iq2.sp.IQraw,
@@ -3442,18 +3442,18 @@ class twinIQ:
 
         return self.cbsp
 
-    def total_bicoherence(self, freq):
-
-        self.cbsp.freq3, self.cbsp.bicohsq_f3, self.cbsp.N_components = calc.total_bicoherence(self.cbsp.freqx, self.cbsp.freqy, self.cbsp.biCohSq)
-        self.cbsp.bicohsq_f3_std = self.cbsp.N_components / self.cbsp.NEns
+    # def total_bicoherence(self, freq):
+    #
+    #     self.cbsp.freq3, self.cbsp.bicohsq_f3, self.cbsp.N_components \
+    #         = calc.total_bicoherence(self.cbsp.freqx, self.cbsp.freqy, self.cbsp.biCohSq)
+    #     self.cbsp.bicohsq_f3_std = self.cbsp.N_components / self.cbsp.NEns
 
     def bispectrum_at_f3(self, f3_at=100e3, tstart=4, tend=5, NFFT1=2**10, OVR=0.5,
-                         window="hann", mode="IQ",
-                         fmax1=None, fmax2=None, display=True, pause=0.):
+                         window="hann", mode="IQ", fmax1=None, fmax2=None):
 
         if mode == "IQ":
             self.iq1.spectrum(tstart, tend, NFFT1, OVR, window, display=False, bgon=False)
-            NFFT2 = int(self.iq1.dT / self.iq2.dT + 0.5) * NFFT1
+            NFFT2 = int(self.iq1.dT / self.iq2.dT * NFFT1 + 0.5)
             self.iq2.spectrum(tstart, tend, NFFT2, OVR, window, display=False, bgon=False)
 
             _, datlist = proc.getTimeIdxsAndDats(self.iq1.t, tstart, tend,
@@ -3468,6 +3468,31 @@ class twinIQ:
                                                              NFFT1, NFFT1, NFFT2,
                                                              flimx=fmax1, flimy=fmax2,
                                                              OVR=OVR, window=window)
+
+        else:
+            print("未実装!")
+            exit()
+
+        return self.cbsp
+
+    def bispectrum_in_f_range(self, fmin3=200e3, fmax3=500e3, tstart=4, tend=5, NFFT1=2**10, OVR=0.5,
+                              window="hann", mode="IQ", fmax1=None, fmax2=None):
+
+        if mode == "IQ":
+            NFFT2 = int(self.iq1.dT * NFFT1 / self.iq2.dT + 0.5)
+
+            _, datlist = proc.getTimeIdxsAndDats(self.iq1.t, tstart, tend,
+                                                 [self.iq1.IQ])
+            IQraw1 = datlist[0]
+            _, datlist = proc.getTimeIdxsAndDats(self.iq2.t, tstart, tend,
+                                                 [self.iq2.IQ])
+            IQraw2 = datlist[0]
+
+            self.cbsp = calc.cross_bispectral_analysis_in_f_range(fmin3, fmax3, IQraw1, IQraw1, IQraw2,
+                                                                  self.iq1.dT, self.iq1.dT, self.iq2.dT,
+                                                                  NFFT1, NFFT1, NFFT2,
+                                                                  flimx=fmax1, flimy=fmax2,
+                                                                  OVR=OVR, window=window)
 
         else:
             print("未実装!")
@@ -3640,8 +3665,8 @@ class tripletIQ:
 
         if mode == "IQ":
             self.iq1.spectrum(tstart, tend, NFFT1, OVR, window, display=False, bgon=False)
-            NFFT2 = int(self.iq1.dT / self.iq2.dT + 0.5) * NFFT1
-            NFFT3 = int(self.iq1.dT / self.iq3.dT + 0.5) * NFFT1
+            NFFT2 = int(self.iq1.dT / self.iq2.dT * NFFT1 + 0.5)
+            NFFT3 = int(self.iq1.dT / self.iq3.dT * NFFT1 + 0.5)
             self.iq2.spectrum(tstart, tend, NFFT2, OVR, window, display=False, bgon=False)
             self.iq3.spectrum(tstart, tend, NFFT3, OVR, window, display=False, bgon=False)
 

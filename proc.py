@@ -149,6 +149,7 @@ def argsort(array2d):
 
 
 def repeat_and_add_lastdim(Array, Nrepeat):
+    # Add a new axis to the end of the array and repeat each element N times in the direction of that axis.
     tmp = tuple(np.concatenate([np.array(Array.shape), 1], axis=None).astype(int))
     return np.repeat(np.reshape(Array, tmp), Nrepeat, axis=-1)
 

@@ -2601,3 +2601,54 @@ class gas_puf:
             elif s == "X":
                 axes.plot(self.t, self.X, c="black", label=s)
         axes.legend()
+
+class pci_ch4_fft:
+
+    def __init__(self, sn, sub, tstart, tend, sampling="slow"):
+        # sampling: "fast", "slow"
+
+        self.sn = sn
+        self.sub = sub
+        self.ts = tstart
+        self.te = tend
+        self.sampling = sampling
+
+        self.diagname = 'pci_ch4_fft'
+        self.diagname += f"_{self.sampling}"
+        self.pciEg = myEgdb.LoadEG(self.diagname, self.sn, self.sub)
+
+        self.t, list_dat, self.dimnms, self.valnms, self.dimunits, self.valunits \
+            = read.eg1d(self.diagname, self.sn, self.sub)
+
+        tidxs, list_dat = proc.getTimeIdxsAndDats(self.t, self.ts, self.te, list_dat)
+        self.t = self.t[tidxs]
+
+        if sampling == "fast":
+            self.midf, self.highf, self.allf = list_dat
+        elif sampling == "slow":
+            self.lowf, self.midf, self.highf, self.allf = list_dat
+
+    def ref_to_fir_nel(self, Rfir=4.1):
+
+        Rfirs = np.array([3.309, 3.399, 3.489, 3.579,
+                          3.669, 3.759, 3.849, 3.939,
+                          4.029, 4.119, 4.209, 4.299, 4.389])
+
+        self.fir = fir_nel(self.sn, self.sub, self.ts, self.te)
+        self.fir.ref_to(self.t)
+        idx_dat = np.argmin(np.abs(Rfirs - Rfir))
+        datlist = [self.fir.ref.avg.nl3309, self.fir.ref.avg.nl3399, self.fir.ref.avg.nl3489, self.fir.ref.avg.nl3579,
+                   self.fir.ref.avg.nl3669, self.fir.ref.avg.nl3759, self.fir.ref.avg.nl3849, self.fir.ref.avg.nl3939,
+                   self.fir.ref.avg.nl4029, self.fir.ref.avg.nl4119, self.fir.ref.avg.nl4209, self.fir.ref.avg.nl4299,
+                   self.fir.ref.avg.nl4389]
+        self.nel = datlist[idx_dat]
+
+        if self.sampling == "fast":
+            self.midf_nel = self.midf / self.nel
+            self.highf_nel = self.highf / self.nel
+            self.allf_nel = self.allf / self.nel
+        elif self.sampling == "slow":
+            self.lowf_nel = self.lowf / self.nel
+            self.midf_nel = self.midf / self.nel
+            self.highf_nel = self.highf / self.nel
+            self.allf_nel = self.allf / self.nel
