@@ -3971,3 +3971,34 @@ def multiple(A, B, A_err=None, B_err=None):
         else:
             pro_err = np.abs(np.sqrt((A_err / A)**2 + (B_err / B)**2) * pro)
     return pro, pro_err
+
+
+def power(x, e, x_err=None):
+
+    pow = x ** e
+    if x_err is None:
+        pow_err = None
+    else:
+        pow_err = np.abs(e * (x ** (e - 1)) * x_err)
+
+    return pow, pow_err
+
+
+def ion_mass(Zi, Ai):
+    return const.mp * Zi + const.mn * (1 - Ai)
+
+
+def scaled_RI_growthrate(resistivity, dPdr, Zi, Ai, resistivity_err=None, dPdr_err=None):
+
+    A, A_err = power(resistivity, 1./3., resistivity_err)
+    B, B_err = power(dPdr, 2./3., dPdr_err)
+    mi = ion_mass(Zi, Ai)
+    C = mi**(-1./3.)
+
+    A *= C
+    if A_err is not None:
+        A_err *= C
+
+    gamma, gamma_err = multiple(A, B, A_err, B_err)
+
+    return gamma, gamma_err

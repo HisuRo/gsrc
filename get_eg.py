@@ -616,11 +616,15 @@ class tsmap:
 
         self.B = np.sqrt(self.Br ** 2 + self.Bz ** 2 + self.Bphi ** 2)
 
-        self.pe = const.ee * self.Te * self.ne_calFIR  # [kPa]
+        self.pe = const.ee * self.Te * self.ne_calFIR * 1e19  # [kPa]
         self.pe_err = np.sqrt((self.dTe/self.Te)**2 + (self.dne_calFIR/self.ne_calFIR)**2) * self.pe
-        self.pe_fit = const.ee * self.Te_fit * self.ne_fit  # [kPa]
+        self.pe_fit = const.ee * self.Te_fit * self.ne_fit * 1e19  # [kPa]
         self.pe_fit_err = np.sqrt((self.Te_fit_err / self.Te_fit) ** 2 +
                                   (self.ne_fit_err / self.ne_fit) ** 2) * self.pe_fit
+
+        self.scaled_resistivity, self.scaled_resistivity_err = calc.power(self.Te, - 3./2., self.dTe)
+        self.scaled_resistivity_fit, self.scaled_resistivity_fit_err \
+            = calc.power(self.Te_fit, - 3. / 2., self.Te_fit_err)
 
     def calcgrad(self, polyN=14):
 
@@ -642,6 +646,12 @@ class tsmap:
         self.LTe_polyfit, self.LTe_polyfit_err, self.RLTe_polyfit, self.RLTe_polyfit_err \
             = calc.Lscale(self.Te_polyfit, self.dTedreff_polyfit, self.Rax,
                           self.Te_polyfit_err, self.dTedreff_polyfit_err)
+
+        self.scaled_resistivity_polyfit, self.scaled_resistivity_polyfit_err \
+            = calc.power(self.Te_polyfit, - 3. / 2., self.Te_polyfit_err)
+
+        self.etae_polyfit, self.etae_polyfit_err \
+            = calc.eta(self.LTe_polyfit, self.LTe_polyfit_err, self.Lne_polyfit, self.Lne_polyfit_err)
 
         _o = calc.polyN_LSM_der(xx=self.reff, yy=self.pe, polyN=polyN, yErr=self.pe_err, parity="even")
         self.pe_polyfit = _o.yHut
@@ -665,6 +675,9 @@ class tsmap:
         self.dnedreff_fit, self.dnedreff_fit_err = calc.dMdreff(self.dnedR_fit, self.dreffdR, self.dnedR_fit_err)
         self.Lne_fit, self.Lne_fit_err, self.RLne_fit, self.RLne_fit_err \
             = calc.Lscale(self.ne_fit, self.dnedreff_fit, self.Rax, self.ne_fit_err, self.dnedreff_fit_err)
+
+        self.etae_fit, self.etae_fit_err \
+            = calc.eta(self.LTe_fit, self.LTe_fit_err, self.Lne_fit, self.Lne_fit_err)
 
         self.dpedR_fit = np.abs(np.gradient(self.pe_fit, self.R, edge_order=2, axis=-1))
         self.dpedR_fit_err = np.abs(np.gradient(self.pe_fit_err, self.R, edge_order=2, axis=-1))
@@ -770,12 +783,17 @@ class tsmap:
         self.twin.tstart = tstart
         self.twin.tend = tend
         datlist = [self.t, self.reff, self.reffa99, self.Te, self.dTe, self.ne_calFIR, self.dne_calFIR,
-                   self.Te_fit, self.Te_fit_err, self.ne_fit, self.ne_fit_err, self.Br, self.Bz, self.Bphi, self.B,
+                   self.scaled_resistivity, self.scaled_resistivity_err,
+                   self.Te_fit, self.Te_fit_err, self.ne_fit, self.ne_fit_err,
+                   self.scaled_resistivity_fit, self.scaled_resistivity_fit_err,
+                   self.Br, self.Bz, self.Bphi, self.B,
                    self.pe, self.pe_err, self.pe_fit, self.pe_fit_err]
         _, datlist_win = proc.getTimeIdxsAndDats(time=self.t, startTime=tstart, endTime=tend, datList=datlist)
         self.twin.t, self.twin.reff, self.twin.reffa99, \
         self.twin.Te, self.twin.dTe, self.twin.ne_calFIR, self.twin.dne_calFIR, \
+        self.twin.scaled_resistivity, self.twin.scaled_resistivity_err, \
         self.twin.Te_fit, self.twin.Te_fit_err, self.twin.ne_fit, self.twin.ne_fit_err, \
+        self.twin.scaled_resistivity_fit, self.twin.scaled_resistivity_fit_err, \
         self.twin.Br, self.twin.Bz, self.twin.Bphi, self.twin.B, \
         self.twin.pe, self.twin.pe_err, self.twin.pe_fit, self.twin.pe_fit_err = datlist_win
 
@@ -787,12 +805,15 @@ class tsmap:
                        self.LTe_fit, self.LTe_fit_err, self.RLTe_fit, self.RLTe_fit_err,
                        self.dnedR_fit, self.dnedR_fit_err, self.dnedreff_fit, self.dnedreff_fit_err,
                        self.Lne_fit, self.Lne_fit_err, self.RLne_fit, self.RLne_fit_err,
+                       self.etae_fit, self.etae_fit_err,
                        self.dpedR_fit, self.dpedR_fit_err, self.dpedreff_fit, self.dpedreff_fit_err,
                        self.Lpe_fit, self.Lpe_fit_err, self.RLpe_fit, self.RLpe_fit_err,
                        self.dTedreff_polyfit, self.dTedreff_polyfit_err,
                        self.LTe_polyfit, self.LTe_polyfit_err, self.RLTe_polyfit, self.RLTe_polyfit_err,
+                       self.scaled_resistivity_polyfit, self.scaled_resistivity_polyfit_err,
                        self.dnedreff_polyfit, self.dnedreff_polyfit_err,
                        self.Lne_polyfit, self.Lne_polyfit_err, self.RLne_polyfit, self.RLne_polyfit_err,
+                       self.etae_polyfit, self.etae_polyfit_err,
                        self.dpedreff_polyfit, self.dpedreff_polyfit_err,
                        self.Lpe_polyfit, self.Lpe_polyfit_err, self.RLpe_polyfit, self.RLpe_polyfit_err,
                        self.dBzdR, self.dBzdreff, self.LBz, self.RLBz,
@@ -805,12 +826,15 @@ class tsmap:
             self.twin.LTe_fit, self.twin.LTe_fit_err, self.twin.RLTe_fit, self.twin.RLTe_fit_err, \
             self.twin.dnedR_fit, self.twin.dnedR_fit_err, self.twin.dnedreff_fit, self.twin.dnedreff_fit_err, \
             self.twin.Lne_fit, self.twin.Lne_fit_err, self.twin.RLne_fit, self.twin.RLne_fit_err, \
+            self.twin.etae_fit, self.twin.etae_fit_err, \
             self.twin.dpedR_fit, self.twin.dpedR_fit_err, self.twin.dpedreff_fit, self.twin.dpedreff_fit_err, \
             self.twin.Lpe_fit, self.twin.Lpe_fit_err, self.twin.RLpe_fit, self.twin.RLpe_fit_err, \
             self.twin.dTedreff_polyfit, self.twin.dTedreff_polyfit_err, \
             self.twin.LTe_polyfit, self.twin.LTe_polyfit_err, self.twin.RLTe_polyfit, self.twin.RLTe_polyfit_err, \
+            self.twin.scaled_resistivity_polyfit, self.twin.scaled_resistivity_polyfit_err, \
             self.twin.dnedreff_polyfit, self.twin.dnedreff_polyfit_err, \
             self.twin.Lne_polyfit, self.twin.Lne_polyfit_err, self.twin.RLne_polyfit, self.twin.RLne_polyfit_err, \
+            self.twin.etae_polyfit, self.twin.etae_polyfit_err, \
             self.twin.dpedreff_polyfit, self.twin.dpedreff_polyfit_err, \
             self.twin.Lpe_polyfit, self.twin.Lpe_polyfit_err, self.twin.RLpe_polyfit, self.twin.RLpe_polyfit_err, \
             self.twin.dBzdR, self.twin.dBzdreff, self.twin.LBz, self.twin.RLBz, \
@@ -829,10 +853,14 @@ class tsmap:
             = calc.average(self.twin.Te, err=self.twin.dTe, axis=0)
         self.twin.avg.ne_calFIR, self.twin.std.ne_calFIR, self.twin.ste.ne_calFIR \
             = calc.average(self.twin.ne_calFIR, err=self.twin.dne_calFIR, axis=0)
+        self.twin.avg.scaled_resistivity, self.twin.std.scaled_resistivity, self.twin.ste.scaled_resistivity \
+            = calc.average(self.twin.scaled_resistivity, err=self.twin.scaled_resistivity_err, axis=0)
         self.twin.avg.Te_fit, self.twin.std.Te_fit, self.twin.ste.Te_fit \
             = calc.average(self.twin.Te_fit, err=self.twin.Te_fit_err, axis=0)
         self.twin.avg.ne_fit, self.twin.std.ne_fit, self.twin.ste.ne_fit \
             = calc.average(self.twin.ne_fit, err=self.twin.ne_fit_err, axis=0)
+        self.twin.avg.scaled_resistivity_fit, self.twin.std.scaled_resistivity_fit, self.twin.ste.scaled_resistivity_fit \
+            = calc.average(self.twin.scaled_resistivity_fit, err=self.twin.scaled_resistivity_fit_err, axis=0)
         self.twin.avg.Br, self.twin.std.Br, self.twin.ste.Br \
             = calc.average(self.twin.Br, err=None, axis=0)
         self.twin.avg.Bz, self.twin.std.Bz, self.twin.ste.Bz \
@@ -857,6 +885,9 @@ class tsmap:
             self.twin.avg.RLTe_polyfit, self.twin.std.RLTe_polyfit, self.twin.ste.RLTe_polyfit \
                 = calc.average(self.twin.RLTe_polyfit, err=self.twin.RLTe_polyfit_err, axis=0)
 
+            self.twin.avg.scaled_resistivity_polyfit, self.twin.std.scaled_resistivity_polyfit, self.twin.ste.scaled_resistivity_polyfit \
+                = calc.average(self.twin.scaled_resistivity_polyfit, err=self.twin.scaled_resistivity_polyfit_err, axis=0)
+
             self.twin.avg.ne_polyfit, self.twin.std.ne_polyfit, self.twin.ste.ne_polyfit \
                 = calc.average(self.twin.ne_polyfit, err=self.twin.ne_polyfit_err, axis=0)
             self.twin.avg.dnedreff_polyfit, self.twin.std.dnedreff_polyfit, self.twin.ste.dnedreff_polyfit \
@@ -865,6 +896,9 @@ class tsmap:
                 = calc.average(self.twin.Lne_polyfit, err=self.twin.Lne_polyfit_err, axis=0)
             self.twin.avg.RLne_polyfit, self.twin.std.RLne_polyfit, self.twin.ste.RLne_polyfit \
                 = calc.average(self.twin.RLne_polyfit, err=self.twin.RLne_polyfit_err, axis=0)
+
+            self.twin.avg.etae_polyfit, self.twin.std.etae_polyfit, self.twin.ste.etae_polyfit \
+                = calc.average(self.twin.etae_polyfit, err=self.twin.etae_polyfit_err, axis=0)
 
             self.twin.avg.pe_polyfit, self.twin.std.pe_polyfit, self.twin.ste.pe_polyfit \
                 = calc.average(self.twin.pe_polyfit, err=self.twin.pe_polyfit_err, axis=0)
@@ -892,6 +926,9 @@ class tsmap:
                 = calc.average(self.twin.Lne_fit, err=self.twin.Lne_fit_err, axis=0)
             self.twin.avg.RLne_fit, self.twin.std.RLne_fit, self.twin.ste.RLne_fit \
                 = calc.average(self.twin.RLne_fit, err=self.twin.RLne_fit_err, axis=0)
+
+            self.twin.avg.etae_fit, self.twin.std.etae_fit, self.twin.ste.etae_fit \
+                = calc.average(self.twin.etae_fit, err=self.twin.etae_fit_err, axis=0)
 
             self.twin.avg.dpedR_fit, self.twin.std.dpedR_fit, self.twin.ste.dpedR_fit \
                 = calc.average(self.twin.dpedR_fit, err=self.twin.dpedR_fit_err, axis=0)
@@ -942,28 +979,36 @@ class tsmap:
         self.Rwin.Rout = Rat + 0.5 * dR
 
         datlist = [self.reff, self.reffa99, self.Te, self.dTe, self.ne_calFIR, self.dne_calFIR,
-                   self.Te_fit, self.Te_fit_err, self.ne_fit, self.ne_fit_err, self.Br, self.Bz, self.Bphi, self.B,
+                   self.scaled_resistivity, self.scaled_resistivity_err,
+                   self.Te_fit, self.Te_fit_err, self.ne_fit, self.ne_fit_err,
+                   self.scaled_resistivity_fit, self.scaled_resistivity_fit_err,
+                   self.Br, self.Bz, self.Bphi, self.B,
                    self.pe, self.pe_err, self.pe_fit, self.pe_fit_err]
         _idxs, datlist_win = proc.getXIdxsAndYs_2dalongLastAxis(xx=self.R, x_start=self.Rwin.Rin, x_end=self.Rwin.Rout,
                                                                 Ys_list=datlist, include_outerside=include_outerside)
         self.Rwin.reff, self.Rwin.reffa99, \
         self.Rwin.Te, self.Rwin.dTe, self.Rwin.ne_calFIR, self.Rwin.dne_calFIR, \
+        self.Rwin.scaled_resistivity, self.Rwin.scaled_resistivity_err, \
         self.Rwin.Te_fit, self.Rwin.Te_fit_err, self.Rwin.ne_fit, self.Rwin.ne_fit_err, \
+        self.Rwin.scaled_resistivity_fit, self.Rwin.scaled_resistivity_fit_err, \
         self.Rwin.Br, self.Rwin.Bz, self.Rwin.Bphi, self.Rwin.B, \
         self.Rwin.pe, self.Rwin.pe_err, self.Rwin.pe_fit, self.Rwin.pe_fit_err = datlist_win
         if include_grad:
             datlist = [self.dreffdR, self.Te_polyfit, self.Te_polyfit_err,
+                       self.scaled_resistivity_polyfit, self.scaled_resistivity_polyfit_err,
                        self.ne_polyfit, self.ne_polyfit_err, self.pe_polyfit, self.pe_polyfit_err,
                        self.dTedR_fit, self.dTedR_fit_err, self.dTedreff_fit, self.dTedreff_fit_err,
                        self.LTe_fit, self.LTe_fit_err, self.RLTe_fit, self.RLTe_fit_err,
                        self.dnedR_fit, self.dnedR_fit_err, self.dnedreff_fit, self.dnedreff_fit_err,
                        self.Lne_fit, self.Lne_fit_err, self.RLne_fit, self.RLne_fit_err,
+                       self.etae_fit, self.etae_fit_err,
                        self.dpedR_fit, self.dpedR_fit_err, self.dpedreff_fit, self.dpedreff_fit_err,
                        self.Lpe_fit, self.Lpe_fit_err, self.RLpe_fit, self.RLpe_fit_err,
                        self.dTedreff_polyfit, self.dTedreff_polyfit_err,
                        self.LTe_polyfit, self.LTe_polyfit_err, self.RLTe_polyfit, self.RLTe_polyfit_err,
                        self.dnedreff_polyfit, self.dnedreff_polyfit_err,
                        self.Lne_polyfit, self.Lne_polyfit_err, self.RLne_polyfit, self.RLne_polyfit_err,
+                       self.etae_polyfit, self.etae_polyfit_err,
                        self.dpedreff_polyfit, self.dpedreff_polyfit_err,
                        self.Lpe_polyfit, self.Lpe_polyfit_err, self.RLpe_polyfit, self.RLpe_polyfit_err,
                        self.dBzdR, self.dBzdreff, self.LBz, self.RLBz,
@@ -974,17 +1019,20 @@ class tsmap:
                                                                     Ys_list=datlist,
                                                                     include_outerside=include_outerside)
             self.Rwin.dreffdR, self.Rwin.Te_polyfit, self.Rwin.Te_polyfit_err, \
+            self.Rwin.scaled_resistivity_polyfit, self.Rwin.scaled_resistivity_polyfit_err, \
             self.Rwin.ne_polyfit, self.Rwin.ne_polyfit_err, self.Rwin.pe_polyfit, self.Rwin.pe_polyfit_err, \
             self.Rwin.dTedR_fit, self.Rwin.dTedR_fit_err, self.Rwin.dTedreff_fit, self.Rwin.dTedreff_fit_err, \
             self.Rwin.LTe_fit, self.Rwin.LTe_fit_err, self.Rwin.RLTe_fit, self.Rwin.RLTe_fit_err, \
             self.Rwin.dnedR_fit, self.Rwin.dnedR_fit_err, self.Rwin.dnedreff_fit, self.Rwin.dnedreff_fit_err, \
             self.Rwin.Lne_fit, self.Rwin.Lne_fit_err, self.Rwin.RLne_fit, self.Rwin.RLne_fit_err, \
+            self.Rwin.etae_fit, self.Rwin.etae_fit_err, \
             self.Rwin.dpedR_fit, self.Rwin.dpedR_fit_err, self.Rwin.dpedreff_fit, self.Rwin.dpedreff_fit_err, \
             self.Rwin.Lpe_fit, self.Rwin.Lpe_fit_err, self.Rwin.RLpe_fit, self.Rwin.RLpe_fit_err, \
             self.Rwin.dTedreff_polyfit, self.Rwin.dTedreff_polyfit_err, \
             self.Rwin.LTe_polyfit, self.Rwin.LTe_polyfit_err, self.Rwin.RLTe_polyfit, self.Rwin.RLTe_polyfit_err, \
             self.Rwin.dnedreff_polyfit, self.Rwin.dnedreff_polyfit_err, \
             self.Rwin.Lne_polyfit, self.Rwin.Lne_polyfit_err, self.Rwin.RLne_polyfit, self.Rwin.RLne_polyfit_err, \
+            self.Rwin.etae_polyfit, self.Rwin.etae_polyfit_err, \
             self.Rwin.dpedreff_polyfit, self.Rwin.dpedreff_polyfit_err, \
             self.Rwin.Lpe_polyfit, self.Rwin.Lpe_polyfit_err, self.Rwin.RLpe_polyfit, self.Rwin.RLpe_polyfit_err, \
             self.Rwin.dBzdR, self.Rwin.dBzdreff, self.Rwin.LBz, self.Rwin.RLBz, \
@@ -1007,10 +1055,14 @@ class tsmap:
             = calc.average(self.Rwin.reffa99, err=None, axis=1)
         self.Rwin.avg.Te, self.Rwin.std.Te, self.Rwin.ste.Te \
             = calc.average(self.Rwin.Te, err=self.Rwin.dTe, axis=1)
+        self.Rwin.avg.scaled_resistivity, self.Rwin.std.scaled_resistivity, self.Rwin.ste.scaled_resistivity \
+            = calc.average(self.Rwin.scaled_resistivity, err=self.Rwin.scaled_resistivity_err, axis=1)
         self.Rwin.avg.ne_calFIR, self.Rwin.std.ne_calFIR, self.Rwin.ste.ne_calFIR \
             = calc.average(self.Rwin.ne_calFIR, err=self.Rwin.dne_calFIR, axis=1)
         self.Rwin.avg.Te_fit, self.Rwin.std.Te_fit, self.Rwin.ste.Te_fit \
             = calc.average(self.Rwin.Te_fit, err=self.Rwin.Te_fit_err, axis=1)
+        self.Rwin.avg.scaled_resistivity_fit, self.Rwin.std.scaled_resistivity_fit, self.Rwin.ste.scaled_resistivity_fit \
+            = calc.average(self.Rwin.scaled_resistivity_fit, err=self.Rwin.scaled_resistivity_fit_err, axis=1)
         self.Rwin.avg.ne_fit, self.Rwin.std.ne_fit, self.Rwin.ste.ne_fit \
             = calc.average(self.Rwin.ne_fit, err=self.Rwin.ne_fit_err, axis=1)
         self.Rwin.avg.Br, self.Rwin.std.Br, self.Rwin.ste.Br \
@@ -1037,6 +1089,9 @@ class tsmap:
             self.Rwin.avg.RLTe_polyfit, self.Rwin.std.RLTe_polyfit, self.Rwin.ste.RLTe_polyfit \
                 = calc.average(self.Rwin.RLTe_polyfit, err=self.Rwin.RLTe_polyfit_err, axis=1)
 
+            self.Rwin.avg.scaled_resistivity_polyfit, self.Rwin.std.scaled_resistivity_polyfit, self.Rwin.ste.scaled_resistivity_polyfit \
+                = calc.average(self.Rwin.scaled_resistivity_polyfit, err=self.Rwin.scaled_resistivity_polyfit_err, axis=1)
+
             self.Rwin.avg.ne_polyfit, self.Rwin.std.ne_polyfit, self.Rwin.ste.ne_polyfit \
                 = calc.average(self.Rwin.ne_polyfit, err=self.Rwin.ne_polyfit_err, axis=1)
             self.Rwin.avg.dnedreff_polyfit, self.Rwin.std.dnedreff_polyfit, self.Rwin.ste.dnedreff_polyfit \
@@ -1045,6 +1100,9 @@ class tsmap:
                 = calc.average(self.Rwin.Lne_polyfit, err=self.Rwin.Lne_polyfit_err, axis=1)
             self.Rwin.avg.RLne_polyfit, self.Rwin.std.RLne_polyfit, self.Rwin.ste.RLne_polyfit \
                 = calc.average(self.Rwin.RLne_polyfit, err=self.Rwin.RLne_polyfit_err, axis=1)
+
+            self.Rwin.avg.etae_polyfit, self.Rwin.std.etae_polyfit, self.Rwin.ste.etae_polyfit \
+                = calc.average(self.Rwin.etae_polyfit, err=self.Rwin.etae_polyfit_err, axis=1)
 
             self.Rwin.avg.pe_polyfit, self.Rwin.std.pe_polyfit, self.Rwin.ste.pe_polyfit \
                 = calc.average(self.Rwin.pe_polyfit, err=self.Rwin.pe_polyfit_err, axis=1)
@@ -1072,6 +1130,9 @@ class tsmap:
                 = calc.average(self.Rwin.Lne_fit, err=self.Rwin.Lne_fit_err, axis=1)
             self.Rwin.avg.RLne_fit, self.Rwin.std.RLne_fit, self.Rwin.ste.RLne_fit \
                 = calc.average(self.Rwin.RLne_fit, err=self.Rwin.RLne_fit_err, axis=1)
+
+            self.Rwin.avg.etae_fit, self.Rwin.std.etae_fit, self.Rwin.ste.etae_fit \
+                = calc.average(self.Rwin.etae_fit, err=self.Rwin.etae_fit_err, axis=1)
 
             self.Rwin.avg.dpedR_fit, self.Rwin.std.dpedR_fit, self.Rwin.ste.dpedR_fit \
                 = calc.average(self.Rwin.dpedR_fit, err=self.Rwin.dpedR_fit_err, axis=1)
