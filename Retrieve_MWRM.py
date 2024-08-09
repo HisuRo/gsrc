@@ -2654,7 +2654,7 @@ class IQ:
                 ts, te = et
                 tssp = self.spg.t - self.spg.dT / 2
                 tesp = self.spg.t + self.spg.dT / 2
-                idx_nan = np.where(((tssp<te)&(tssp>ts))|((tesp>ts)&(tesp<te))|((tssp<ts)&(tesp>te)))[0]
+                idx_nan = np.where((ts < tesp) & (te > tssp))[0]
                 self.spg.int.Sk[idx_nan] = np.nan
                 self.spg.int.Ia[idx_nan] = np.nan
                 self.spg.int.Sknorm[idx_nan] = np.nan

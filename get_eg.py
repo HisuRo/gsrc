@@ -2351,6 +2351,172 @@ class cxsmap7:
             self.tRwin.tor.avg.teti, self.tRwin.tor.std.teti, self.tRwin.tor.ste.teti \
                 = calc.average(self.tRwin.tor.teti, err=self.tRwin.tor.teti_err)
 
+class cxs7_Er:
+
+    def __init__(self, sn=184508, sub=1, tstart=3, tend=6, Er_lim=50):
+
+        self.sn = sn
+        self.sub = sub
+        self.ts = tstart
+        self.te = tend
+        self.Er_lim = Er_lim
+
+        self.t, self.R, list_dat, self.dimnms, self.valnms, self.dimunits, self.valunits \
+            = read.eg2d("cxs7_Er", sn, sub)
+        self.dt = self.t[1] - self.t[0]
+        self.dR = self.R[1] - self.R[0]
+
+        list_dat[10][list_dat[10] == 0.] = np.nan
+        list_dat[10][np.abs(list_dat[10]) > self.Er_lim] = np.nan
+
+        tidxs, list_dat = proc.getTimeIdxsAndDats(self.t, self.ts, self.te, list_dat)
+        self.t = self.t[tidxs]
+
+        # tidxs = ~np.isnan(list_dat[10]).all(axis=1)
+        # self.t = self.t[tidxs]
+        # for i in range(len(list_dat)):
+        #     list_dat[i] = list_dat[i][tidxs]
+
+        # Ridxs = ~np.isnan(list_dat[10]).any(axis=0)
+        # self.R = self.R[Ridxs]
+        # for i in range(len(list_dat)):
+        #     list_dat[i] = list_dat[i][:, Ridxs]
+
+        self.reff, self.reffa99, self.Erdia, self.Erdiaerr, self.Ervt, self.Ervterr, self.Ervp, self.Ervperr, \
+        self.Ervperp, self.Ervperperr, self.Er, self.Ererr, self.Ereff, self.Erefferr, self.Inc, self.Incerr, \
+        self.Tip, self.Tiperr, self.Vt, self.Vterr, self.Vp, self.Vperr, self.Br, self.Bz, self.Bphi = list_dat
+
+        self.Bax, self.Rax, self.Bq, self.gamma, self.datetime, self.cycle = getShotInfo.info(self.sn)
+
+        self.Br *= self.Bax / 3
+        self.Bz *= self.Bax / 3
+        self.Bphi *= self.Bax / 3
+
+        self.B = np.sqrt(self.Br**2 + self.Bz**2 + self.Bphi**2)
+
+        self.vExB, self.vExB_err = calc.divide(self.Er * self.Bphi, self.B**2, self.Ererr * self.Bphi)
+        self.vExBeff, self.vExBeff_err = calc.divide(self.Ereff * self.Bphi, self.B**2, self.Erefferr * self.Bphi)
+
+        self.dirnm = f"cxs7_Er"
+        proc.ifNotMake(self.dirnm)
+
+    def tat(self, time=4.5, include_grad=True):
+
+        self.at = struct()
+        datlist = [self.t,
+                   self.reff, self.reffa99, self.Erdia, self.Erdiaerr, self.Ervt, self.Ervterr, self.Ervp, self.Ervperr,
+                   self.Ervperp, self.Ervperperr, self.Er, self.Ererr, self.Ereff, self.Erefferr, self.Inc, self.Incerr,
+                   self.Tip, self.Tiperr, self.Vt, self.Vterr, self.Vp, self.Vperr, self.Br, self.Bz, self.Bphi, 
+                   self.B, self.vExB, self.vExB_err, self.vExBeff, self.vExBeff_err]
+
+        _, datlist_at = proc.getTimeIdxAndDats(self.t, time, datlist)
+        self.at.t, \
+        self.at.reff, self.at.reffa99, self.at.Erdia, self.at.Erdiaerr, \
+        self.at.Ervt, self.at.Ervterr, self.at.Ervp, self.at.Ervperr, \
+        self.at.Ervperp, self.at.Ervperperr, self.at.Er, self.at.Ererr, \
+        self.at.Ereff, self.at.Erefferr, self.at.Inc, self.at.Incerr, \
+        self.at.Tip, self.at.Tiperr, self.at.Vt, self.at.Vterr, \
+        self.at.Vp, self.at.Vperr, self.at.Br, self.at.Bz, self.at.Bphi, \
+        self.at.B, self.at.vExB, self.at.vExB_err, self.at.vExBeff, self.at.vExBeff_err = datlist_at
+
+        if include_grad:
+
+            datlist = [self.Er_polyfit, self.Er_polyfit_err, self.dErdreff_polyfit, self.dErdreff_polyfit_err,
+                       self.LEr_polyfit, self.LEr_polyfit_err, self.RLEr_polyfit, self.RLEr_polyfit_err,
+                       self.Ereff_polyfit, self.Ereff_polyfit_err, self.dEreffdreff_polyfit, self.dEreffdreff_polyfit_err,
+                       self.LEreff_polyfit, self.LEreff_polyfit_err, self.RLEreff_polyfit, self.RLEreff_polyfit_err,
+                       self.vExB_polyfit, self.vExB_polyfit_err, self.dvExBdreff_polyfit, self.dvExBdreff_polyfit_err,
+                       self.LvExB_polyfit, self.LvExB_polyfit_err, self.RLvExB_polyfit, self.RLvExB_polyfit_err,
+                       self.vExBeff_polyfit, self.vExBeff_polyfit_err,
+                       self.dvExBeffdreff_polyfit, self.dvExBeffdreff_polyfit_err,
+                       self.LvExBeff_polyfit, self.LvExBeff_polyfit_err,
+                       self.RLvExBeff_polyfit, self.RLvExBeff_polyfit_err
+                       ]
+            _, datlist_at = proc.getTimeIdxAndDats(self.t, time, datlist)
+            self.at.Er_polyfit, self.at.Er_polyfit_err, self.at.dErdreff_polyfit, self.at.dErdreff_polyfit_err, \
+            self.at.LEr_polyfit, self.at.LEr_polyfit_err, self.at.RLEr_polyfit, self.at.RLEr_polyfit_err, \
+            self.at.Ereff_polyfit, self.at.Ereff_polyfit_err, \
+            self.at.dEreffdreff_polyfit, self.at.dEreffdreff_polyfit_err, \
+            self.at.LEreff_polyfit, self.at.LEreff_polyfit_err, \
+            self.at.RLEreff_polyfit, self.at.RLEreff_polyfit_err, \
+            self.at.vExB_polyfit, self.at.vExB_polyfit_err, \
+            self.at.dvExBdreff_polyfit, self.at.dvExBdreff_polyfit_err, \
+            self.at.LvExB_polyfit, self.at.LvExB_polyfit_err, \
+            self.at.RLvExB_polyfit, self.at.RLvExB_polyfit_err, \
+            self.at.vExBeff_polyfit, self.at.vExBeff_polyfit_err, \
+            self.at.dvExBeffdreff_polyfit, self.at.dvExBeffdreff_polyfit_err, \
+            self.at.LvExBeff_polyfit, self.at.LvExBeff_polyfit_err, \
+            self.at.RLvExBeff_polyfit, self.at.RLvExBeff_polyfit_err = datlist_at
+
+    def calcgrad(self, polyN=10):
+
+        # a. 2)
+        self.polyN = polyN
+
+        _o = calc.polyN_LSM_der(xx=self.reff, yy=self.Er, polyN=polyN, yErr=self.Ererr, parity="even")
+        self.Er_polyfit = _o.yHut
+        self.Er_polyfit_err = _o.yHutErr
+        self.dErdreff_polyfit = _o.yHutDer
+        self.dErdreff_polyfit_err = _o.yHutDerErr
+        self.LEr_polyfit, self.LEr_polyfit_err, self.RLEr_polyfit, self.RLEr_polyfit_err \
+            = calc.Lscale(self.Er_polyfit, self.dErdreff_polyfit, self.Rax,
+                          self.Er_polyfit_err, self.dErdreff_polyfit_err)
+
+        _o = calc.polyN_LSM_der(xx=self.reff, yy=self.Ereff, polyN=polyN, yErr=self.Erefferr, parity="even")
+        self.Ereff_polyfit = _o.yHut
+        self.Ereff_polyfit_err = _o.yHutErr
+        self.dEreffdreff_polyfit = _o.yHutDer
+        self.dEreffdreff_polyfit_err = _o.yHutDerErr
+        self.LEreff_polyfit, self.LEreff_polyfit_err, self.RLEreff_polyfit, self.RLEreff_polyfit_err \
+            = calc.Lscale(self.Ereff_polyfit, self.dEreffdreff_polyfit, self.Rax,
+                          self.Ereff_polyfit_err, self.dEreffdreff_polyfit_err)
+        
+        _o = calc.polyN_LSM_der(xx=self.reff, yy=self.vExB, polyN=polyN, yErr=self.vExB_err, parity="even")
+        self.vExB_polyfit = _o.yHut
+        self.vExB_polyfit_err = _o.yHutErr
+        self.dvExBdreff_polyfit = _o.yHutDer
+        self.dvExBdreff_polyfit_err = _o.yHutDerErr
+        self.LvExB_polyfit, self.LvExB_polyfit_err, self.RLvExB_polyfit, self.RLvExB_polyfit_err \
+            = calc.Lscale(self.vExB_polyfit, self.dvExBdreff_polyfit, self.Rax,
+                          self.vExB_polyfit_err, self.dvExBdreff_polyfit_err)
+
+        _o = calc.polyN_LSM_der(xx=self.reff, yy=self.vExBeff, polyN=polyN, yErr=self.vExBeff_err, parity="even")
+        self.vExBeff_polyfit = _o.yHut
+        self.vExBeff_polyfit_err = _o.yHutErr
+        self.dvExBeffdreff_polyfit = _o.yHutDer
+        self.dvExBeffdreff_polyfit_err = _o.yHutDerErr
+        self.LvExBeff_polyfit, self.LvExBeff_polyfit_err, self.RLvExBeff_polyfit, self.RLvExBeff_polyfit_err \
+            = calc.Lscale(self.vExBeff_polyfit, self.dvExBeffdreff_polyfit, self.Rax,
+                          self.vExBeff_polyfit_err, self.dvExBeffdreff_polyfit_err)
+
+    def plot_vExB(self, vExB_lim=5, cmap="coolwarm", pause=0):
+
+        self.vExB_lim = vExB_lim
+        self.cmap = cmap
+
+        figdir = os.path.join(self.dirnm, "vExB")
+        proc.ifNotMake(figdir)
+        fnm = f"{self.sn}_{self.sub}_{self.ts}_{self.te}_{self.vExB_lim}"
+        title = f"#{self.sn}-{self.sub}"
+        path = os.path.join(figdir, f"{fnm}.png")
+        fig, ax = plt.subplots(1)
+
+        im = ax.pcolormesh(np.append(self.t - 0.5 * self.dt, self.t[-1] + 0.5 * self.dt),
+                           np.append(self.R - 0.5 * self.dR, self.R[-1] + 0.5 * self.dR),
+                           self.vExBeff.T, cmap=self.cmap, vmin=-self.vExB_lim, vmax=self.vExB_lim)
+        cbar = plt.colorbar(im)
+        cbar.set_label("vExB [km/s]")
+
+        ax.set_xlabel("Time [s]")
+        ax.set_ylabel("R [m]")
+
+        plot.caption(fig, title)
+        plot.capsave(fig, title, fnm, path)
+
+        plot.check(pause)
+
+
+
 class LID_cur:
 
     def __init__(self, sn=184508, sub=1):
