@@ -470,3 +470,74 @@ def any2_t_mul(time, huelabels, any1, any2, range1, range2, label1, label2, colo
     fig.legend()
 
     return fig, axs
+
+
+def scatter3d(x, y, z, X_Label=None, Y_Label=None, Z_Label=None, xlim=None, ylim=None, zlim=None, figsize=(7, 8)):
+
+    if X_Label is None:
+        X_Label = "X"
+    if Y_Label is None:
+        Y_Label = "Y"
+    if Z_Label is None:
+        Z_Label = "Z"
+    if xlim is None:
+        xlim = (np.nanmin(x), np.nanmax(x))
+    if ylim is None:
+        ylim = (np.nanmin(y), np.nanmax(y))
+    if zlim is None:
+        zlim = (np.nanmin(z), np.nanmax(z))
+
+    fig = plt.figure(facecolor='white', figsize=figsize)
+    ax = fig.add_subplot(111, projection='3d')
+
+    ax.scatter(x, y, z, c='k', marker='o', s=10, alpha=1)
+    for i in range(len(x)):
+        ax.plot([x[i], x[i]], [y[i], y[i]], [z[i], 0], c='grey', linestyle='-', lw=0.5)
+
+    ax.scatter(x, z, zdir='y', zs=ylim[1], color='red', s=5, alpha=1)
+    ax.scatter(y, z, zdir='x', zs=xlim[0], color='green', s=5, alpha=1)
+    ax.scatter(x, y, zdir='z', zs=zlim[0], color='blue', s=5, alpha=1)
+
+    ax.set_xlim(xlim)
+    ax.set_ylim(ylim)
+    ax.set_zlim(zlim)
+
+    # Define the data ranges
+    x2 = np.linspace(xlim[0], xlim[1], 50)
+    y2 = np.linspace(ylim[0], ylim[1], 50)
+    z2 = np.linspace(zlim[0], zlim[1], 50)
+    # x-y plane equation: z = 0
+    x_plane1, y_plane1 = np.meshgrid(x2, y2)
+    z_plane1 = np.full_like(x_plane1, zlim[0])
+    # y-z plane equation: x = 0
+    y_plane2, z_plane2 = np.meshgrid(y2, z2)
+    x_plane2 = np.full_like(y_plane2, xlim[0])
+    # z-x plane equation: y = 0
+    z_plane3, x_plane3 = np.meshgrid(z2, x2)
+    y_plane3 = np.full_like(z_plane3, ylim[1])
+
+    # 下の平面の枠線を無色に設定
+    ax.xaxis.pane.edgecolor = 'none'
+    ax.yaxis.pane.edgecolor = 'none'
+    ax.zaxis.pane.edgecolor = 'none'
+
+    # ax.xaxis.pane.fill = False
+    # ax.yaxis.pane.fill = False
+    # ax.zaxis.pane.fill = False
+
+    ax.plot_surface(x_plane1, y_plane1, z_plane1, color='lightcyan', alpha=0.3, rstride=100, cstride=100, shade=False)
+    # Plot y-z plane (red)
+    ax.plot_surface(x_plane2, y_plane2, z_plane2, color='palegreen', alpha=0.3, rstride=100, cstride=100, shade=False)
+    # Plot z-x plane (green)
+    ax.plot_surface(x_plane3, y_plane3, z_plane3, color='pink', alpha=0.3, rstride=100, cstride=100, shade=False)
+
+    ax.set_xlabel(X_Label, labelpad=10)
+    ax.set_ylabel(Y_Label, labelpad=10)
+    ax.set_zlabel(Z_Label, labelpad=10)
+
+    # ティックラベル設定
+    ax.xaxis.set_tick_params(pad=4)  # X軸ティックラベル
+    ax.yaxis.set_tick_params(pad=4)  # Y軸ティックラベル
+    ax.zaxis.set_tick_params(pad=4)  # Z軸ティックラベル
+
+    return fig, ax

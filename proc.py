@@ -12,6 +12,16 @@ from nasu import calc
 import copy
 
 
+def flatten(lst):
+    flattened = []
+    for item in lst:
+        if isinstance(item, list):
+            flattened.extend(flatten(item))
+        else:
+            flattened.append(item)
+    return flattened
+
+
 def interleave_lists(list1, list2):
     # interleave : to combine different things so that parts of one thing are put between parts of another thing
     interleaved_list = []

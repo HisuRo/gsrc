@@ -3476,7 +3476,7 @@ class twinIQ:
         return self.cbsp
 
     def bispectrum_in_f_range(self, fmin3=200e3, fmax3=500e3, tstart=4, tend=5, NFFT1=2**10, OVR=0.5,
-                              window="hann", mode="IQ", fmax1=None, fmax2=None):
+                              window="hann", mode="IQ", flim1=None, flim2=None):
 
         if mode == "IQ":
             NFFT2 = int(self.iq1.dT * NFFT1 / self.iq2.dT + 0.5)
@@ -3491,7 +3491,7 @@ class twinIQ:
             self.cbsp = calc.cross_bispectral_analysis_in_f_range(fmin3, fmax3, IQraw1, IQraw1, IQraw2,
                                                                   self.iq1.dT, self.iq1.dT, self.iq2.dT,
                                                                   NFFT1, NFFT1, NFFT2,
-                                                                  flimx=fmax1, flimy=fmax2,
+                                                                  flimx=flim1, flimy=flim2,
                                                                   OVR=OVR, window=window)
 
         else:

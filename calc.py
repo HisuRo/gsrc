@@ -2432,6 +2432,7 @@ def cross_bispectrum_at_f3(f3_at, freqx, freqy, freqz, XX0, YY0, ZZ0, NFFTx, NFF
 
 def cross_bispectrum_in_f_range(fmin, fmax, freqx, freqy, freqz, XX0, YY0, ZZ0, NFFTx, NFFTy, NFFTz, NEns,
                                 Fsx, Fsy, flimx=None, flimy=None):
+    # flimx, flimy: int, float as fmax or tuple, list as (fmin, fmax), [fmin, fmax]
 
     idxMxz, _ = makeIdxsForCrossBiSpectrum(NFFTx, NFFTy, NFFTz)
     freq3 = freqz[idxMxz]
@@ -2442,13 +2443,19 @@ def cross_bispectrum_in_f_range(fmin, fmax, freqx, freqy, freqz, XX0, YY0, ZZ0, 
 
     # limitation
     if flimx is not None:
-        fidx_x = np.where(np.abs(freqx) < flimx)[0]
+        if isinstance(flimx, tuple) or isinstance(flimx, list):
+            fidx_x = np.where((np.abs(freqx) < flimx[1]) & (np.abs(freqx) > flimx[0]))[0]
+        else:
+            fidx_x = np.where(np.abs(freqx) < flimx)[0]
         freqx = freqx[fidx_x]
         freq3 = freq3[:, fidx_x]
         XX = XX[:, fidx_x]
         ZZ = ZZ[:, :, fidx_x]
     if flimy is not None:
-        fidx_y = np.where(np.abs(freqy) < flimy)[0]
+        if isinstance(flimy, tuple) or isinstance(flimy, list):
+            fidx_y = np.where((np.abs(freqy) < flimy[1]) & (np.abs(freqy) > flimy[0]))[0]
+        else:
+            fidx_y = np.where(np.abs(freqy) < flimy)[0]
         freqy = freqy[fidx_y]
         freq3 = freq3[fidx_y, :]
         YY = YY[:, fidx_y]
@@ -3928,15 +3935,18 @@ def moving_average(data, window_size, mode="same"):
     # window_size must be odd number.
     # mode = "same", "valid"
 
-    if mode == "same":
-        cumsum = np.insert(np.cumsum(np.append(np.insert(data, 0, [0] * ((window_size - 1)//2)),
-                                               [0] * ((window_size - 1)//2))), 0, 0)
-    elif mode == "valid":
-        cumsum = np.insert(np.cumsum(data), 0, 0)
+    if window_size == 1:
+        moving_average = data
     else:
-        print("please input correct mode. 'same' or 'valid'")
-        exit()
-    moving_average = (cumsum[window_size:] - cumsum[:-window_size]) / window_size
+        if mode == "same":
+            cumsum = np.insert(np.cumsum(np.append(np.insert(data, 0, [0] * ((window_size - 1)//2)),
+                                                   [0] * ((window_size - 1)//2))), 0, 0)
+        elif mode == "valid":
+            cumsum = np.insert(np.cumsum(data), 0, 0)
+        else:
+            print("please input correct mode. 'same' or 'valid'")
+            exit()
+        moving_average = (cumsum[window_size:] - cumsum[:-window_size]) / window_size
 
     return moving_average
 
