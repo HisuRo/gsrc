@@ -64,6 +64,24 @@ def cauchy_lorentz(x, a, b, c, d):
 def gauss_and_lorentz(x, ag, bg, cg, al, bl, cl, d):
     return gauss(x, ag, bg, cg, 0) + cauchy_lorentz(x, al, bl, cl, 0) + d
 
+
+class randomIQ:
+
+    def __init__(self, Fs, mu, sigma, tstart, tend):
+
+        self.Fs = Fs
+        self.dT = 1./Fs
+        self.mu = mu
+        self.sigma = sigma
+        self.tstart = tstart
+        self.tend = tend
+
+        self.t = np.arange(self.tstart, self.tend + self.dT, self.dT)
+        self.size = self.t.size
+        self.IQ = np.random.normal(self.mu, self.sigma, self.size) \
+                  + 1.j * np.random.normal(self.mu, self.sigma, self.size)
+
+
 class single:
 
     def __init__(self, sn=187570, subsn=1, tstart=3., tend=6., diagname="MWRM-PXI", ch=1):
@@ -140,7 +158,7 @@ class single:
 class IQ:
 
     def __init__(self, sn=187570, subsn=1, tstart=3., tend=6.,
-                 diagname="MWRM-PXI", chI=11, chQ=12, phase_unwrap=True):
+                 diagname="MWRM-PXI", chI=11, chQ=12, phase_unwrap=True, save=True):
 
         self.sn = sn
         self.subsn = subsn
@@ -177,18 +195,19 @@ class IQ:
         else:
             self.phaseIQ = np.angle(self.IQ)
 
-        self.dirbase = "Retrieve_MWRM"
-        proc.ifNotMake(self.dirbase)
-        self.fnm_init = f"{sn}_{subsn}_{tstart}_{tend}_{diagname}_{chI}_{chQ}"
-        self.figtitle = f"#{self.sn}-{self.subsn}\n" \
-                        f"1: {self.diagname} {self.chI} {self.chQ}"
+        if save:
+            self.dirbase = "Retrieve_MWRM"
+            proc.ifNotMake(self.dirbase)
+            self.fnm_init = f"{sn}_{subsn}_{tstart}_{tend}_{diagname}_{chI}_{chQ}"
+            self.figtitle = f"#{self.sn}-{self.subsn}\n" \
+                            f"1: {self.diagname} {self.chI} {self.chQ}"
 
         self.spg = calc.struct()
         self.sp = calc.struct()
 
     def specgram(self, NFFT=2**10, ovr=0.5, window="hann", dT=5e-3,
                  cmap="viridis", magnify=True, fmin=None, fmax=None, pause=0.,
-                 display=True, detrend="constant", sub_phi=False):
+                 display=True, detrend="constant", sub_phi=False, save=True):
 
         plot.set("notebook", "ticks")
 
@@ -252,120 +271,121 @@ class IQ:
 
         self.spg.psddB_diff = np.diff(self.spg.psddB, axis=-1)
 
-        if not display:
-            original_backend = matplotlib.get_backend()
-            matplotlib.use('Agg')
+        if save:
+            if not display:
+                original_backend = matplotlib.get_backend()
+                matplotlib.use('Agg')
 
-        if sub_phi:
-            figdir = os.path.join(self.dirbase, "specgram_subphi")
-        else:
-            figdir = os.path.join(self.dirbase, "specgram")
-        proc.ifNotMake(figdir)
-        if sub_phi:
-            fnm_base = f"{self.sn}_{self.subsn}_{self.tstart}_{self.tend}_{self.diagname}_{self.chI}_{self.chQ}_" \
-                       f"{self.spg.NFFT}_{self.spg.ovr}_{self.spg.window}_{self.spg.dT}_subphi"
-        else:
-            fnm_base = f"{self.sn}_{self.subsn}_{self.tstart}_{self.tend}_{self.diagname}_{self.chI}_{self.chQ}_" \
-                       f"{self.spg.NFFT}_{self.spg.ovr}_{self.spg.window}_{self.spg.dT}"
-        if fmin is not None:
-            fnm_base += f"_min{fmin*1e-3}kHz"
-        if fmax is not None:
-            fnm_base += f"_max{fmax*1e-3}kHz"
-        path = os.path.join(figdir, f"{fnm_base}.png")
-        self.fnm_spg = fnm_base
-        if sub_phi:
-            title = f"#{self.sn}-{self.subsn} {self.tstart}-{self.tend}s\n" \
-                    f"{self.diagname} ch:{self.chI},{self.chQ}\n" \
-                    f"{self.spg.NFFT} {self.spg.ovr} {self.spg.window} {self.spg.dT}s\n" \
-                    f"subtract phase line"
-        else:
+            if sub_phi:
+                figdir = os.path.join(self.dirbase, "specgram_subphi")
+            else:
+                figdir = os.path.join(self.dirbase, "specgram")
+            proc.ifNotMake(figdir)
+            if sub_phi:
+                fnm_base = f"{self.sn}_{self.subsn}_{self.tstart}_{self.tend}_{self.diagname}_{self.chI}_{self.chQ}_" \
+                           f"{self.spg.NFFT}_{self.spg.ovr}_{self.spg.window}_{self.spg.dT}_subphi"
+            else:
+                fnm_base = f"{self.sn}_{self.subsn}_{self.tstart}_{self.tend}_{self.diagname}_{self.chI}_{self.chQ}_" \
+                           f"{self.spg.NFFT}_{self.spg.ovr}_{self.spg.window}_{self.spg.dT}"
+            if fmin is not None:
+                fnm_base += f"_min{fmin*1e-3}kHz"
+            if fmax is not None:
+                fnm_base += f"_max{fmax*1e-3}kHz"
+            path = os.path.join(figdir, f"{fnm_base}.png")
+            self.fnm_spg = fnm_base
+            if sub_phi:
+                title = f"#{self.sn}-{self.subsn} {self.tstart}-{self.tend}s\n" \
+                        f"{self.diagname} ch:{self.chI},{self.chQ}\n" \
+                        f"{self.spg.NFFT} {self.spg.ovr} {self.spg.window} {self.spg.dT}s\n" \
+                        f"subtract phase line"
+            else:
+                title = f"#{self.sn}-{self.subsn} {self.tstart}-{self.tend}s\n" \
+                        f"{self.diagname} ch:{self.chI},{self.chQ}\n" \
+                        f"{self.spg.NFFT} {self.spg.ovr} {self.spg.window} {self.spg.dT}s"
+
+            fig, axs = plt.subplots(nrows=3, sharex=True,
+                                    figsize=(5, 10), gridspec_kw={'height_ratios': [1, 1, 3]},
+                                    num=fnm_base)
+
+            if sub_phi:
+                axs[0].plot(self.t, self.I_subphi, c="black", lw=0.1)
+            else:
+                axs[0].plot(self.t, self.I, c="black", lw=0.1)
+            axs[0].set_ylabel("I [V]")
+            if magnify:
+                p2p = self.I.max() - self.I.min()
+                axs[0].set_ylim(self.I.min() - p2p * 0.05, self.I.max() + p2p * 0.05)
+            else:
+                axs[0].set_ylim(float(self.Iprms["RangeLow"][0]), float(self.Iprms["RangeHigh"][0]))
+
+            if sub_phi:
+                axs[1].plot(self.t, self.Q_subphi, c="black", lw=0.1)
+            else:
+                axs[1].plot(self.t, self.Q, c="black", lw=0.1)
+            if magnify:
+                p2p = self.Q.max() - self.Q.min()
+                axs[1].set_ylim(self.Q.min() - p2p * 0.05, self.Q.max() + p2p * 0.05)
+            else:
+                axs[1].set_ylim(float(self.Qprms["RangeLow"][0]), float(self.Qprms["RangeHigh"][0]))
+            axs[1].set_ylabel("Q [V]")
+
+            if sub_phi:
+                axs[2].pcolormesh(np.append(self.spg.t - 0.5 * self.spg.dT, self.spg.t[-1] + 0.5 * self.spg.dT),
+                                  np.append(self.spg.f - 0.5 * self.spg.dF, self.spg.f[-1] + 0.5 * self.spg.dF),
+                                  self.spg.psddB_subphi.T,
+                                  cmap=self.spg.cmap, vmin=self.spg.vmindB, vmax=self.spg.vmaxdB)
+            else:
+                axs[2].pcolormesh(np.append(self.spg.t - 0.5 * self.spg.dT, self.spg.t[-1] + 0.5 * self.spg.dT),
+                                  np.append(self.spg.f - 0.5 * self.spg.dF, self.spg.f[-1] + 0.5 * self.spg.dF),
+                                  self.spg.psddB.T,
+                                  cmap=self.spg.cmap, vmin=self.spg.vmindB, vmax=self.spg.vmaxdB)
+            if magnify:
+                axs[2].set_ylim(- self.spg.fmax, self.spg.fmax)
+            axs[2].set_ylabel("Frequency [Hz]")
+            axs[2].set_xlabel("Time [s]")
+            axs[2].set_xlim(self.tstart, self.tend)
+
+            plot.caption(fig, title, hspace=0.1, wspace=0.1)
+            plot.capsave(fig, title, fnm_base, path)
+
+            if display:
+                plot.check(pause)
+            else:
+                plot.close(fig)
+
+            fig2dir = os.path.join(self.dirbase, "specgram_diff")
+            proc.ifNotMake(fig2dir)
+            fnm = f"{fnm_base}_diff"
+            if fmin is not None:
+                fnm += f"_min{fmin * 1e-3}kHz"
+            if fmax is not None:
+                fnm += f"_max{fmax * 1e-3}kHz"
+            path = os.path.join(fig2dir, f"{fnm}.png")
             title = f"#{self.sn}-{self.subsn} {self.tstart}-{self.tend}s\n" \
                     f"{self.diagname} ch:{self.chI},{self.chQ}\n" \
                     f"{self.spg.NFFT} {self.spg.ovr} {self.spg.window} {self.spg.dT}s"
+            fig2, ax2 = plt.subplots(nrows=1, num=fnm, figsize=(5, 5))
 
-        fig, axs = plt.subplots(nrows=3, sharex=True,
-                                figsize=(5, 10), gridspec_kw={'height_ratios': [1, 1, 3]},
-                                num=fnm_base)
+            ax2.pcolormesh(np.append(self.spg.t - 0.5 * self.spg.dT, self.spg.t[-1] + 0.5 * self.spg.dT),
+                           self.spg.f,
+                           self.spg.psddB_diff.T,
+                           cmap="coolwarm")
+            if magnify:
+                ax2.set_ylim(- self.spg.fmax, self.spg.fmax)
+            ax2.set_ylabel("Frequency [Hz]")
+            ax2.set_xlabel("Time [s]")
+            ax2.set_xlim(self.tstart, self.tend)
 
-        if sub_phi:
-            axs[0].plot(self.t, self.I_subphi, c="black", lw=0.1)
-        else:
-            axs[0].plot(self.t, self.I, c="black", lw=0.1)
-        axs[0].set_ylabel("I [V]")
-        if magnify:
-            p2p = self.I.max() - self.I.min()
-            axs[0].set_ylim(self.I.min() - p2p * 0.05, self.I.max() + p2p * 0.05)
-        else:
-            axs[0].set_ylim(float(self.Iprms["RangeLow"][0]), float(self.Iprms["RangeHigh"][0]))
+            plot.caption(fig2, title, hspace=0.1, wspace=0.1)
+            plot.capsave(fig2, title, fnm, path)
 
-        if sub_phi:
-            axs[1].plot(self.t, self.Q_subphi, c="black", lw=0.1)
-        else:
-            axs[1].plot(self.t, self.Q, c="black", lw=0.1)
-        if magnify:
-            p2p = self.Q.max() - self.Q.min()
-            axs[1].set_ylim(self.Q.min() - p2p * 0.05, self.Q.max() + p2p * 0.05)
-        else:
-            axs[1].set_ylim(float(self.Qprms["RangeLow"][0]), float(self.Qprms["RangeHigh"][0]))
-        axs[1].set_ylabel("Q [V]")
+            if display:
+                plot.check(pause)
+            else:
+                plot.close(fig2)
 
-        if sub_phi:
-            axs[2].pcolormesh(np.append(self.spg.t - 0.5 * self.spg.dT, self.spg.t[-1] + 0.5 * self.spg.dT),
-                              np.append(self.spg.f - 0.5 * self.spg.dF, self.spg.f[-1] + 0.5 * self.spg.dF),
-                              self.spg.psddB_subphi.T,
-                              cmap=self.spg.cmap, vmin=self.spg.vmindB, vmax=self.spg.vmaxdB)
-        else:
-            axs[2].pcolormesh(np.append(self.spg.t - 0.5 * self.spg.dT, self.spg.t[-1] + 0.5 * self.spg.dT),
-                              np.append(self.spg.f - 0.5 * self.spg.dF, self.spg.f[-1] + 0.5 * self.spg.dF),
-                              self.spg.psddB.T,
-                              cmap=self.spg.cmap, vmin=self.spg.vmindB, vmax=self.spg.vmaxdB)
-        if magnify:
-            axs[2].set_ylim(- self.spg.fmax, self.spg.fmax)
-        axs[2].set_ylabel("Frequency [Hz]")
-        axs[2].set_xlabel("Time [s]")
-        axs[2].set_xlim(self.tstart, self.tend)
-
-        plot.caption(fig, title, hspace=0.1, wspace=0.1)
-        plot.capsave(fig, title, fnm_base, path)
-
-        if display:
-            plot.check(pause)
-        else:
-            plot.close(fig)
-
-        fig2dir = os.path.join(self.dirbase, "specgram_diff")
-        proc.ifNotMake(fig2dir)
-        fnm = f"{fnm_base}_diff"
-        if fmin is not None:
-            fnm += f"_min{fmin * 1e-3}kHz"
-        if fmax is not None:
-            fnm += f"_max{fmax * 1e-3}kHz"
-        path = os.path.join(fig2dir, f"{fnm}.png")
-        title = f"#{self.sn}-{self.subsn} {self.tstart}-{self.tend}s\n" \
-                f"{self.diagname} ch:{self.chI},{self.chQ}\n" \
-                f"{self.spg.NFFT} {self.spg.ovr} {self.spg.window} {self.spg.dT}s"
-        fig2, ax2 = plt.subplots(nrows=1, num=fnm, figsize=(5, 5))
-
-        ax2.pcolormesh(np.append(self.spg.t - 0.5 * self.spg.dT, self.spg.t[-1] + 0.5 * self.spg.dT),
-                       self.spg.f,
-                       self.spg.psddB_diff.T,
-                       cmap="coolwarm")
-        if magnify:
-            ax2.set_ylim(- self.spg.fmax, self.spg.fmax)
-        ax2.set_ylabel("Frequency [Hz]")
-        ax2.set_xlabel("Time [s]")
-        ax2.set_xlim(self.tstart, self.tend)
-
-        plot.caption(fig2, title, hspace=0.1, wspace=0.1)
-        plot.capsave(fig2, title, fnm, path)
-
-        if display:
-            plot.check(pause)
-        else:
-            plot.close(fig2)
-
-        if not display:
-            matplotlib.use(original_backend)
+            if not display:
+                matplotlib.use(original_backend)
 
         return self.spg
 
@@ -3623,6 +3643,32 @@ def cross_spectrogram(iq1, iq2, NFFT=2**10, window="hann", NEns=20, OVR=0.5, mod
         matplotlib.use(original_backend)
 
     return csg
+
+def bispectrum_in_f_range(iq1, iq2, fmin3=200e3, fmax3=500e3,
+                          tstart=4, tend=5, NFFT1=2**10, OVR=0.5,
+                          window="hann", mode="IQ", flim1=None, flim2=None):
+
+    if mode == "IQ":
+        NFFT2 = int(iq1.dT * NFFT1 / iq2.dT + 0.5)
+
+        _, datlist = proc.getTimeIdxsAndDats(iq1.t, tstart, tend,
+                                             [iq1.IQ])
+        IQraw1 = datlist[0]
+        _, datlist = proc.getTimeIdxsAndDats(iq2.t, tstart, tend,
+                                             [iq2.IQ])
+        IQraw2 = datlist[0]
+
+        cbsp = calc.cross_bispectral_analysis_in_f_range(fmin3, fmax3, IQraw1, IQraw1, IQraw2,
+                                                         iq1.dT, iq1.dT, iq2.dT,
+                                                         NFFT1, NFFT1, NFFT2,
+                                                         flimx=flim1, flimy=flim2,
+                                                         OVR=OVR, window=window)
+
+    else:
+        print("未実装!")
+        exit()
+
+    return cbsp
 
 
 class tripletIQ:
