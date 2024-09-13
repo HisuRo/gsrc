@@ -2621,7 +2621,7 @@ def cross_bispectral_analysis_at_f3(f3_at, xx, yy, zz, dtx, dty, dtz,
 
 def cross_bispectral_analysis_in_f_range(fmin, fmax, xx, yy, zz, dtx, dty, dtz,
                                          NFFTx, NFFTy, NFFTz, flimx=None, flimy=None,
-                                         OVR=0.5, window="hann"):
+                                         OVR=0.5, window="hann", coef_OV=1.0):
 
     o = struct()
 
@@ -2678,7 +2678,7 @@ def cross_bispectral_analysis_in_f_range(fmin, fmax, xx, yy, zz, dtx, dty, dtz,
                                       NFFTx, NFFTy, NFFTz, o.NEns,
                                       1./dtx, 1./dty, flimx=flimx, flimy=flimy)
     o.biCohSq_total = np.sum(o.biCohSq)
-    o.biCohSq_stastd = o.biCohSq.size / o.NEns
+    o.biCohSq_stastd = o.biCohSq.size / o.NEns * coef_OV
     o.biPhs_avg = np.average(o.biPhs)
     o.biPhs_avg_err = np.sqrt(np.average(o.biPhsErr**2))
 

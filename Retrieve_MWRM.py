@@ -158,7 +158,7 @@ class single:
 class IQ:
 
     def __init__(self, sn=187570, subsn=1, tstart=3., tend=6.,
-                 diagname="MWRM-PXI", chI=11, chQ=12, phase_unwrap=True, save=True):
+                 diagname="MWRM-PXI", chI=11, chQ=12, phase_unwrap=True, save=True):   # LHD version
 
         self.sn = sn
         self.subsn = subsn
@@ -3496,7 +3496,7 @@ class twinIQ:
         return self.cbsp
 
     def bispectrum_in_f_range(self, fmin3=200e3, fmax3=500e3, tstart=4, tend=5, NFFT1=2**10, OVR=0.5,
-                              window="hann", mode="IQ", flim1=None, flim2=None):
+                              window="hann", mode="IQ", flim1=None, flim2=None, coef_OV=1.03):
 
         if mode == "IQ":
             NFFT2 = int(self.iq1.dT * NFFT1 / self.iq2.dT + 0.5)
@@ -3512,7 +3512,7 @@ class twinIQ:
                                                                   self.iq1.dT, self.iq1.dT, self.iq2.dT,
                                                                   NFFT1, NFFT1, NFFT2,
                                                                   flimx=flim1, flimy=flim2,
-                                                                  OVR=OVR, window=window)
+                                                                  OVR=OVR, window=window, coef_OV=coef_OV)
 
         else:
             print("未実装!")
@@ -3801,8 +3801,6 @@ class tripletIQ:
         else:
             plot.close(fig)
 
-
-
         figdir = os.path.join(self.dirbase, "bicoherence_rer")
         proc.ifNotMake(figdir)
         fname = f"{self.fnm_init}_{tstart}_{tend}_{NFFT1}_{OVR}_{window}_{mode}"
@@ -3929,4 +3927,3 @@ class tripletIQ:
             matplotlib.use(original_backend)
 
         return self.cbsp
-
