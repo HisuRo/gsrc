@@ -125,6 +125,7 @@ def sqrt_AndErr(x, x_err):
     return y, y_err
 
 
+"""
 # def timeAverageProfiles(dat2d, err=np.array([False])):
 #     if err.all():
 #         idxs_isnanInDat2d = np.isnan(dat2d)
@@ -157,8 +158,9 @@ def sqrt_AndErr(x, x_err):
 #     err_Ref = np.sqrt(np.nanvar(datAtRef, axis=1) + np.nanmean(errAtRef ** 2, axis=1))
 #
 #     return dat_Ref, err_Ref
-#
-#
+"""
+
+
 def timeAverageDatByRefs_v2(timeDat, dat, timeRef, err=None, skipnan=False):
     dtDat = timeDat[1] - timeDat[0]
     dtRef = timeRef[1] - timeRef[0]
@@ -193,10 +195,6 @@ def timeAverageDatListByRefs(timeDat, datList, timeRef, errList=None, skipnan=Fa
         errRefList[ii] = errRef
 
     return datRefList, stdRefList, errRefList
-
-
-
-
 
 
 def shifted_gauss(x, a, b, x0, C):
@@ -455,6 +453,7 @@ def Er_vExB_1ion(Ti, LTi, Lne, Vtor, Vpol, Btor, Bpol, Zi,
     return Er, Er_err, vExB, vExB_err   # [kV/m, km/s]
 
 
+"""
 # def center_of_gravity_of_complex_spectrum(freq, psd, psd_err, power=2):
 
 #     idx_fD = np.where(np.abs(freq) > 1000)[0]
@@ -468,7 +467,7 @@ def Er_vExB_1ion(Ti, LTi, Lne, Vtor, Vpol, Btor, Bpol, Zi,
 #     cog, cog_err = avgByWeightHavingError(freq_ex2d, weight, weight_err)
 
 #     return cog, cog_err
-
+"""
 
 def center_of_gravity(t, x, NFFT=2**6, OVR=0.5, window="hann"):
 
@@ -645,6 +644,7 @@ def timeSeriesRegGradAtRhoOfInterest(reff2d, rho2d, dat, err, rhoOfInterest, NFi
     return reffsOfInterest, RegDat, RegDatEr, DatGrad, DatGradEr
 
 
+"""
 # def nanWeightedAvg(dat, err):
 #
 #     areNotNansInDat = (~np.isnan(dat)).astype(np.int8)
@@ -657,7 +657,7 @@ def timeSeriesRegGradAtRhoOfInterest(reff2d, rho2d, dat, err, rhoOfInterest, NFi
 #     AvgErr = np.sum(Wg * err, axis=0) / np.sum(Wg, axis=0)
 #
 #     return Avg, AvgErr
-
+"""
 
 def dB(spec, spec_err):
     spec_db = 10 * np.log10(spec)
@@ -673,7 +673,7 @@ def toZeroMeanTimeSliceEnsemble(xx, NFFT, NEns, NOV, time=None, tout=None):
 
     return xens
 
-
+"""
 # def makeidxsalongtime(tdat, tout, NSamp):
 #
 #     idxs_tout = np.argmin(np.abs(np.tile(tdat, (len(tout), 1)) - np.reshape(tout, (len(tout), 1))), axis=-1)
@@ -681,7 +681,7 @@ def toZeroMeanTimeSliceEnsemble(xx, NFFT, NEns, NOV, time=None, tout=None):
 #     idxs_samp = np.tile(np.arange(ss_base[0], ss_base[1]), (len(tout), 1)) + np.reshape(idxs_tout, (len(tout), 1))
 #
 #     return idxs_samp
-
+"""
 
 def toTimeSliceEnsemble(xx, NFFT, NEns, NOV, time=None, tout=None):  # time, tout: 1darray
 
@@ -1016,6 +1016,7 @@ def calibIQComp2(datI, datQ, VAR, VOS_I, VOS_Q, phDif):
     return datICalib, datQCalib
 
 
+"""
 # def power_spectrogram_1s(ti, xx, dt, NFFT, window, Ndiv, Ntisp):
 #
 #     idxs = np.arange(0, NFFT * Ndiv * Ntisp)
@@ -1053,6 +1054,7 @@ def calibIQComp2(datI, datQ, VAR, VOS_I, VOS_Q, phDif):
 #           f' @{tisp[0]:.3f}+-{0.5 * dtisp:.3f}s')
 #
 #     return tisp, rfreq, psd, psd_err
+"""
 
 
 def power_spectrogram_1s(ti, xx, dt, NFFT, window, NEns, NOV):
@@ -1556,6 +1558,7 @@ def corrcoef_series(time, sig1, sig2, Nsamp):
 
 
 
+"""
 # try:
 #     lags_inc = np.mean(np.diff(cc.lags))
 #     _ik = signal.argrelextrema(ccf_amp, np.less)[0]
@@ -1577,6 +1580,7 @@ def corrcoef_series(time, sig1, sig2, Nsamp):
 # except RuntimeError:
 #     peakcorr, delay, sigma, bg = [np.nan]*4
 #     print('error in curve fit ... skipping this set')
+"""
 
 
 def cross_spectre_2s(x, y, Fs, NEns, NFFT, window, NOV):
@@ -1943,6 +1947,7 @@ def power_spectrogram_2s_by_dtout(tt, xx, dt, dtout=1e-3, Nfft=2**10, OVR=0.5, w
     return tisp, freq, psd, psd_std, psd_err
 
 
+"""
 # def matrix_for_1stDerivative_by_5pointsStencil_finiteDiff(Ndat, h):
 
 #     Mstencil = np.zeros((Ndat, Ndat))
@@ -1963,7 +1968,7 @@ def power_spectrogram_2s_by_dtout(tt, xx, dt, dtout=1e-3, Nfft=2**10, OVR=0.5, w
 
 # def function_of_1stDerivative_by_5pointsStencil_finiteDiff(x1d, h):
 #     return (1 * x1d[0] - 8 * x1d[1] + 8 * x1d[3] - 1 * x1d[4]) / (12 * h)
-
+"""
 
 def firstDerivative_by_5pointsStencil_finiteDiff(tt, xx):
 
@@ -2998,6 +3003,7 @@ def polyN_LSM_v2(xx, yy, polyN, yErr=np.array([False])):
     return prms, errs, sigma_y, yHut, yHutErr
 
 
+"""
 # def datMatrix_for_movingLLSM_from_dat1d(dat1d, Nfit):
 
 #     Ndat = len(dat1d)
@@ -3063,6 +3069,7 @@ def polyN_LSM_v2(xx, yy, polyN, yErr=np.array([False])):
 #     datMat = unitMat * dat_ext
 
 #     return datMat
+"""
 
 
 def get_Xmatrix_forLLSM(xx, deg):
@@ -3085,6 +3092,7 @@ def get_Xpsinv(WW, XX):
     return Xpsinv
 
 
+"""
 # def NthPolyfit_by_movingLLSM(xx, yy, Nfit, deg, y_err=np.array([False])):
 
     # Ndat = xx.shape[-1]
@@ -3125,7 +3133,7 @@ def get_Xpsinv(WW, XX):
     # theta_std_mat = np.sqrt(np.diagonal(XpsinvXpsinvt * var_fit_mat, axis1=-2, axis2=-1))
 
     # return xnew, theta_mat, theta_std_mat, var_fit
-
+"""
 
 def transposeLast2Dims(ndarray):
 
@@ -3552,6 +3560,7 @@ def Tratio(Te, Ti, Te_err, Ti_err):
     return Tratio, Tratio_err
 
 
+"""
 # def weighted_average_1D(x1D, weight1D):
 #     Sw = np.sum(weight1D)
 #     wx = x1D * weight1D
@@ -3598,6 +3607,7 @@ def Tratio(Te, Ti, Te_err, Ti_err):
 #     xmerr = np.sqrt(Um)
 #
 #     return xm, xerr, xmerr
+"""
 
 
 def envelope(sig):
