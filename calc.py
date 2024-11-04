@@ -3616,6 +3616,19 @@ def envelope(sig):
     return amplitude_envelope
 
 
+def amplitude(signal):
+
+	if np.iscomplexobj(signal):
+		amp = np.abs(signal)
+	else:
+		amp = envelope(signal)
+
+	return amp
+
+
+def iqphase(IQ_signal):
+	return np.unwrap(np.angle(IQ_signal))
+
 
 def turnLastDimToDiagMat(array):
     rawdatshape = array.shape
