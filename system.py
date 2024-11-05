@@ -10,3 +10,4 @@ def get_commit_id(repository):
 		return commit_id
 	else:
 		raise Exception("Git コマンドが失敗しました")
+
