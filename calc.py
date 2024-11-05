@@ -1,8 +1,9 @@
-import numpy as np
-from numpy.lib.stride_tricks import sliding_window_view
-from scipy import signal, fft, interpolate, optimize
+import numpy as np  # type: ignore
+from numpy.lib.stride_tricks import sliding_window_view  # type: ignore
+from scipy import signal, fft, interpolate, optimize  # type: ignore
+from scipy.signal import welch  # type: ignore
 import gc
-import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt  # type: ignore
 from nasu import proc, plot, getShotInfo, myEgdb, read, const
 import os
 import sys
@@ -840,70 +841,159 @@ def bestNfftFromNdat(Nens, OVR, Ndat):
     return 2**int(np.log2(Ndat / (Nens - (Nens - 1) * OVR)))
 
 
-def power_spectre_1s(xx, dt, NFFT, window, NEns, NOV):
+"""
+# def power_spectre_1s(xx, dt, NFFT, window, NEns, NOV):
 
-    xens = toTimeSliceEnsemble(xx, NFFT, NEns, NOV)
-    win, enbw, CG, CV = getWindowAndCoefs(NFFT, window, NEns, NOV)
+#     xens = toTimeSliceEnsemble(xx, NFFT, NEns, NOV)
+#     win, enbw, CG, CV = getWindowAndCoefs(NFFT, window, NEns, NOV)
 
-    rfreq, rfft_x = fourier_components_1s(xens, dt, NFFT, win)
-    p_xx = np.real(rfft_x * rfft_x.conj())
-    p_xx[:, 1:-1] *= 2
-    p_xx_ave = np.mean(p_xx, axis=0)
-    p_xx_std = np.std(p_xx, axis=0, ddof=1)
-    p_xx_rerr = p_xx_std / np.abs(p_xx_ave) * CV
+#     rfreq, rfft_x = fourier_components_1s(xens, dt, NFFT, win)
+#     p_xx = np.real(rfft_x * rfft_x.conj())
+#     p_xx[:, 1:-1] *= 2
+#     p_xx_ave = np.mean(p_xx, axis=0)
+#     p_xx_std = np.std(p_xx, axis=0, ddof=1)
+#     p_xx_rerr = p_xx_std / np.abs(p_xx_ave) * CV
 
-    Fs = 1. / dt
-    psd = p_xx_ave / (Fs * NFFT * enbw * (CG ** 2))
-    psd_err = psd * p_xx_rerr
+#     Fs = 1. / dt
+#     psd = p_xx_ave / (Fs * NFFT * enbw * (CG ** 2))
+#     psd_err = psd * p_xx_rerr
 
-    dfreq = 1. / (NFFT * dt)
-    print(f'Power x^2_bar            ={np.sum(xx**2) / len(xx)}')
-    print(f'Power integral of P(f)*df={np.sum(psd * dfreq)}\n')
+#     dfreq = 1. / (NFFT * dt)
+#     print(f'Power x^2_bar            ={np.sum(xx**2) / len(xx)}')
+#     print(f'Power integral of P(f)*df={np.sum(psd * dfreq)}\n')
 
-    return rfreq, psd, psd_err
+#     return rfreq, psd, psd_err
+"""
 
 
-def power_spectre_2s(xx, dt, NFFT, window, NEns, NOV):
+def spectrum(t_s, d, Fs_Hz, tstart, tend, NFFT=2**10, ovr=0.5, window="hann", detrend="constant",
+            fmin=None, fmax=None):
 
-    print(f'Overlap ratio: {NOV/NFFT*100:.0f}%\n')
+    sp = struct()
+    sp.tstart = tstart
+    sp.tend = tend
 
-    Nsamp = NEns * NFFT - (NEns - 1) * NOV
-    if len(xx) != Nsamp:
-        print('The number of samples is improper. \n')
-        sys.exit()
+    sp.NFFT = NFFT
+    sp.ovr = ovr
+    sp.NOV = int(sp.NFFT * sp.ovr)
+    sp.window = window
+
+    _, datlist = proc.getTimeIdxsAndDats(t_s, sp.tstart, sp.tend, [t_s, d])
+    sp.traw, sp.draw = datlist
+    sp.NSamp = sp.traw.size
+    sp.dF = Fs_Hz / sp.NFFT
+
+    return_onesided = ~ np.iscomplexobj(d)
+
+    sp.t = (sp.tstart + sp.tend) / 2
+    sp.f, sp.psd = welch(x=sp.draw, fs=Fs_Hz, window=window,
+                        nperseg=sp.NFFT, noverlap=sp.NOV,
+                        detrend=detrend, scaling="density",
+                        average="mean", return_onesided=return_onesided)
+    if not return_onesided:
+        sp.f = fft.fftshift(sp.f)
+        sp.psd = fft.fftshift(sp.psd)
+    sp.psddB = 10 * np.log10(sp.psd)
+
+    if fmin is not None:
+        sp.fmin = fmin
     else:
-        print(f'The number of samples: {Nsamp:d}')
-
-    if NOV != 0:
-        idxs = (np.reshape(np.arange(NEns * NFFT), (NEns, NFFT)).T - np.arange(0, NEns * NOV, NOV)).T
+        sp.fmin = sp.dF
+    if fmax is not None:
+        sp.fmax = fmax
     else:
-        idxs = np.reshape(np.arange(NEns * NFFT), (NEns, NFFT))
-    xens = xx[idxs]
+        sp.fmax = Fs_Hz / 2
 
-    win = signal.get_window(window, NFFT)
-    enbw = NFFT * np.sum(win ** 2) / (np.sum(win) ** 2)
-    CG = np.abs(np.sum(win)) / NFFT
+    sp.vmindB = np.min(sp.psddB)
+    sp.vmaxdB = np.max(sp.psddB)
 
-    CV = CV_overlap(NFFT, NEns, NOV)
+    return sp
 
-    freq = fft.fftshift(fft.fftfreq(NFFT, dt))
 
-    fft_x = fft.fftshift(fft.fft(xens * win), axes=1)
+def specgram(t_s, d, Fs_Hz, NFFT=2**10, ovr=0., window="hann", NEns=1, fmin=None, fmax=None, detrend="constant"):
 
-    p_xx = np.real(fft_x * fft_x.conj())
-    p_xx_ave = np.mean(p_xx, axis=0)
-    p_xx_err = np.std(p_xx, axis=0, ddof=1)
-    p_xx_rerr = p_xx_err / np.abs(p_xx_ave) * CV
+    spg = struct()
+    spg.NFFT = NFFT
+    spg.ovr = ovr
+    spg.NOV = int(spg.NFFT * spg.ovr)
+    spg.window = window
+    spg.NEns = NEns
+    spg.size = len(t_s)
+    spg.NSamp = NSampleForFFT(NFFT=spg.NFFT, NEns=spg.NEns, NOV=spg.NOV)
+    spg.Nsp = spg.size // spg.NSamp
 
-    Fs = 1. / dt
-    psd = p_xx_ave / (Fs * NFFT * enbw * (CG ** 2))
-    psd_err = np.abs(psd) * p_xx_rerr
+    return_onesided = ~ np.iscomplexobj(spg.draw)
 
-    dfreq = 1. / (NFFT * dt)
-    print(f'Power x^2_bar            ={np.sum(np.real(xx*np.conj(xx))) / Nsamp}')
-    print(f'Power integral of P(f)*df={np.sum(psd * dfreq)}')
+    spg.tarray = t_s[:spg.Nsp * spg.NSamp].reshape((spg.Nsp, spg.NSamp))
+    spg.t = spg.tarray.mean(axis=-1)
+    spg.darray = d[:spg.Nsp * spg.NSamp].reshape((spg.Nsp, spg.NSamp))
+    spg.f, spg.psd = welch(x=spg.darray, fs= Fs_Hz, window="hann",
+                            nperseg=spg.NFFT, noverlap=spg.NOV,
+                            return_onesided=return_onesided,
+                            detrend=detrend, scaling="density",
+                            axis=-1, average="mean")
 
-    return freq, psd, psd_err
+    if not return_onesided:
+        spg.f = fft.fftshift(spg.f)
+        spg.psd = fft.fftshift(spg.psd, axes=-1)
+    spg.psdamp = np.sqrt(spg.psd)
+    spg.psddB = 10 * np.log10(spg.psd)
+
+    spg.dF = Fs_Hz / spg.NFFT
+
+    if fmin is not None:
+        spg.fmin = fmin
+    else:
+        spg.fmin = spg.dF
+    if fmax is not None:
+        spg.fmax = fmax
+    else:
+        spg.fmax = Fs_Hz / 2
+
+    return spg
+
+
+# def power_spectre_2s(xx, dt, NFFT, window, NEns, NOV):
+
+    # print(f'Overlap ratio: {NOV/NFFT*100:.0f}%\n')
+
+    # Nsamp = NEns * NFFT - (NEns - 1) * NOV
+    # if len(xx) != Nsamp:
+    #     print('The number of samples is improper. \n')
+    #     sys.exit()
+    # else:
+    #     print(f'The number of samples: {Nsamp:d}')
+
+    # if NOV != 0:
+    #     idxs = (np.reshape(np.arange(NEns * NFFT), (NEns, NFFT)).T - np.arange(0, NEns * NOV, NOV)).T
+    # else:
+    #     idxs = np.reshape(np.arange(NEns * NFFT), (NEns, NFFT))
+    # xens = xx[idxs]
+
+    # win = signal.get_window(window, NFFT)
+    # enbw = NFFT * np.sum(win ** 2) / (np.sum(win) ** 2)
+    # CG = np.abs(np.sum(win)) / NFFT
+
+    # CV = CV_overlap(NFFT, NEns, NOV)
+
+    # freq = fft.fftshift(fft.fftfreq(NFFT, dt))
+
+    # fft_x = fft.fftshift(fft.fft(xens * win), axes=1)
+
+    # p_xx = np.real(fft_x * fft_x.conj())
+    # p_xx_ave = np.mean(p_xx, axis=0)
+    # p_xx_err = np.std(p_xx, axis=0, ddof=1)
+    # p_xx_rerr = p_xx_err / np.abs(p_xx_ave) * CV
+
+    # Fs = 1. / dt
+    # psd = p_xx_ave / (Fs * NFFT * enbw * (CG ** 2))
+    # psd_err = np.abs(psd) * p_xx_rerr
+
+    # dfreq = 1. / (NFFT * dt)
+    # print(f'Power x^2_bar            ={np.sum(np.real(xx*np.conj(xx))) / Nsamp}')
+    # print(f'Power integral of P(f)*df={np.sum(psd * dfreq)}')
+
+    # return freq, psd, psd_err
 
 
 def get_intermediate(xx, Nsample):
