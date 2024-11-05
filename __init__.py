@@ -28,4 +28,3 @@ with open("nasu/version_table.csv", mode='r', newline='', encoding='utf-8') as f
 			raise Exception(f"{module_name} version was changed from {logged_version} to {current_version}!! ")
 		
 		i += 1
-		
