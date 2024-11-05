@@ -57,19 +57,21 @@ class timetrace_multidomains():
 			self.d = np.append(self.d, ga.zdata)
 		self.t_s = self.t_ms * 1e-3
 
+		# calculate sampling freuency Fs
 		dts = np.diff(self.t_s)
 		if np.allclose(dts, dts[0]):
 			self.Fs = 1. / dts[0]
 		else:
 			raise ValueError("Time data not equally spaced")
 		
+		# calculate amplitude
 		self.amp = calc.amplitude(self.d)
 		
 	def produce_virtual_IQ_signal(self, carrier_freq_Hz, ref_phase=0):
 			
-			self.iq = produce_virtual_IQ_signal(times_s=self.t_s, signal=self.d, carrier_freq_Hz=carrier_freq_Hz, ref_phase=ref_phase)
-			self.iqamp = calc.amplitude(self.iq)
-			self.iqphase = calc.iqphase(self.iq)
+		self.iq = produce_virtual_IQ_signal(times_s=self.t_s, signal=self.d, carrier_freq_Hz=carrier_freq_Hz, ref_phase=ref_phase)
+		self.iqamp = calc.amplitude(self.iq)
+		self.iqphase = calc.iqphase(self.iq)
 
 	class raw(signal):
 		def __init__(self, timetrace_instance):
