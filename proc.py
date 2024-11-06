@@ -12,6 +12,16 @@ from nasu import calc
 import copy
 
 
+def convert_value(value):
+    try:
+        return int(value)
+    except ValueError:
+        try:
+            return float(value)
+        except ValueError:
+            return value  # 変換できなければそのまま文字列として返す
+
+
 def flatten(lst):
     flattened = []
     for item in lst:
