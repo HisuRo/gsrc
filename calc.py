@@ -883,7 +883,7 @@ def spectrum(t_s, d, Fs_Hz, tstart, tend, NFFT=2**10, ovr=0.5, window="hann", de
     sp.NSamp = sp.traw.size
     sp.dF = Fs_Hz / sp.NFFT
 
-    return_onesided = ~ np.iscomplexobj(d)
+    return_onesided = not np.iscomplexobj(d)
 
     sp.t = (sp.tstart + sp.tend) / 2
     sp.f, sp.psd = welch(x=sp.draw, fs=Fs_Hz, window=window,
