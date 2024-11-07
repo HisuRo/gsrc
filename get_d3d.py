@@ -36,6 +36,39 @@ class signal():
 		self.sp = calc.spectrum(t_s=self.t_s, d=self.d, Fs_Hz=self.Fs, tstart=tstart, tend=tend, NFFT=NFFT, ovr=ovr, window=window, detrend=detrend, fmin=fmin, fmax=fmax)
 		return self.sp
 
+class timetrace():
+
+	def __init__(self,pointname,shot,tree=None,connection=None,nomds=False):
+		
+		# Save object values
+		self.pointname = pointname
+		self.shot = shot
+		self.connection = connection
+
+		# Retrieve data
+		ga = gadata.gadata(signal=self.pointname, shot=self.shot, tree=tree, connection=self.connection, nomds=nomds)
+		self.t_ms = np.array(ga.xdata)
+		self.d = np.array(ga.zdata)
+		self.t_s = self.t_ms * 1e-3
+
+		# calculate sampling freuency Fs
+		dts = np.diff(self.t_s)
+		if np.allclose(dts, dts[0]):
+			self.Fs = 1. / dts[0]
+		else:
+			raise ValueError("Time data not equally spaced")
+		
+		# calculate amplitude
+		self.amp = calc.amplitude(self.d)
+
+	class raw(signal):
+		def __init__(self, timetrace_instance):
+			super().__init__(timetrace_instance.t_s, timetrace_instance.d, timetrace_instance.Fs)
+
+	class amplitude(signal):	
+		def __init__(self, timetrace_instance):
+			super().__init__(timetrace_instance.t_s, timetrace_instance.amp, timetrace_instance.Fs)
+
 class timetrace_multidomains():
 
 	def __init__(self,pointname,shot,idx_startdomain,N_domain,tree=None,connection=None,nomds=False):

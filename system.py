@@ -83,6 +83,6 @@ def output_fig(fig, outdir, inputs, output_filepath, now):
 	fig.savefig(output_figureloc, format="png", metadata=metadata)
 	plt.close(fig)
 
-def load_pickle_data(inputs):
-	with open(inputs["input_datpath"], "rb") as f:
+def load_pickle_data(inputs, key_name="input_datpath"):
+	with open(inputs[key_name], "rb") as f:
 		return pickle.load(f)
