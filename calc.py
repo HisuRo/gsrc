@@ -1042,6 +1042,12 @@ def bandPass(xx, sampleRate, fp, fs, gpass=3, gstop=16, cut=False):
     return yy
 
 
+def notch(xx, samplerate, f0, Q):  # Q = f0 / df, where df = frequency range with
+    b, a = signal.iirnotch(f0, Q, samplerate)
+    yy = signal.filtfilt(b, a, xx)
+    return yy
+
+
 def filter_butterworth(xx, samplingFreq, cutoffFreq, filtertype, order):
     # filtertype: "low", "high", "band", "bandstop"
     # cutoffFreq should be list [fl, fh] in the case of "band" or "bandstop"
