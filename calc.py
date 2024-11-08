@@ -16,6 +16,18 @@ class struct:
     pass
 
 
+def samplingrate_from_timedat(times_s, atol=1e-30, rtol=1e-2):
+
+    # calculate sampling freuency Fs
+    dts = np.diff(times_s)
+    if np.allclose(dts[:-1], dts[1:], atol=atol, rtol=rtol):
+        Fs_Hz = 1. / (dts.mean())
+    else:
+        raise ValueError("Time data not equally spaced")
+    
+    return Fs_Hz
+
+
 def expand_by1dim(array, Nexp=1, axis=-1):
     if axis < 0:
         axis = array.ndim + 1 + axis
