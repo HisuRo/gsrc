@@ -957,6 +957,7 @@ def cross_spectrum(t_s, d1, d2, Fs_Hz, tstart, tend, NFFT=2**10, ovr=0.5, window
     _, datlist = proc.getTimeIdxsAndDats(t_s, cs.tstart, cs.tend, [t_s, d1, d2])
     _, cs.d1raw, cs.d2raw = datlist
     cs.dF = Fs_Hz / cs.NFFT
+    cs.NEns = NEnsFromNSample(cs.NFFT, cs.NOV, cs.d1raw.size)
 
     return_onesided = not (np.iscomplexobj(d1) or np.iscomplexobj(d2))
 
