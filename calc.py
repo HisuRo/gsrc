@@ -962,11 +962,11 @@ def cross_spectrum(t_s, d1, d2, Fs_Hz, tstart, tend, NFFT=2**10, ovr=0.5, window
     return_onesided = not (np.iscomplexobj(d1) or np.iscomplexobj(d2))
 
     cs.t = (cs.tstart + cs.tend) / 2
-    cs.f, cs.csd = signal.csd(x=cs.draw1, y=cs.draw2, fs=Fs_Hz, window=window,
+    cs.f, cs.csd = signal.csd(x=cs.d1raw, y=cs.d2raw, fs=Fs_Hz, window=window,
                                 nperseg=cs.NFFT, noverlap=cs.NOV, nfft=None, 
                                 detrend=detrend, scaling="density",
                                 average="mean", return_onesided=return_onesided)
-    _, cs.cohsq = signal.coherence(x=cs.draw1, y=cs.draw2, fs=Fs_Hz, window=window,
+    _, cs.cohsq = signal.coherence(x=cs.d1raw, y=cs.d2raw, fs=Fs_Hz, window=window,
                                     nperseg=cs.NFFT, noverlap=cs.NOV, nfft=None, 
                                     detrend=detrend, scaling="density",
                                     average="mean", return_onesided=return_onesided)
