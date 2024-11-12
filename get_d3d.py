@@ -24,12 +24,12 @@ class signal():
 		self.d = d
 		self.Fs = Fs
 
-	def specgram(self, NFFT=2**14, ovr=0., window="hann", NEns=1, fmin=None, fmax=None, detrend="constant"):
-		self.spg = calc.specgram(self.t_s, self.d, self.Fs_Hz, NFFT=NFFT, ovr=ovr, window=window, NEns=NEns, fmin=fmin, fmax=fmax, detrend=detrend)
+	def specgram(self, NFFT=2**14, ovr=0., window="hann", NEns=1, detrend="constant"):
+		self.spg = calc.specgram(self.t_s, self.d, self.Fs_Hz, NFFT=NFFT, ovr=ovr, window=window, NEns=NEns, detrend=detrend)
 		return self.spg
 
-	def spectrum(self, tstart, tend, NFFT=2**14, ovr=0.5, window="hann", detrend="constant", fmin=None, fmax=None):
-		self.sp = calc.spectrum(t_s=self.t_s, d=self.d, Fs_Hz=self.Fs, tstart=tstart, tend=tend, NFFT=NFFT, ovr=ovr, window=window, detrend=detrend, fmin=fmin, fmax=fmax)
+	def spectrum(self, tstart, tend, NFFT=2**14, ovr=0.5, window="hann", detrend="constant"):
+		self.sp = calc.spectrum(t_s=self.t_s, d=self.d, Fs_Hz=self.Fs, tstart=tstart, tend=tend, NFFT=NFFT, ovr=ovr, window=window, detrend=detrend)
 		return self.sp
 	
 class raw(signal):
@@ -58,6 +58,20 @@ class virtIQphase(signal):
 
 # =================================================================================================================================
 
+class twin_signals():
+
+	def __init__(self, t_s, d1, d2, Fs):
+		self.t_s = t_s
+		self.d1 = d1
+		self.d2 = d2
+		self.Fs = Fs
+
+	def cross_spectrum(self, tstart, tend, NFFT=2**14, ovr=0.5, window="hann", detrend="constant", unwrap_phase=False):
+		self.cs = calc.cross_spectrum(self.t_s, self.d1, self.d2, tstart, tend, NFFT=NFFT, ovr=ovr, window=window, detrend=detrend, unwrap_phase=unwrap_phase)
+		return self.cs
+
+# ================================================================================================================================
+
 class timetrace():
 
 	def __init__(self,pointname,shot,tree=None,connection=None,nomds=False):
@@ -81,7 +95,7 @@ class timetrace():
 			
 		self.virtiq = produce_virtual_IQ_signal(times_s=self.t_s, signal=self.d, carrier_freq_Hz=carrier_freq_Hz, ref_phase=ref_phase)
 		self.virtamp = calc.amplitude(self.iq)
-		self.virtphase = calc.iqphase(self.iq)
+		self.virtphase = calc.phase(self.iq)
 
 class timetrace_multidomains(timetrace):
 
@@ -122,4 +136,4 @@ class timetrace_multidomains_iq():
 		self.d = self.i_obj.d + 1.j * self.q_obj.d
 		
 		self.amp = calc.amplitude(self.d)
-		self.phase = calc.iqphase(self.d)
+		self.phase = calc.phase(self.d)

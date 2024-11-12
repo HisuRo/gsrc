@@ -16,7 +16,7 @@ class struct:
     pass
 
 
-def samplingrate_from_timedat(times_s, atol=1e-30, rtol=1e-2):
+def samplingrate_from_timedat(times_s, atol=1e-30, rtol=2e-2):
 
     # calculate sampling freuency Fs
     dts = np.diff(times_s)
@@ -878,8 +878,7 @@ def bestNfftFromNdat(Nens, OVR, Ndat):
 """
 
 
-def spectrum(t_s, d, Fs_Hz, tstart, tend, NFFT=2**10, ovr=0.5, window="hann", detrend="constant",
-            fmin=None, fmax=None):
+def spectrum(t_s, d, Fs_Hz, tstart, tend, NFFT=2**10, ovr=0.5, window="hann", detrend="constant"):
 
     sp = struct()
     sp.tstart = tstart
@@ -892,7 +891,6 @@ def spectrum(t_s, d, Fs_Hz, tstart, tend, NFFT=2**10, ovr=0.5, window="hann", de
 
     _, datlist = proc.getTimeIdxsAndDats(t_s, sp.tstart, sp.tend, [t_s, d])
     sp.traw, sp.draw = datlist
-    sp.NSamp = sp.traw.size
     sp.dF = Fs_Hz / sp.NFFT
 
     return_onesided = not np.iscomplexobj(d)
@@ -907,22 +905,10 @@ def spectrum(t_s, d, Fs_Hz, tstart, tend, NFFT=2**10, ovr=0.5, window="hann", de
         sp.psd = fft.fftshift(sp.psd)
     sp.psddB = 10 * np.log10(sp.psd)
 
-    if fmin is not None:
-        sp.fmin = fmin
-    else:
-        sp.fmin = sp.dF
-    if fmax is not None:
-        sp.fmax = fmax
-    else:
-        sp.fmax = Fs_Hz / 2
-
-    sp.vmindB = np.min(sp.psddB)
-    sp.vmaxdB = np.max(sp.psddB)
-
     return sp
 
 
-def specgram(t_s, d, Fs_Hz, NFFT=2**10, ovr=0., window="hann", NEns=1, fmin=None, fmax=None, detrend="constant"):
+def specgram(t_s, d, Fs_Hz, NFFT=2**10, ovr=0., window="hann", NEns=1, detrend="constant"):
 
     spg = struct()
     spg.NFFT = NFFT
@@ -952,17 +938,46 @@ def specgram(t_s, d, Fs_Hz, NFFT=2**10, ovr=0., window="hann", NEns=1, fmin=None
     spg.psddB = 10 * np.log10(spg.psd)
 
     spg.dF = Fs_Hz / spg.NFFT
-
-    if fmin is not None:
-        spg.fmin = fmin
-    else:
-        spg.fmin = spg.dF
-    if fmax is not None:
-        spg.fmax = fmax
-    else:
-        spg.fmax = Fs_Hz / 2
+    spg.fmax = Fs_Hz / 2
 
     return spg
+
+
+def cross_spectrum(t_s, d1, d2, Fs_Hz, tstart, tend, NFFT=2**10, ovr=0.5, window="hann", detrend="constant", unwrap_phase=False):
+
+    cs = struct()
+    cs.tstart = tstart
+    cs.tend = tend
+
+    cs.NFFT = NFFT
+    cs.ovr = ovr
+    cs.NOV = int(cs.NFFT * cs.ovr)
+    cs.window = window
+
+    _, datlist = proc.getTimeIdxsAndDats(t_s, cs.tstart, cs.tend, [t_s, d1, d2])
+    _, cs.d1raw, cs.d2raw = datlist
+    cs.dF = Fs_Hz / cs.NFFT
+
+    return_onesided = not (np.iscomplexobj(d1) or np.iscomplexobj(d2))
+
+    cs.t = (cs.tstart + cs.tend) / 2
+    cs.f, cs.csd = signal.csd(x=cs.draw1, y=cs.draw2, fs=Fs_Hz, window=window,
+                                nperseg=cs.NFFT, noverlap=cs.NOV, nfft=None, 
+                                detrend=detrend, scaling="density",
+                                average="mean", return_onesided=return_onesided)
+    _, cs.cohsq = signal.coherence(x=cs.draw1, y=cs.draw2, fs=Fs_Hz, window=window,
+                                    nperseg=cs.NFFT, noverlap=cs.NOV, nfft=None, 
+                                    detrend=detrend, scaling="density",
+                                    average="mean", return_onesided=return_onesided)
+    if not return_onesided:
+        cs.f = fft.fftshift(cs.f)
+        cs.csd = fft.fftshift(cs.csd)
+        cs.cohsq = fft.fftshift(cs.cohsq)
+    cs.psd = np.amp(cs.csd)
+    cs.phase = phase(cs.csd, unwrap=unwrap_phase)
+    cs.coh = np.sqrt(cs.cohsq)
+
+    return cs
 
 
 # def power_spectre_2s(xx, dt, NFFT, window, NEns, NOV):
@@ -3734,8 +3749,12 @@ def amplitude(signal):
 	return amp
 
 
-def iqphase(IQ_signal):
-	return np.unwrap(np.angle(IQ_signal))
+def phase(complex_signal, unwrap=True):
+    if unwrap:
+        phase = np.unwrap(np.angle(complex_signal)) 
+    else:
+        phase = np.angle(complex_signal)
+    return phase
 
 
 def turnLastDimToDiagMat(array):
