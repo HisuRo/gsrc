@@ -67,7 +67,7 @@ class twin_signals():
 		self.Fs = Fs
 
 	def cross_spectrum(self, tstart, tend, NFFT=2**14, ovr=0.5, window="hann", detrend="constant", unwrap_phase=False):
-		self.cs = calc.cross_spectrum(self.t_s, self.d1, self.d2, tstart, tend, NFFT=NFFT, ovr=ovr, window=window, detrend=detrend, unwrap_phase=unwrap_phase)
+		self.cs = calc.cross_spectrum(self.t_s, self.d1, self.d2, self.Fs, tstart, tend, NFFT=NFFT, ovr=ovr, window=window, detrend=detrend, unwrap_phase=unwrap_phase)
 		return self.cs
 
 # ================================================================================================================================
