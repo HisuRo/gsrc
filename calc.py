@@ -968,8 +968,7 @@ def cross_spectrum(t_s, d1, d2, Fs_Hz, tstart, tend, NFFT=2**10, ovr=0.5, window
                                 average="mean", return_onesided=return_onesided)
     _, cs.cohsq = signal.coherence(x=cs.d1raw, y=cs.d2raw, fs=Fs_Hz, window=window,
                                     nperseg=cs.NFFT, noverlap=cs.NOV, nfft=None, 
-                                    detrend=detrend, scaling="density",
-                                    average="mean", return_onesided=return_onesided)
+                                    detrend=detrend, return_onesided=return_onesided)
     if not return_onesided:
         cs.f = fft.fftshift(cs.f)
         cs.csd = fft.fftshift(cs.csd)
