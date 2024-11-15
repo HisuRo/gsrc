@@ -920,7 +920,7 @@ def specgram(t_s, d, Fs_Hz, NFFT=2**10, ovr=0., window="hann", NEns=1, detrend="
     spg.NSamp = NSampleForFFT(NFFT=spg.NFFT, NEns=spg.NEns, NOV=spg.NOV)
     spg.Nsp = spg.size // spg.NSamp
 
-    return_onesided = ~ np.iscomplexobj(spg.draw)
+    return_onesided = ~ np.iscomplexobj(d)
 
     spg.tarray = t_s[:spg.Nsp * spg.NSamp].reshape((spg.Nsp, spg.NSamp))
     spg.t = spg.tarray.mean(axis=-1)

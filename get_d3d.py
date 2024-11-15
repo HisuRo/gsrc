@@ -25,7 +25,7 @@ class signal():
 		self.Fs = Fs
 
 	def specgram(self, NFFT=2**14, ovr=0., window="hann", NEns=1, detrend="constant"):
-		self.spg = calc.specgram(self.t_s, self.d, self.Fs_Hz, NFFT=NFFT, ovr=ovr, window=window, NEns=NEns, detrend=detrend)
+		self.spg = calc.specgram(self.t_s, self.d, self.Fs, NFFT=NFFT, ovr=ovr, window=window, NEns=NEns, detrend=detrend)
 		return self.spg
 
 	def spectrum(self, tstart, tend, NFFT=2**14, ovr=0.5, window="hann", detrend="constant"):
