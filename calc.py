@@ -1,6 +1,6 @@
 import numpy as np  # type: ignore
 from numpy.lib.stride_tricks import sliding_window_view  # type: ignore
-from scipy import signal, fft, interpolate, optimize  # type: ignore
+from scipy import signal, fft, ifft, interpolate, optimize  # type: ignore
 from scipy.signal import welch  # type: ignore
 import gc
 import matplotlib.pyplot as plt  # type: ignore
@@ -1045,6 +1045,8 @@ def power_spectre_2s_v2(tt, xx, NFFT, window, OVR):
     return tisp[0], freq, psd[0], psd_std[0], psd_err[0]
 
 
+
+### Filters ###
 def lowpass(x, samplerate, fp, fs, gpass=3, gstop=16):
     fn = samplerate / 2                           #ナイキスト周波数
     wp = fp / fn                                  #ナイキスト周波数で通過域端周波数を正規化
@@ -1053,7 +1055,6 @@ def lowpass(x, samplerate, fp, fs, gpass=3, gstop=16):
     b, a = signal.butter(N, Wn, "low")            #フィルタ伝達関数の分子と分母を計算
     y = signal.filtfilt(b, a, x)                  #信号に対してフィルタをかける
     return y                                      #フィルタ後の信号を返す
-
 
 def bandPass(xx, sampleRate, fp, fs, gpass=3, gstop=16, cut=False):
     fn = sampleRate / 2                           # ナイキスト周波数
@@ -1067,24 +1068,27 @@ def bandPass(xx, sampleRate, fp, fs, gpass=3, gstop=16, cut=False):
     yy = signal.filtfilt(b, a, xx)                 # 信号に対してフィルタをかける
     return yy
 
-
 def notch(xx, samplerate, f0, Q):  # Q = f0 / df, where df = frequency range with
     b, a = signal.iirnotch(f0, Q, samplerate)
     yy = signal.filtfilt(b, a, xx)
     return yy
 
-
-def filter_butterworth(xx, samplingFreq, cutoffFreq, filtertype, order):
-    # filtertype: "low", "high", "band", "bandstop"
+def filter(xx, samplingFreq, cutoffFreq, bandtype="lowpass", order=4, filtertype="butter"):
+    # bandtype: "lowpass", "highpass", "bandpass", "bandstop"
     # cutoffFreq should be list [fl, fh] in the case of "band" or "bandstop"
+    # filtertype: "butter", "bessel"
 
     fnyq = samplingFreq / 2
     Wn = cutoffFreq / fnyq
-    b, a = signal.butter(order, Wn, filtertype)
+    if filtertype == "butter":
+        b, a = signal.butter(order, Wn, btype=bandtype)
+    elif filtertype == "bessel": 
+        b, a = signal.bessel(order, Wn, btype=bandtype)
+    else:
+        raise Exception("Unimplemented or Wrong filtertype")
     yy = signal.filtfilt(b, a, xx)
 
     return yy
-
 
 def highpass(x, samplerate, fp, fs, gpass=3, gstop=16):
     fn = samplerate / 2  # ナイキスト周波数
@@ -1094,6 +1098,9 @@ def highpass(x, samplerate, fp, fs, gpass=3, gstop=16):
     b, a = signal.butter(N, Wn, "high")  # フィルタ伝達関数の分子と分母を計算
     y = signal.filtfilt(b, a, x)  # 信号に対してフィルタをかける
     return y  # フィルタ後の信号を返す
+
+
+
 
 
 def THDF(rfreq, rpsd, FF, maxH):

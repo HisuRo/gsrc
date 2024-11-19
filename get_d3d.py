@@ -4,14 +4,15 @@ import numpy as np # type: ignore
 def produce_virtual_IQ_reference(times_s, carrier_freq_Hz, phase=0):
 	return np.cos(2 * np.pi * carrier_freq_Hz * times_s + phase) - 1.j * np.sin(2 * np.pi * carrier_freq_Hz * times_s + phase)
 
-def produce_virtual_IQ_signal(times_s, signal, carrier_freq_Hz, ref_phase=0):
+def produce_virtual_IQ_signal(times_s, signal, carrier_freq_Hz, ref_phase=0, downsampling_factor=1):
 
 	Fs = calc.samplingrate_from_timedat(times_s)
+	cutoffFreq = Fs / 2 / downsampling_factor
 
 	reference = produce_virtual_IQ_reference(times_s=times_s, carrier_freq_Hz=carrier_freq_Hz, phase=ref_phase)
 
 	IQ_signal = signal * reference
-	IQ_signal = calc.lowpass(x=IQ_signal, samplerate=Fs, fp=0.5*carrier_freq_Hz, fs=0.75*carrier_freq_Hz, gstop=30)
+	IQ_signal = calc.filter(IQ_signal, samplingFreq=Fs, cutoffFreq=cutoffFreq, bandtype="lowpass", order=4, filtertype="bessel")
 
 	return IQ_signal
 
@@ -94,8 +95,8 @@ class timetrace():
 	def produce_virtual_IQ_signal(self, carrier_freq_Hz, ref_phase=0):
 			
 		self.virtiq = produce_virtual_IQ_signal(times_s=self.t_s, signal=self.d, carrier_freq_Hz=carrier_freq_Hz, ref_phase=ref_phase)
-		self.virtamp = calc.amplitude(self.iq)
-		self.virtphase = calc.phase(self.iq)
+		self.virtamp = calc.amplitude(self.virtiq)
+		self.virtphase = calc.phase(self.virtiq)
 
 class timetrace_multidomains(timetrace):
 
