@@ -1047,36 +1047,18 @@ def power_spectre_2s_v2(tt, xx, NFFT, window, OVR):
 
 
 ### Filters ###
-def lowpass(x, samplerate, fp, fs, gpass=3, gstop=16):
-    fn = samplerate / 2                           #ナイキスト周波数
-    wp = fp / fn                                  #ナイキスト周波数で通過域端周波数を正規化
-    ws = fs / fn                                  #ナイキスト周波数で阻止域端周波数を正規化
-    N, Wn = signal.buttord(wp, ws, gpass, gstop)  #オーダーとバターワースの正規化周波数を計算
-    b, a = signal.butter(N, Wn, "low")            #フィルタ伝達関数の分子と分母を計算
-    y = signal.filtfilt(b, a, x)                  #信号に対してフィルタをかける
-    return y                                      #フィルタ後の信号を返す
-
-def bandPass(xx, sampleRate, fp, fs, gpass=3, gstop=16, cut=False):
-    fn = sampleRate / 2                           # ナイキスト周波数
-    wp = fp / fn                                  # ナイキスト周波数で通過域端周波数を正規化
-    ws = fs / fn                                  # ナイキスト周波数で阻止域端周波数を正規化
-    N, Wn = signal.buttord(wp, ws, gpass, gstop)        # オーダーとバターワースの正規化周波数を計算
-    if cut:
-        b, a = signal.butter(N, Wn, "bandstop")  # フィルタ伝達関数の分子と分母を計算
-    else:
-        b, a = signal.butter(N, Wn, "band")           # フィルタ伝達関数の分子と分母を計算
-    yy = signal.filtfilt(b, a, xx)                 # 信号に対してフィルタをかける
-    return yy
 
 def notch(xx, samplerate, f0, Q):  # Q = f0 / df, where df = frequency range with
     b, a = signal.iirnotch(f0, Q, samplerate)
     yy = signal.filtfilt(b, a, xx)
     return yy
 
-def filter(xx, samplingFreq, cutoffFreq, bandtype="lowpass", order=4, filtertype="butter"):
+def iirfilter(xx, samplingFreq, cutoffFreq, bandtype="lowpass", order=4, filtertype="butter"):
     # bandtype: "lowpass", "highpass", "bandpass", "bandstop"
-    # cutoffFreq should be list [fl, fh] in the case of "band" or "bandstop"
+    # cutoffFreq should be list [fl, fh] in the case of "bandpass" or "bandstop"
     # filtertype: "butter", "bessel"
+
+    order /= 2 # because filter will be applied twice by scipy.signal.filtfilt()
 
     fnyq = samplingFreq / 2
     Wn = cutoffFreq / fnyq
@@ -1085,19 +1067,56 @@ def filter(xx, samplingFreq, cutoffFreq, bandtype="lowpass", order=4, filtertype
     elif filtertype == "bessel": 
         b, a = signal.bessel(order, Wn, btype=bandtype)
     else:
-        raise Exception("Unimplemented or Wrong filtertype")
+        raise Exception("Unimplemented or Wrong filtertype")  # chebyshev type 1 and type 2 will be implemented!
     yy = signal.filtfilt(b, a, xx)
 
     return yy
 
-def highpass(x, samplerate, fp, fs, gpass=3, gstop=16):
-    fn = samplerate / 2  # ナイキスト周波数
-    wp = fp / fn  # ナイキスト周波数で通過域端周波数を正規化
-    ws = fs / fn  # ナイキスト周波数で阻止域端周波数を正規化
-    N, Wn = signal.buttord(wp, ws, gpass, gstop)  # オーダーとバターワースの正規化周波数を計算
-    b, a = signal.butter(N, Wn, "high")  # フィルタ伝達関数の分子と分母を計算
-    y = signal.filtfilt(b, a, x)  # 信号に対してフィルタをかける
-    return y  # フィルタ後の信号を返す
+def firfilter(xx, samplingFreq, cutoffFreq, bandtype="lowpass", order=1000, window="hamming"):
+    # yy should be shifted backward by group delay = order / 2
+    # bandtype: "lowpass", "highpass", "bandpass", "bandstop"
+    # cutoffFreq should be list [fl, fh] in the case of "bandpass" or "bandstop"
+
+    numtaps = order + 1
+    fnyq = samplingFreq / 2
+    Wn = cutoffFreq / fnyq
+
+    if bandtype == "lowpass":
+        pass_zero = True
+    elif bandtype == "highpass": 
+        pass_zero = False
+    elif bandtype == "bandpass": 
+        pass_zero = False
+    elif bandtype == "bandstop": 
+        pass_zero = True
+    else: 
+        raise Exception("Unimplemented or Wrong bandtype")
+
+    b = signal.firwin(numtaps, Wn, window=window, pass_zero=pass_zero)
+    yy = signal.lfilter(b, 1, xx)
+
+    return yy
+
+def shift_signal(t, sig, shift_points, direction="backward"):
+    # direction: "forward", "backward"
+
+    if direction == "backward":
+        t_shift = t[:-shift_points]
+        sig_shift = sig[shift_points:]
+    elif direction == "forward": 
+        t_shift = t[shift_points:]
+        sig_shift = sig[:-shift_points]
+    else:
+        raise Exception("wrong direction")
+
+    return t_shift, sig_shift
+
+def firfilter_zerodelay(t, sig, samplingFreq, cutoffFreq, bandtype="lowpass", order=1000, window="hamming"):
+
+    sig_filt = firfilter(sig, samplingFreq=samplingFreq, cutoffFreq=cutoffFreq, bandtype=bandtype, order=order, window=window)
+    t_shift, sig_filt_shift = shift_signal(t, sig_filt, shift_points=order//2, direction="backward")
+
+    return t_shift, sig_filt_shift
 
 
 
