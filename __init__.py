@@ -1,3 +1,4 @@
+import os
 from pkg_resources import get_distribution
 from sys import version
 import csv
@@ -14,7 +15,9 @@ current_matplotlib_version = get_distribution("matplotlib").version
 
 current_versions = [current_python_version, current_numpy_version, current_scipy_version, current_pandas_version, current_matplotlib_version]
 
-with open("nasu/version_table.csv", mode='r', newline='', encoding='utf-8') as file:
+nasu_dir = os.path.dirname(os.path.abspath(__file__))
+version_table_path = os.path.join(nasu_dir, "version_table.csv")
+with open(version_table_path, mode='r', newline='', encoding='utf-8') as file:
 	reader = csv.DictReader(file)
 	first_colnm = "name"
 
