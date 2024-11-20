@@ -31,6 +31,26 @@ class signal():
 		self.sp = calc.spectrum(t_s=self.t_s, d=self.d, Fs_Hz=self.Fs, tstart=tstart, tend=tend, NFFT=NFFT, ovr=ovr, window=window, detrend=detrend)
 		return self.sp
 	
+	def iirfilter(self, cutoffFreq, bandtype="lowpass", order=4, filtertype="butter"):
+		self.filt = calc.struct()
+		self.filt.t_s = self.t_s
+		self.filt.d = calc.iirfilter(self.d, self.Fs, cutoffFreq=cutoffFreq, bandtype=bandtype, order=order, filtertype=filtertype)
+		self.filt.Fs = self.Fs
+		return self.filt
+	
+	def firfilter(self, cutoffFreq, bandtype="lowpass", order=1000, window="hamming"): 
+		self.filt = calc.struct()
+		self.filt.t_s, self.filt.d = calc.firfilter_zerodelay(self.t_s, self.d, self.Fs, cutoffFreq=cutoffFreq, bandtype=bandtype, order=order, window=window)
+		self.filt.Fs = self.Fs
+		return self.filt
+	
+	def decimate(self, downsampling_factor=10):
+		self.dec = calc.struct()
+		self.dec.t_s = self.t_s[::downsampling_factor]
+		self.dec.d = calc.signal.decimate(self.d, q=downsampling_factor, ftype='fir')
+		self.dec.Fs = self.Fs / downsampling_factor
+		return self.dec
+
 class raw(signal):
 	def __init__(self, timetrace_instance):
 		super().__init__(timetrace_instance.t_s, timetrace_instance.d, timetrace_instance.Fs)
