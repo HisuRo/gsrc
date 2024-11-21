@@ -39,177 +39,6 @@ def expand_by1dim(array, Nexp=1, axis=-1):
 
     return np.transpose(np.tile(array, idx_tile), idx_trans)
 
-
-def average(dat, err=None, axis=None, skipnan=False):
-
-    if axis is None:
-        datsize = dat.size
-    else:
-        datsize = dat.shape[axis]
-
-    if err is None:
-        if skipnan:
-            avg = np.nanmean(dat, axis=axis)
-            std = np.nanstd(dat, axis=axis, ddof=1)
-            ste = std / np.sqrt(datsize)
-        else:
-            avg = np.average(dat, axis=axis)
-            std = np.std(dat, axis=axis, ddof=1)
-            ste = std / np.sqrt(datsize)
-    else:
-        if skipnan:
-            err_sq = err ** 2
-            w = 1. / err_sq
-            avg = np.nansum(dat * w, axis=axis) / np.nansum(w, axis=axis)
-            std = np.sqrt(np.nanvar(dat, axis=axis) + np.nanmean(err_sq, axis=axis))
-            if axis is None:
-                ste = np.sqrt(np.nansum((dat - avg) ** 2 * w, axis=axis) \
-                              / ((datsize - 1) * np.nansum(w, axis=axis)) + 1. / np.nansum(w, axis=axis))
-            else:
-                ste = np.sqrt(np.nansum((dat - expand_by1dim(avg, datsize, axis=axis)) ** 2 * w, axis=axis) \
-                              / ((datsize - 1) * np.nansum(w, axis=axis)) + 1. / np.nansum(w, axis=axis))
-        else:
-            err_sq = err ** 2
-            w = 1. / err_sq
-            avg = np.average(dat, axis=axis, weights=1./err_sq)
-            std = np.sqrt(np.var(dat, axis=axis) + np.average(err_sq, axis=axis))
-            if axis is None:
-                ste = np.sqrt(np.sum((dat - avg) ** 2 * w, axis=axis) \
-                              / ((datsize - 1) * np.sum(w, axis=axis)) + 1. / np.sum(w, axis=axis))
-            else:
-                ste = np.sqrt(np.sum((dat - expand_by1dim(avg, datsize, axis=axis))**2 * w, axis=axis) \
-                / ((datsize - 1) * np.sum(w, axis=axis)) + 1./np.sum(w, axis=axis))
-
-    return avg, std, ste
-
-
-def average_dat_withinRhoRange(rho, list_dat, rho_in, rho_out, list_err=None, include_outerside=False):
-    idxs, list_dat = proc.getXIdxsAndYs(rho, rho_in, rho_out, list_dat, include_outerside=include_outerside)
-    array_dat = np.array(list_dat)
-
-    if list_err is None:
-        array_avg, array_std, array_ste = average(array_dat, err=None, axis=-1)
-    else:
-        idxs, list_err = proc.getXIdxsAndYs(rho, rho_in, rho_out, list_err)
-        array_err = np.array(list_err)
-        array_avg, array_std, array_ste = average(array_dat, err=array_err, axis=-1)
-
-    return array_avg, array_std, array_ste
-
-
-def avgByWeightHavingError(xxs, weights, weights_err):
-
-    areNotNansInX = (~np.isnan(xxs)).astype(np.int8)
-    areNotNansInWgt = (~np.isnan(weights)).astype(np.int8)
-    xxs = np.nan_to_num(xxs) * areNotNansInWgt
-    weights = np.nan_to_num(weights) * areNotNansInX
-    weights_err = np.nan_to_num(weights_err) * areNotNansInX
-
-    Sws = np.sum(weights, axis=-1)
-    Swxs = np.sum(weights * xxs, axis=-1)
-    xWAvgs = Swxs / Sws
-    xWAvgs_ex = proc.repeat_and_add_lastdim(xWAvgs, weights.shape[-1])
-    xWAvgErrs = np.sqrt(np.sum((xxs - xWAvgs_ex) ** 2 * weights_err ** 2, axis=-1)) / Sws
-
-    return xWAvgs, xWAvgErrs
-
-
-def sumErr(errList):
-    err = np.sqrt(np.sum(np.array(errList)**2, axis=0))
-    return err
-
-
-def multiRer(datList, errList):
-    rerArray = np.array(errList) / np.array(datList)
-    rer = np.sqrt(np.sum(rerArray**2, axis=0))
-    return rer
-
-
-def inverseDat_andErr(dat, err):
-    inv = 1 / dat
-    rer = err / np.abs(dat)
-    inv_err = inv * rer
-    return inv, inv_err
-
-
-def sqrt_AndErr(x, x_err):
-    y = np.sqrt(x)
-    y_err = 0.5 / y * x_err
-    return y, y_err
-
-
-"""
-# def timeAverageProfiles(dat2d, err=np.array([False])):
-#     if err.all():
-#         idxs_isnanInDat2d = np.isnan(dat2d)
-#         idxs_isnanInErr = np.isnan(err)
-#         idxs_isnan = idxs_isnanInErr + idxs_isnanInDat2d
-#         dat2d[idxs_isnan] = np.nan
-#         err[idxs_isnan] = np.nan
-#
-#         avg = np.nanmean(dat2d, axis=0)
-#         std = np.sqrt(np.nanvar(dat2d, axis=0) + np.nanmean(err ** 2, axis=0))
-#     else:
-#         avg = np.nanmean(dat2d, axis=0)
-#         std = np.nanstd(dat2d, axis=0, ddof=1)
-#
-#     return avg, std
-#
-#
-# def timeAverageDatByRefs(timeDat, dat, err, timeRef):
-#     proc.suggestNewVer(2, 'timeAverageDatByRefs')
-#
-#     dtDat = timeDat[1] - timeDat[0]
-#     dtRef = timeRef[1] - timeRef[0]
-#     dNDatRef = int(dtRef / dtDat + 0.5)
-#     timeRef_ext = repeat_and_add_lastdim(timeRef, len(timeDat))
-#     idxDatAtRef = np.argsort(np.abs(timeDat - timeRef_ext))[:, :dNDatRef]
-#
-#     datAtRef = dat[idxDatAtRef]
-#     errAtRef = err[idxDatAtRef]
-#     dat_Ref = np.nanmean(datAtRef, axis=1)
-#     err_Ref = np.sqrt(np.nanvar(datAtRef, axis=1) + np.nanmean(errAtRef ** 2, axis=1))
-#
-#     return dat_Ref, err_Ref
-"""
-
-
-def timeAverageDatByRefs_v2(timeDat, dat, timeRef, err=None, skipnan=False):
-    dtDat = timeDat[1] - timeDat[0]
-    dtRef = timeRef[1] - timeRef[0]
-    dNDatRef = int(dtRef / dtDat + 0.5)
-    timeRef_ext = repeat_and_add_lastdim(timeRef, len(timeDat))
-    idxDatAtRef = np.argsort(np.abs(timeDat - timeRef_ext))[:, :dNDatRef]
-
-    datAtRef = dat[idxDatAtRef]
-    if err is not None:
-        errAtRef = err[idxDatAtRef]
-    else:
-        errAtRef = None
-
-    dat_Ref, std_Ref, err_Ref = average(datAtRef, err=errAtRef, axis=-1, skipnan=skipnan)
-
-    return dat_Ref, std_Ref, err_Ref
-
-
-def timeAverageDatListByRefs(timeDat, datList, timeRef, errList=None, skipnan=False):
-    datRefList = [0] * len(datList)
-    stdRefList = [0] * len(datList)
-    errRefList = [0] * len(datList)
-
-    for ii, dat in enumerate(datList):
-        if errList is None:
-            datRef, stdRef, errRef = timeAverageDatByRefs_v2(timeDat, dat, timeRef, skipnan=skipnan)
-        else:
-            err = errList[ii]
-            datRef, stdRef, errRef = timeAverageDatByRefs_v2(timeDat, dat, timeRef, err, skipnan=skipnan)
-        datRefList[ii] = datRef
-        stdRefList[ii] = stdRef
-        errRefList[ii] = errRef
-
-    return datRefList, stdRefList, errRefList
-
-
 def shifted_gauss(x, a, b, x0, C):
     return C + a * np.exp(-(x - x0) ** 2 / b ** 2)
 
@@ -438,34 +267,6 @@ def MakeLLSMFitProfilesFromCXS7(sn, startTime, endTime, Nfit, poly):
     return time, raw_list, reg_list
 
 
-def Er_vExB_1ion(Ti, LTi, Lne, Vtor, Vpol, Btor, Bpol, Zi,
-                 Ti_er, LTi_er, Lne_er, Vtor_er, Vpol_er, Btor_er, Bpol_er):
-    # [keV, keV/m, e19m^-3, e19m^-4, km/s, km/s, T, T, -]
-
-    gradTi, gradTi_er = inverseDat_andErr(LTi, LTi_er)
-    gradne, gradne_er = inverseDat_andErr(Lne, Lne_er)
-    sumgrad = gradTi + gradne
-    sumgrad_er = sumErr([gradTi_er, gradne_er])
-    Er_gradp = Ti * sumgrad / Zi
-    Er_gradp_err = multiRer([Ti, sumgrad], [Ti_er, sumgrad_er]) * np.abs(Er_gradp)
-    VtBp = Vtor * Bpol
-    VtBp_err = multiRer([Vtor, Bpol], [Vtor_er, Bpol_er]) * np.abs(VtBp)
-    VpBt = Vpol * Btor
-    VpBt_err = multiRer([Vpol, Btor], [Vpol_er, Btor_er]) * np.abs(VpBt)
-    Er_lorenz = - (VtBp - VpBt)
-    Er_lorenz_err = sumErr([VtBp_err, VpBt_err])
-    print(f'grad p term: {Er_gradp} pm {Er_gradp_err}')
-    print(f'lorenz term: {Er_lorenz} pm {Er_lorenz_err}')
-
-    Er = Er_gradp + Er_lorenz   # [k V/m = k N/C]
-    Er_err = sumErr([Er_gradp_err, Er_lorenz_err])
-
-    vExB = Er / Btor  # [km/s]
-    vExB_err = multiRer([Er, Btor], [Er_err, Btor_er]) * np.abs(vExB)
-
-    return Er, Er_err, vExB, vExB_err   # [kV/m, km/s]
-
-
 """
 # def center_of_gravity_of_complex_spectrum(freq, psd, psd_err, power=2):
 
@@ -672,11 +473,438 @@ def timeSeriesRegGradAtRhoOfInterest(reff2d, rho2d, dat, err, rhoOfInterest, NFi
 #     return Avg, AvgErr
 """
 
+def get_intermediate(xx, Nsample):
+
+    Nremain = len(xx) - Nsample
+    idx_s = Nremain // 2
+
+    return xx[idx_s: idx_s + Nsample]
+
+def turnLastDimToDiagMat(array):
+    rawdatshape = array.shape
+    last_dim_size = rawdatshape[-1]
+    result_array = np.zeros(rawdatshape + (last_dim_size,), dtype=array.dtype)
+    for i in range(last_dim_size):
+        result_array[..., i, i] = array[..., i]
+    return result_array
+
+
+
+
+
+
+
+
+
+### Elementary Calculations ###
+
+def sumErr(errList):
+    err = np.sqrt(np.sum(np.array(errList)**2, axis=0))
+    return err
+
+def multiRer(datList, errList):
+    rerArray = np.array(errList) / np.array(datList)
+    rer = np.sqrt(np.sum(rerArray**2, axis=0))
+    return rer
+
+def inverseDat_andErr(dat, err):
+    inv = 1 / dat
+    rer = err / np.abs(dat)
+    inv_err = inv * rer
+    return inv, inv_err
+
+def sqrt_AndErr(x, x_err):
+    y = np.sqrt(x)
+    y_err = 0.5 / y * x_err
+    return y, y_err
+
+def divide(nu, de, n_err=None, d_err=None):
+
+    quo = nu / de
+    if n_err is None:
+        if d_err is None:
+            quo_err = None
+        else:
+            quo_err = np.abs(d_err/de * quo)
+    else:
+        if d_err is None:
+            quo_err = np.abs(n_err/nu * quo)
+        else:
+            quo_err = np.abs(np.sqrt((n_err/nu)**2 + (d_err/de)**2) * quo)
+
+    return quo, quo_err
+
+def multiple(A, B, A_err=None, B_err=None):
+    pro = A * B
+    if A_err is None:
+        if B_err is None:
+            pro_err = None
+        else:
+            pro_err = np.abs(B_err / B * pro)
+    else:
+        if B_err is None:
+            pro_err = np.abs(A_err / A * pro)
+        else:
+            pro_err = np.abs(np.sqrt((A_err / A)**2 + (B_err / B)**2) * pro)
+    return pro, pro_err
+
+def power(x, e, x_err=None):
+
+    pow = x ** e
+    if x_err is None:
+        pow_err = None
+    else:
+        pow_err = np.abs(e * (x ** (e - 1)) * x_err)
+
+    return pow, pow_err
+
+
+
+
+
+
+
+### Average ###
+
+def average(dat, err=None, axis=None, skipnan=False):
+
+    if axis is None:
+        datsize = dat.size
+    else:
+        datsize = dat.shape[axis]
+
+    if err is None:
+        if skipnan:
+            avg = np.nanmean(dat, axis=axis)
+            std = np.nanstd(dat, axis=axis, ddof=1)
+            ste = std / np.sqrt(datsize)
+        else:
+            avg = np.average(dat, axis=axis)
+            std = np.std(dat, axis=axis, ddof=1)
+            ste = std / np.sqrt(datsize)
+    else:
+        if skipnan:
+            err_sq = err ** 2
+            w = 1. / err_sq
+            avg = np.nansum(dat * w, axis=axis) / np.nansum(w, axis=axis)
+            std = np.sqrt(np.nanvar(dat, axis=axis) + np.nanmean(err_sq, axis=axis))
+            if axis is None:
+                ste = np.sqrt(np.nansum((dat - avg) ** 2 * w, axis=axis) \
+                              / ((datsize - 1) * np.nansum(w, axis=axis)) + 1. / np.nansum(w, axis=axis))
+            else:
+                ste = np.sqrt(np.nansum((dat - expand_by1dim(avg, datsize, axis=axis)) ** 2 * w, axis=axis) \
+                              / ((datsize - 1) * np.nansum(w, axis=axis)) + 1. / np.nansum(w, axis=axis))
+        else:
+            err_sq = err ** 2
+            w = 1. / err_sq
+            avg = np.average(dat, axis=axis, weights=1./err_sq)
+            std = np.sqrt(np.var(dat, axis=axis) + np.average(err_sq, axis=axis))
+            if axis is None:
+                ste = np.sqrt(np.sum((dat - avg) ** 2 * w, axis=axis) \
+                              / ((datsize - 1) * np.sum(w, axis=axis)) + 1. / np.sum(w, axis=axis))
+            else:
+                ste = np.sqrt(np.sum((dat - expand_by1dim(avg, datsize, axis=axis))**2 * w, axis=axis) \
+                / ((datsize - 1) * np.sum(w, axis=axis)) + 1./np.sum(w, axis=axis))
+
+    return avg, std, ste
+
+"""
+# def weighted_average_1D(x1D, weight1D):
+#     Sw = np.sum(weight1D)
+#     wx = x1D * weight1D
+#     Swx = np.sum(wx)
+#     xm = Swx / Sw
+#     w2 = weight1D ** 2
+#     Sw2 = np.sum(w2)
+#     errsq = (x1D - np.full(x1D.T.shape, xm).T) ** 2
+#     werrsq = weight1D * errsq
+#     Swerrsq = np.sum(werrsq)
+#     U = Sw / (Sw ** 2 - Sw2) * Swerrsq
+#     xerr = np.sqrt(U)
+#
+#     wwerrsq = weight1D * werrsq
+#     Swwerrsq = np.sum(wwerrsq)
+#     Um = Sw / (Sw ** 2 - Sw2) * Swwerrsq / Sw
+#     xmerr = np.sqrt(Um)
+#
+#     return xm, xerr, xmerr
+#
+#
+# def weighted_average_2D(x2D, weight2D):
+#
+#     areNotNansInX = (~np.isnan(x2D)).astype(np.int8)
+#     areNotNansInWgt = (~np.isnan(weight2D)).astype(np.int8)
+#     x2D = np.nan_to_num(x2D) * areNotNansInWgt
+#     weight2D = np.nan_to_num(weight2D) * areNotNansInX
+#
+#     Sw = np.sum(weight2D, axis=1)
+#     wx = x2D * weight2D
+#     Swx = np.sum(wx, axis=1)
+#     xm = Swx / Sw
+#     w2 = weight2D ** 2
+#     Sw2 = np.sum(w2, axis=1)
+#     errsq = (x2D - np.full(x2D.T.shape, xm).T) ** 2
+#     werrsq = weight2D * errsq
+#     Swerrsq = np.sum(werrsq, axis=1)
+#     U = Sw / (Sw ** 2 - Sw2) * Swerrsq
+#     xerr = np.sqrt(U)
+#
+#     wwerrsq = weight2D * werrsq
+#     Swwerrsq = np.sum(wwerrsq, axis=1)
+#     Um = Sw / (Sw ** 2 - Sw2) * Swwerrsq / Sw
+#     xmerr = np.sqrt(Um)
+#
+#     return xm, xerr, xmerr
+"""
+
+def average_dat_withinRhoRange(rho, list_dat, rho_in, rho_out, list_err=None, include_outerside=False):
+    idxs, list_dat = proc.getXIdxsAndYs(rho, rho_in, rho_out, list_dat, include_outerside=include_outerside)
+    array_dat = np.array(list_dat)
+
+    if list_err is None:
+        array_avg, array_std, array_ste = average(array_dat, err=None, axis=-1)
+    else:
+        idxs, list_err = proc.getXIdxsAndYs(rho, rho_in, rho_out, list_err)
+        array_err = np.array(list_err)
+        array_avg, array_std, array_ste = average(array_dat, err=array_err, axis=-1)
+
+    return array_avg, array_std, array_ste
+
+def avgByWeightHavingError(xxs, weights, weights_err):
+
+    areNotNansInX = (~np.isnan(xxs)).astype(np.int8)
+    areNotNansInWgt = (~np.isnan(weights)).astype(np.int8)
+    xxs = np.nan_to_num(xxs) * areNotNansInWgt
+    weights = np.nan_to_num(weights) * areNotNansInX
+    weights_err = np.nan_to_num(weights_err) * areNotNansInX
+
+    Sws = np.sum(weights, axis=-1)
+    Swxs = np.sum(weights * xxs, axis=-1)
+    xWAvgs = Swxs / Sws
+    xWAvgs_ex = proc.repeat_and_add_lastdim(xWAvgs, weights.shape[-1])
+    xWAvgErrs = np.sqrt(np.sum((xxs - xWAvgs_ex) ** 2 * weights_err ** 2, axis=-1)) / Sws
+
+    return xWAvgs, xWAvgErrs
+
+"""
+# def timeAverageProfiles(dat2d, err=np.array([False])):
+#     if err.all():
+#         idxs_isnanInDat2d = np.isnan(dat2d)
+#         idxs_isnanInErr = np.isnan(err)
+#         idxs_isnan = idxs_isnanInErr + idxs_isnanInDat2d
+#         dat2d[idxs_isnan] = np.nan
+#         err[idxs_isnan] = np.nan
+#
+#         avg = np.nanmean(dat2d, axis=0)
+#         std = np.sqrt(np.nanvar(dat2d, axis=0) + np.nanmean(err ** 2, axis=0))
+#     else:
+#         avg = np.nanmean(dat2d, axis=0)
+#         std = np.nanstd(dat2d, axis=0, ddof=1)
+#
+#     return avg, std
+#
+#
+# def timeAverageDatByRefs(timeDat, dat, err, timeRef):
+#     proc.suggestNewVer(2, 'timeAverageDatByRefs')
+#
+#     dtDat = timeDat[1] - timeDat[0]
+#     dtRef = timeRef[1] - timeRef[0]
+#     dNDatRef = int(dtRef / dtDat + 0.5)
+#     timeRef_ext = repeat_and_add_lastdim(timeRef, len(timeDat))
+#     idxDatAtRef = np.argsort(np.abs(timeDat - timeRef_ext))[:, :dNDatRef]
+#
+#     datAtRef = dat[idxDatAtRef]
+#     errAtRef = err[idxDatAtRef]
+#     dat_Ref = np.nanmean(datAtRef, axis=1)
+#     err_Ref = np.sqrt(np.nanvar(datAtRef, axis=1) + np.nanmean(errAtRef ** 2, axis=1))
+#
+#     return dat_Ref, err_Ref
+"""
+
+def timeAverageDatByRefs_v2(timeDat, dat, timeRef, err=None, skipnan=False):
+    dtDat = timeDat[1] - timeDat[0]
+    dtRef = timeRef[1] - timeRef[0]
+    dNDatRef = int(dtRef / dtDat + 0.5)
+    timeRef_ext = repeat_and_add_lastdim(timeRef, len(timeDat))
+    idxDatAtRef = np.argsort(np.abs(timeDat - timeRef_ext))[:, :dNDatRef]
+
+    datAtRef = dat[idxDatAtRef]
+    if err is not None:
+        errAtRef = err[idxDatAtRef]
+    else:
+        errAtRef = None
+
+    dat_Ref, std_Ref, err_Ref = average(datAtRef, err=errAtRef, axis=-1, skipnan=skipnan)
+
+    return dat_Ref, std_Ref, err_Ref
+
+def timeAverageDatListByRefs(timeDat, datList, timeRef, errList=None, skipnan=False):
+    datRefList = [0] * len(datList)
+    stdRefList = [0] * len(datList)
+    errRefList = [0] * len(datList)
+
+    for ii, dat in enumerate(datList):
+        if errList is None:
+            datRef, stdRef, errRef = timeAverageDatByRefs_v2(timeDat, dat, timeRef, skipnan=skipnan)
+        else:
+            err = errList[ii]
+            datRef, stdRef, errRef = timeAverageDatByRefs_v2(timeDat, dat, timeRef, err, skipnan=skipnan)
+        datRefList[ii] = datRef
+        stdRefList[ii] = stdRef
+        errRefList[ii] = errRef
+
+    return datRefList, stdRefList, errRefList
+
+def moving_average(data, window_size, mode="same"):
+    # window_size must be odd number.
+    # mode = "same", "valid"
+
+    if window_size == 1:
+        moving_average = data
+    else:
+        if mode == "same":
+            cumsum = np.insert(np.cumsum(np.append(np.insert(data, 0, [0] * ((window_size - 1)//2)),
+                                                   [0] * ((window_size - 1)//2))), 0, 0)
+        elif mode == "valid":
+            cumsum = np.insert(np.cumsum(data), 0, 0)
+        else:
+            print("please input correct mode. 'same' or 'valid'")
+            exit()
+        moving_average = (cumsum[window_size:] - cumsum[:-window_size]) / window_size
+
+    return moving_average
+
+
+
+
+
+
+
+### Calibration ###
+
+def calibIQComp2(datI, datQ, VAR, VOS_I, VOS_Q, phDif):
+    phDifErr = phDif - 90
+
+    datICalib = datI - VOS_I
+    datQCalib = (VAR * (datQ - VOS_Q) + datICalib * np.sin(np.radians(phDifErr))) / np.cos(np.radians(phDifErr))
+
+    return datICalib, datQCalib
+
+def calib_dbs9O(chDiag, pathCalib, Idat, Qdat):
+    dictIF = {'27.7G': 40, '29.1G': 80, '30.5G': 120, '32.0G': 160,
+              '33.4G': 200, '34.8G': 240, '36.9G': 300, '38.3G': 340}
+    frLO = dictIF[chDiag]
+    lvLO = float(input('LO Power [dBm] >>> '))
+    vgaLO = float(input('LO VGA [V] >>> '))
+    vgaRF = float(input('RF VGA [V] >>> '))
+    calibPrms_df = read.calibPrms_df(pathCalib)
+    VAR, VOS_I, VOS_Q, phDif = calibPrms_df.loc[(frLO, lvLO, vgaLO, vgaRF)]
+
+    Idat, Qdat = calibIQComp2(Idat, Qdat, VAR, VOS_I, VOS_Q, phDif)
+
+    return Idat, Qdat
+
+
+
+
+### Time Trace Signal Processing ###
+
+def envelope(sig):
+    analytic_signal = signal.hilbert(sig)
+    amplitude_envelope = np.abs(analytic_signal)
+    return amplitude_envelope
+
+def amplitude(signal):
+
+	if np.iscomplexobj(signal):
+		amp = np.abs(signal)
+	else:
+		amp = envelope(signal)
+
+	return amp
+
+def phase(complex_signal, unwrap=True):
+    if unwrap:
+        phase = np.unwrap(np.angle(complex_signal)) 
+    else:
+        phase = np.angle(complex_signal)
+    return phase
+
+## Time Derivative ##
+
+"""
+# def matrix_for_1stDerivative_by_5pointsStencil_finiteDiff(Ndat, h):
+
+#     Mstencil = np.zeros((Ndat, Ndat))
+#     np.fill_diagonal(Mstencil[1:], -8)
+#     np.fill_diagonal(Mstencil[2:], 1)
+#     np.fill_diagonal(Mstencil[:, 1:], 8)
+#     np.fill_diagonal(Mstencil[:, 2:], -1)
+
+#     Mstencil[0, :] = 0
+#     Mstencil[1, :] = 0
+#     Mstencil[-1, :] = 0
+#     Mstencil[-2, :] = 0
+
+#     Mstencil /= 12 * h
+
+#     return Mstencil
+
+
+# def function_of_1stDerivative_by_5pointsStencil_finiteDiff(x1d, h):
+#     return (1 * x1d[0] - 8 * x1d[1] + 8 * x1d[3] - 1 * x1d[4]) / (12 * h)
+"""
+
+def firstDerivative_by_5pointsStencil_finiteDiff(tt, xx):
+
+    dt = tt[1] - tt[0]
+
+    xdot = (np.roll(xx, 2, axis=-1) - 8 * np.roll(xx, 1, axis=-1) + 8 * np.roll(xx, -1, axis=-1) - np.roll(xx, -2, axis=-1)) / (12 * dt)
+    xdot = xdot[2: -2]
+    t_short = tt[2: -2]
+
+    return t_short, xdot
+
+def phasederivative(phase, dt):
+    return firstDerivative_by_5pointsStencil_finiteDiff(phase, dt)
+
+def pulsepair(t, iq, Nsample=100, ovr=0.5):
+
+    dt = t[1] - t[0]
+    Nov = int(Nsample*ovr)
+    Ndat = len(t)
+    Nout = NspFromNdat(Nsample, Nov, Ndat)
+    idxs = make_idxs_for_spectrogram_wo_EnsembleAVG(Nsample, Nov, Nout)
+
+    tout = time_for_spectrogram_wo_ensembleAVG(t, idxs)
+    iqtmp = iq[idxs]
+    re = np.real(iqtmp)
+    im = np.imag(iqtmp)
+
+    reacf = np.sum(np.delete(re * np.roll(re, -1, axis=-1) + im * np.roll(im, -1, axis=-1), -1, axis=-1), axis=-1)
+    imacf = np.sum(np.delete(re * np.roll(im, -1, axis=-1) - np.roll(re, -1, axis=-1) * im, -1, axis=-1), axis=-1)
+    iqacf = reacf + 1.j * imacf
+    acf0 = np.average(np.real(iqtmp*np.conjugate(iqtmp)), axis=-1)
+
+    fd = 1 / (2*np.pi*dt) * np.angle(iqacf)
+    fdstd = 1 / (np.sqrt(2) * np.pi * dt) * np.sqrt(1-(np.abs(iqacf))/acf0)
+
+    o = struct()
+    o.t = tout
+    o.fd = fd
+    o.fdstd = fdstd
+
+    return o
+
+
+
+
+### Spectral Analysis Tools ###
+
 def dB(spec, spec_err):
     spec_db = 10 * np.log10(spec)
     spec_err_db = 10 / np.log(10) / spec * spec_err
     return spec_db, spec_err_db
-
 
 def toZeroMeanTimeSliceEnsemble(xx, NFFT, NEns, NOV, time=None, tout=None):
     xens = toTimeSliceEnsemble(xx, NFFT, NEns, NOV, time=time, tout=tout)
@@ -725,7 +953,6 @@ def toTimeSliceEnsemble(xx, NFFT, NEns, NOV, time=None, tout=None):  # time, tou
 
     return xens
 
-
 def CV(dat):
     datAvg = np.mean(dat, axis=0)
     datExp = np.mean(datAvg)
@@ -734,7 +961,6 @@ def CV(dat):
     print(f'C.V.={CV_dat * 100:.0f}%')
 
     return CV_dat
-
 
 def CV_overlap(NFFT, NEns, NOV):
 
@@ -749,47 +975,12 @@ def CV_overlap(NFFT, NEns, NOV):
 
     return CV_randND
 
-
-def CVForBiSpecAna(NFFTs, NEns, NOVs):
-    NFFT1, NFFT2, NFFT3 = NFFTs
-    NOV1, NOV2, NOV3 = NOVs
-
-    idxMx3, idxNan = makeIdxsForCrossBiSpectrum(NFFTs)
-
-    NSamp1 = NEns * NFFT1 - (NEns - 1) * NOV1
-    NSamp2 = NEns * NFFT2 - (NEns - 1) * NOV2
-    NSamp3 = NEns * NFFT3 - (NEns - 1) * NOV3
-    randND1 = np.random.normal(size=NSamp1)
-    randND1 = toTimeSliceEnsemble(randND1, NFFT1, NEns, NOV1)
-    randND2 = np.random.normal(size=NSamp2)
-    randND2 = toTimeSliceEnsemble(randND2, NFFT2, NEns, NOV2)
-    randND3 = np.random.normal(size=NSamp3)
-    randND3 = toTimeSliceEnsemble(randND3, NFFT3, NEns, NOV3)
-    ND1 = fft.fft(randND1)
-    ND2 = fft.fft(randND2)
-    ND3 = fft.fft(randND3)
-
-    ND1 = np.reshape(ND1, (NEns, 1, NFFT1))
-    ND2 = np.reshape(ND2, (NEns, NFFT2, 1))
-    ND3 = ND3[:, idxMx3]
-
-    ND2ND1 = np.matmul(ND2, ND1)
-    ND2ND1AbsSq = np.abs(ND2ND1) ** 2
-    ND3AbsSq = np.abs(ND3) ** 2
-
-    CV_ND2ND1 = CV(ND2ND1AbsSq)
-    CV_ND3 = CV(ND3AbsSq)
-
-    return CV_ND2ND1, CV_ND3
-
-
 def getWindowAndCoefs(NFFT, window, NEns):
 
     win, enbw, CG = get_window(NFFT, window)
     CV = get_CV(NEns)
 
     return win, enbw, CG, CV
-
 
 def get_window(NFFT, window):
 
@@ -799,7 +990,6 @@ def get_window(NFFT, window):
 
     return win, enbw, CG
 
-
 def get_CV(NEns):
 
     # CV = CV_overlap(NFFT, NEns, NOV)
@@ -807,76 +997,163 @@ def get_CV(NEns):
 
     return CV
 
-
 def powerTodB(power, powerErr):
     power_db = 10 * np.log10(power)
     powerErr_db = 10 / np.log(10) / power * powerErr
 
     return power_db, powerErr_db
 
-
-def fourier_components_1s(xens, dt, NFFT, win):
-
-    rfreq = fft.rfftfreq(NFFT, dt)
-    rfft_x = fft.rfft(xens * win)
-
-    return rfreq, rfft_x
-
-
-def fourier_components_2s(xens, dt, NFFT, win):
-
-    freq = fft.fftfreq(NFFT, dt)
-    freq = fft.fftshift(freq)
-    fft_x = fft.fft(xens * win)
-    fft_x = fft.fftshift(fft_x, axes=-1)
-
-    return freq, fft_x
-
-
 def NSampleForFFT(NFFT, NEns, NOV):
     return NEns * NFFT - (NEns - 1) * NOV
-
 
 def NdatForFFT(Nsample, Nsp, NOV):
     return Nsp * Nsample - (Nsp - 1) * NOV
 
-
 def NEnsFromNSample(NFFT, NOV, Nsamp):
     return (Nsamp - NOV) // (NFFT - NOV)
-
 
 def NspFromNdat(Nsample, NOV, Ndat):
     return (Ndat - NOV) // (Nsample - NOV)
 
-
 def bestNfftFromNdat(Nens, OVR, Ndat):
     return 2**int(np.log2(Ndat / (Nens - (Nens - 1) * OVR)))
 
+def Nspectra(time, NFFT, NEns, NOV):
 
-"""
-# def power_spectre_1s(xx, dt, NFFT, window, NEns, NOV):
+    Nsample = NEns * NFFT - (NEns - 1) * NOV
+    Nspectra = len(time) // Nsample
+    Ndat = Nsample * Nspectra
 
-#     xens = toTimeSliceEnsemble(xx, NFFT, NEns, NOV)
-#     win, enbw, CG, CV = getWindowAndCoefs(NFFT, window, NEns, NOV)
+    print(f'The number of samples per a spectrum: {Nsample:d}')
+    print(f'The number of spectra: {Nspectra:d}\n')
 
-#     rfreq, rfft_x = fourier_components_1s(xens, dt, NFFT, win)
-#     p_xx = np.real(rfft_x * rfft_x.conj())
-#     p_xx[:, 1:-1] *= 2
-#     p_xx_ave = np.mean(p_xx, axis=0)
-#     p_xx_std = np.std(p_xx, axis=0, ddof=1)
-#     p_xx_rerr = p_xx_std / np.abs(p_xx_ave) * CV
+    return Nspectra, Nsample, Ndat
 
-#     Fs = 1. / dt
-#     psd = p_xx_ave / (Fs * NFFT * enbw * (CG ** 2))
-#     psd_err = psd * p_xx_rerr
+def Nspectra_v2(time, NFFT, NEns, NOV):
 
-#     dfreq = 1. / (NFFT * dt)
-#     print(f'Power x^2_bar            ={np.sum(xx**2) / len(xx)}')
-#     print(f'Power integral of P(f)*df={np.sum(psd * dfreq)}\n')
+    Nsample = NSampleForFFT(NFFT, NEns, NOV)
+    Nsp = NspFromNdat(Nsample, NOV, len(time))
+    Ndat = NdatForFFT(Nsample, Nsp, NOV)
 
-#     return rfreq, psd, psd_err
-"""
+    print(f'The number of samples per a spectrum: {Nsample:d}')
+    print(f'The number of spectra: {Nsp:d}\n')
 
+    return Nsp, Nsample, Ndat
+
+def make_idxs_for_spectrogram(NFFT, NEns, NOV, Nsp):
+
+    if NOV != 0:
+        tmp = (np.reshape(np.arange(NEns * NFFT), (NEns, NFFT)).T - np.arange(0, NEns * NOV, NOV)).T
+    else:
+        tmp = np.reshape(np.arange(NEns * NFFT), (NEns, NFFT))
+    Nsamp = NSampleForFFT(NFFT, NEns, NOV)
+    idxs = np.transpose(np.tile(tmp, (Nsp, 1, 1)).T + np.arange(0, Nsp * Nsamp, Nsamp))
+
+    return idxs
+
+def make_idxs_for_spectrogram_v2(Nfft, Nens, Nov, Nsp):
+
+    tmp1 = np.reshape(np.arange(Nsp*Nens*Nfft), (Nsp, Nens, Nfft))
+    tmp2 = np.reshape(repeat_and_add_lastdim(Nov * np.arange(Nens * Nsp), Nfft), (Nsp, Nens, Nfft))
+    idxs = tmp1 - tmp2
+
+    return idxs
+
+def make_idxs_for_spectrogram_wo_EnsembleAVG(NFFT, NOV, Nsp):
+
+    if NOV != 0:
+        tmp = (np.reshape(np.arange(Nsp * NFFT), (Nsp, NFFT)).T - np.arange(0, Nsp * NOV, NOV)).T
+    else:
+        tmp = np.reshape(np.arange(Nsp * NFFT), (Nsp, NFFT))
+    Ndat = NSampleForFFT(NFFT, Nsp, NOV)
+    idxs = np.transpose(np.tile(tmp, (1, 1)).T + np.arange(0, Ndat, Ndat))
+
+    return idxs
+
+def time_for_spectrogram(time, idxs_for_spectrogram):
+
+    tisp = np.average(np.array([time[idxs_for_spectrogram][:, 0, 0], time[idxs_for_spectrogram][:, -1, -1]]), axis=0)
+
+    return tisp
+
+def time_for_spectrogram_wo_ensembleAVG(time, idxs_for_spectrogram):
+
+    tisp = np.average(time[idxs_for_spectrogram], axis=-1)
+
+    return tisp
+
+def check_power(NFFT, dt, xx, Nsamp, tisp, dtisp, psd):
+
+    dfreq = 1. / (NFFT * dt)
+    print(f'Power: Time average of x(t)^2 = {np.sum(np.abs(xx[0:Nsamp]) ** 2) / Nsamp:.6f} V^2 '
+          f'@{tisp[0]:.3f}+-{0.5 * dtisp:.3f} s')
+    print(f'Power: Integral of P(f)       = {np.sum(psd[0] * dfreq):.6f} V^2 '
+          f'@{tisp[0]:.3f}+-{0.5 * dtisp:.3f} s')
+
+    return
+
+def get_freq_for_spectrum(NFFT, dt):
+
+    freq = fft.fftfreq(NFFT, dt)
+    freq = fft.fftshift(freq)
+
+    return freq
+
+def FFT(xens, win):
+
+    fft_x = fft.fft(xens * win)
+    fft_x = fft.fftshift(fft_x, axes=-1)
+
+    return fft_x
+
+def Nens_from_dtout(dtout, dt, Nfft=2**10, OVR=0.5):
+
+    Nov = int(Nfft * OVR)
+    sampledatlen = int(np.round(dtout / dt))
+    Nens = NEnsFromNSample(Nfft, Nov, sampledatlen)
+
+    return Nens
+
+def makeIdxsForAutoBiSpectrum(NFFT):
+
+    idxf0 = int(NFFT / 2 + 0.5)
+    idxMx1 = np.tile(np.arange(NFFT), (NFFT, 1))
+    idxMx2 = idxMx1.T
+    coefMx1 = idxMx1 - idxf0
+    coefMx2 = idxMx2 - idxf0
+    coefMx3 = coefMx1 + coefMx2
+    idxMx3 = coefMx3 + idxf0
+    idxNan = np.where(((idxMx3 < 0) | (idxMx3 >= NFFT)))
+    idxMx3[idxNan] = False
+
+    return idxMx3, idxNan
+
+def makeIdxsForCrossBiSpectrum(NFFTx, NFFTy, NFFTz):
+
+    idxf0x = NFFTx // 2
+    idxf0y = NFFTy // 2
+    idxf0z = NFFTz // 2
+
+    idxMx1 = np.tile(np.arange(NFFTx), (NFFTy, 1))
+    idxMx2 = np.tile(np.arange(NFFTy), (NFFTx, 1)).T
+    coefMx1 = idxMx1 - idxf0x
+    coefMx2 = idxMx2 - idxf0y
+    coefMx3 = coefMx1 + coefMx2
+    idxMx3 = coefMx3 + idxf0z
+    idxNan = np.where(((idxMx3 < 0) | (idxMx3 >= NFFTz)))
+    idxMx3[idxNan] = 0
+
+    del idxMx1
+    del idxMx2
+    del coefMx1
+    del coefMx2
+    del coefMx3
+    gc.collect()
+
+    return idxMx3, idxNan
+
+
+## Spectrum & Spectrogram
 
 def spectrum(t_s, d, Fs_Hz, tstart, tend, NFFT=2**10, ovr=0.5, window="hann", detrend="constant"):
 
@@ -907,78 +1184,31 @@ def spectrum(t_s, d, Fs_Hz, tstart, tend, NFFT=2**10, ovr=0.5, window="hann", de
 
     return sp
 
+"""
+# def power_spectre_1s(xx, dt, NFFT, window, NEns, NOV):
 
-def specgram(t_s, d, Fs_Hz, NFFT=2**10, ovr=0., window="hann", NEns=1, detrend="constant"):
+#     xens = toTimeSliceEnsemble(xx, NFFT, NEns, NOV)
+#     win, enbw, CG, CV = getWindowAndCoefs(NFFT, window, NEns, NOV)
 
-    spg = struct()
-    spg.NFFT = NFFT
-    spg.ovr = ovr
-    spg.NOV = int(spg.NFFT * spg.ovr)
-    spg.window = window
-    spg.NEns = NEns
-    spg.size = len(t_s)
-    spg.NSamp = NSampleForFFT(NFFT=spg.NFFT, NEns=spg.NEns, NOV=spg.NOV)
-    spg.Nsp = spg.size // spg.NSamp
+#     rfreq, rfft_x = fourier_components_1s(xens, dt, NFFT, win)
+#     p_xx = np.real(rfft_x * rfft_x.conj())
+#     p_xx[:, 1:-1] *= 2
+#     p_xx_ave = np.mean(p_xx, axis=0)
+#     p_xx_std = np.std(p_xx, axis=0, ddof=1)
+#     p_xx_rerr = p_xx_std / np.abs(p_xx_ave) * CV
 
-    return_onesided = not np.iscomplexobj(d)
+#     Fs = 1. / dt
+#     psd = p_xx_ave / (Fs * NFFT * enbw * (CG ** 2))
+#     psd_err = psd * p_xx_rerr
 
-    spg.tarray = t_s[:spg.Nsp * spg.NSamp].reshape((spg.Nsp, spg.NSamp))
-    spg.t = spg.tarray.mean(axis=-1)
-    spg.darray = d[:spg.Nsp * spg.NSamp].reshape((spg.Nsp, spg.NSamp))
-    spg.f, spg.psd = welch(x=spg.darray, fs= Fs_Hz, window="hann",
-                            nperseg=spg.NFFT, noverlap=spg.NOV,
-                            return_onesided=return_onesided,
-                            detrend=detrend, scaling="density",
-                            axis=-1, average="mean")
+#     dfreq = 1. / (NFFT * dt)
+#     print(f'Power x^2_bar            ={np.sum(xx**2) / len(xx)}')
+#     print(f'Power integral of P(f)*df={np.sum(psd * dfreq)}\n')
 
-    if not return_onesided:
-        spg.f = fft.fftshift(spg.f)
-        spg.psd = fft.fftshift(spg.psd, axes=-1)
-    spg.psdamp = np.sqrt(spg.psd)
-    spg.psddB = 10 * np.log10(spg.psd)
+#     return rfreq, psd, psd_err
+"""
 
-    spg.dF = Fs_Hz / spg.NFFT
-    spg.fmax = Fs_Hz / 2
-
-    return spg
-
-
-def cross_spectrum(t_s, d1, d2, Fs_Hz, tstart, tend, NFFT=2**10, ovr=0.5, window="hann", detrend="constant", unwrap_phase=False):
-
-    cs = struct()
-    cs.tstart = tstart
-    cs.tend = tend
-
-    cs.NFFT = NFFT
-    cs.ovr = ovr
-    cs.NOV = int(cs.NFFT * cs.ovr)
-    cs.window = window
-
-    _, datlist = proc.getTimeIdxsAndDats(t_s, cs.tstart, cs.tend, [t_s, d1, d2])
-    _, cs.d1raw, cs.d2raw = datlist
-    cs.dF = Fs_Hz / cs.NFFT
-    cs.NEns = NEnsFromNSample(cs.NFFT, cs.NOV, cs.d1raw.size)
-
-    return_onesided = not (np.iscomplexobj(d1) or np.iscomplexobj(d2))
-
-    cs.t = (cs.tstart + cs.tend) / 2
-    cs.f, cs.csd = signal.csd(x=cs.d1raw, y=cs.d2raw, fs=Fs_Hz, window=window,
-                                nperseg=cs.NFFT, noverlap=cs.NOV, nfft=None, 
-                                detrend=detrend, scaling="density",
-                                average="mean", return_onesided=return_onesided)
-    _, cs.cohsq = signal.coherence(x=cs.d1raw, y=cs.d2raw, fs=Fs_Hz, window=window,
-                                    nperseg=cs.NFFT, noverlap=cs.NOV, nfft=None, 
-                                    detrend=detrend)
-    if not return_onesided:
-        cs.f = fft.fftshift(cs.f)
-        cs.csd = fft.fftshift(cs.csd)
-    cs.csdamp = amplitude(cs.csd)
-    cs.phase = phase(cs.csd, unwrap=unwrap_phase)
-    cs.coh = np.sqrt(cs.cohsq)
-
-    return cs
-
-
+"""
 # def power_spectre_2s(xx, dt, NFFT, window, NEns, NOV):
 
     # print(f'Overlap ratio: {NOV/NFFT*100:.0f}%\n')
@@ -1020,15 +1250,7 @@ def cross_spectrum(t_s, d1, d2, Fs_Hz, tstart, tend, NFFT=2**10, ovr=0.5, window
     # print(f'Power integral of P(f)*df={np.sum(psd * dfreq)}')
 
     # return freq, psd, psd_err
-
-
-def get_intermediate(xx, Nsample):
-
-    Nremain = len(xx) - Nsample
-    idx_s = Nremain // 2
-
-    return xx[idx_s: idx_s + Nsample]
-
+"""
 
 def power_spectre_2s_v2(tt, xx, NFFT, window, OVR):
 
@@ -1043,6 +1265,1457 @@ def power_spectre_2s_v2(tt, xx, NFFT, window, OVR):
     tisp, freq, psd, psd_std, psd_err = power_spectrogram_2s_v4(tt, xx, dt, NFFT, window, NEns, NOV)
 
     return tisp[0], freq, psd[0], psd_std[0], psd_err[0]
+
+def fourier_components_1s(xens, dt, NFFT, win):
+
+    rfreq = fft.rfftfreq(NFFT, dt)
+    rfft_x = fft.rfft(xens * win)
+
+    return rfreq, rfft_x
+
+def fourier_components_2s(xens, dt, NFFT, win):
+
+    freq = fft.fftfreq(NFFT, dt)
+    freq = fft.fftshift(freq)
+    fft_x = fft.fft(xens * win)
+    fft_x = fft.fftshift(fft_x, axes=-1)
+
+    return freq, fft_x
+
+def specgram(t_s, d, Fs_Hz, NFFT=2**10, ovr=0., window="hann", NEns=1, detrend="constant"):
+
+    spg = struct()
+    spg.NFFT = NFFT
+    spg.ovr = ovr
+    spg.NOV = int(spg.NFFT * spg.ovr)
+    spg.window = window
+    spg.NEns = NEns
+    spg.size = len(t_s)
+    spg.NSamp = NSampleForFFT(NFFT=spg.NFFT, NEns=spg.NEns, NOV=spg.NOV)
+    spg.Nsp = spg.size // spg.NSamp
+
+    return_onesided = not np.iscomplexobj(d)
+
+    spg.tarray = t_s[:spg.Nsp * spg.NSamp].reshape((spg.Nsp, spg.NSamp))
+    spg.t = spg.tarray.mean(axis=-1)
+    spg.darray = d[:spg.Nsp * spg.NSamp].reshape((spg.Nsp, spg.NSamp))
+    spg.f, spg.psd = welch(x=spg.darray, fs= Fs_Hz, window="hann",
+                            nperseg=spg.NFFT, noverlap=spg.NOV,
+                            return_onesided=return_onesided,
+                            detrend=detrend, scaling="density",
+                            axis=-1, average="mean")
+
+    if not return_onesided:
+        spg.f = fft.fftshift(spg.f)
+        spg.psd = fft.fftshift(spg.psd, axes=-1)
+    spg.psdamp = np.sqrt(spg.psd)
+    spg.psddB = 10 * np.log10(spg.psd)
+
+    spg.dF = Fs_Hz / spg.NFFT
+    spg.fmax = Fs_Hz / 2
+
+    return spg
+
+"""
+# def power_spectrogram_1s(ti, xx, dt, NFFT, window, Ndiv, Ntisp):
+#
+#     idxs = np.arange(0, NFFT * Ndiv * Ntisp)
+#     idxs = idxs.reshape((Ntisp, Ndiv, NFFT))
+#
+#     dtisp = Ndiv * NFFT * dt
+#     tisp = ti[idxs.T[0][0]] + 0.5 * dtisp
+#     xens = xx[idxs]
+#
+#     win = signal.get_window(window, NFFT)
+#     enbw = NFFT * np.sum(win ** 2) / (np.sum(win) ** 2)
+#     CG = np.abs(np.sum(win)) / NFFT
+#
+#     div_CV = np.sqrt(1. / Ndiv)  # 分割平均平滑化による相対誤差の変化率
+#     sp_CV = div_CV
+#
+#     rfreq = fft.rfftfreq(NFFT, dt)
+#
+#     rfft_x = fft.rfft(xens * win)
+#
+#     p_xx = np.real(rfft_x * rfft_x.conj())
+#     p_xx[:, :, 1:-1] *= 2
+#     p_xx_ave = np.mean(p_xx, axis=1)
+#     p_xx_err = np.std(p_xx, axis=1, ddof=1)
+#     p_xx_rerr = p_xx_err / np.abs(p_xx_ave) * sp_CV
+#
+#     Fs = 1. / dt
+#     psd = p_xx_ave / (Fs * NFFT * enbw * (CG ** 2))
+#     psd_err = np.abs(psd) * p_xx_rerr
+#
+#     dfreq = 1. / (NFFT * dt)
+#     print(f'Power x^2_bar             = {np.sum(xx[idxs][0] ** 2) / (NFFT * Ndiv):.3f}V^2 '
+#           f'@{tisp[0]:.3f}+-{0.5 * dtisp:.3f}s')
+#     print(f'Power integral of P(f)*df = {np.sum(psd[0] * dfreq):.3f}V^2'
+#           f' @{tisp[0]:.3f}+-{0.5 * dtisp:.3f}s')
+#
+#     return tisp, rfreq, psd, psd_err
+"""
+
+def power_spectrogram_1s(ti, xx, dt, NFFT, window, NEns, NOV):
+
+    print(f'Overlap ratio: {NOV/NFFT*100:.0f}%\n')
+
+    Nsamp = NEns * NFFT - (NEns - 1) * NOV
+    Nsp = int(len(ti) / Nsamp + 0.5)
+
+    if len(xx) % Nsamp != 0 or len(ti) % Nsamp != 0 or len(xx) != len(ti):
+        print('The number of data points is improper. \n')
+        sys.exit()
+    else:
+        print(f'The number of samples a spectrum: {Nsamp:d}')
+        print(f'The number of spectra: {Nsp:d}\n')
+
+    if NOV != 0:
+        tmp = (np.reshape(np.arange(NEns * NFFT), (NEns, NFFT)).T - np.arange(0, NEns * NOV, NOV)).T
+    else:
+        tmp = np.reshape(np.arange(NEns * NFFT), (NEns, NFFT))
+    idxs = np.transpose(np.tile(tmp, (Nsp, 1, 1)).T + np.arange(0, Nsp*Nsamp, Nsamp))
+
+    dtisp = Nsamp * dt
+    tisp = ti[idxs.T[0][0]] + 0.5 * dtisp
+    xens = xx[idxs]
+
+    win = signal.get_window(window, NFFT)
+    enbw = NFFT * np.sum(win ** 2) / (np.sum(win) ** 2)
+    CG = np.abs(np.sum(win)) / NFFT
+
+    CV = CV_overlap(NFFT, NEns, NOV)
+
+    rfreq = fft.rfftfreq(NFFT, dt)
+
+    fft_x = fft.rfft(xens * win)
+
+    p_xx = np.real(fft_x * fft_x.conj())
+    p_xx_ave = np.mean(p_xx, axis=1)
+    p_xx_err = np.std(p_xx, axis=1, ddof=1)
+    p_xx_rerr = p_xx_err / np.abs(p_xx_ave) * CV
+
+    Fs = 1. / dt
+    psd = p_xx_ave / (Fs * NFFT * enbw * (CG ** 2))
+    psd_err = np.abs(psd) * p_xx_rerr
+
+    dfreq = 1. / (NFFT * dt)
+    print(f'Power: Time average of x(t)^2 = {np.sum(np.abs(xx[0:Nsamp])**2) / Nsamp:.6f} V^2 '
+          f'@{tisp[0]:.3f}+-{0.5 * dtisp:.3f} s')
+    print(f'Power: Integral of P(f)       = {np.sum(psd[0] * dfreq):.6f} V^2 '
+          f'@{tisp[0]:.3f}+-{0.5 * dtisp:.3f} s')
+
+    return tisp, rfreq, psd, psd_err
+
+def power_spectrogram_2s(ti, xx, dt, NFFT, window, NEns, NOV):
+
+    proc.suggestNewVer(2, 'power_spectrogram_2s')
+
+    print(f'Overlap ratio: {NOV/NFFT*100:.0f}%\n')
+
+    Nsamp = NEns * NFFT - (NEns - 1) * NOV
+    Nsp = int(len(ti) / Nsamp + 0.5)
+
+    if len(xx) % Nsamp != 0 or len(ti) % Nsamp != 0 or len(xx) != len(ti):
+        print('The number of data points is improper. \n')
+        sys.exit()
+    else:
+        print(f'The number of samples a spectrum: {Nsamp:d}')
+        print(f'The number of spectra: {Nsp:d}\n')
+
+    if NOV != 0:
+        tmp = (np.reshape(np.arange(NEns * NFFT), (NEns, NFFT)).T - np.arange(0, NEns * NOV, NOV)).T
+    else:
+        tmp = np.reshape(np.arange(NEns * NFFT), (NEns, NFFT))
+    idxs = np.transpose(np.tile(tmp, (Nsp, 1, 1)).T + np.arange(0, Nsp*Nsamp, Nsamp))
+
+    dtisp = Nsamp * dt
+    tisp = ti[idxs.T[0][0]] + 0.5 * dtisp
+    xens = xx[idxs]
+
+    win = signal.get_window(window, NFFT)
+    enbw = NFFT * np.sum(win ** 2) / (np.sum(win) ** 2)
+    CG = np.abs(np.sum(win)) / NFFT
+
+    CV = CV_overlap(NFFT, NEns, NOV)
+
+    freq = fft.fftshift(fft.fftfreq(NFFT, dt))
+
+    fft_x = fft.fftshift(fft.fft(xens * win), axes=2)
+
+    p_xx = np.real(fft_x * fft_x.conj())
+    p_xx_ave = np.mean(p_xx, axis=1)
+    p_xx_err = np.std(p_xx, axis=1, ddof=1)
+    p_xx_rerr = p_xx_err / np.abs(p_xx_ave) * CV
+
+    Fs = 1. / dt
+    psd = p_xx_ave / (Fs * NFFT * enbw * (CG ** 2))
+    psd_err = np.abs(psd) * p_xx_rerr
+
+    dfreq = 1. / (NFFT * dt)
+    print(f'Power: Time average of x(t)^2 = {np.sum(np.abs(xx[0:Nsamp])**2) / Nsamp:.6f} V^2 '
+          f'@{tisp[0]:.3f}+-{0.5 * dtisp:.3f} s')
+    print(f'Power: Integral of P(f)       = {np.sum(psd[0] * dfreq):.6f} V^2 '
+          f'@{tisp[0]:.3f}+-{0.5 * dtisp:.3f} s')
+
+    return tisp, freq, psd, psd_err
+
+def power_spectrogram_2s_v2(ti, xx, dt, NFFT, window, NEns, NOV):
+
+    proc.suggestNewVer(3, 'power_spectrogram_2s')
+
+    print(f'Overlap ratio: {NOV / NFFT * 100:.0f}%\n')
+
+    Nsp, Nsamp, Ndat = Nspectra(ti, NFFT, NEns, NOV)
+
+    if len(xx) % Nsamp != 0 or len(ti) % Nsamp != 0 or len(xx) != len(ti):
+        print('The number of data points is improper. \n')
+        sys.exit()
+    else:
+        print(f'The number of samples a spectrum: {Nsamp:d}')
+        print(f'The number of spectra: {Nsp:d}\n')
+
+    if NOV != 0:
+        tmp = (np.reshape(np.arange(NEns * NFFT), (NEns, NFFT)).T - np.arange(0, NEns * NOV, NOV)).T
+    else:
+        tmp = np.reshape(np.arange(NEns * NFFT), (NEns, NFFT))
+    idxs = np.transpose(np.tile(tmp, (Nsp, 1, 1)).T + np.arange(0, Nsp * Nsamp, Nsamp))
+
+    dtisp = Nsamp * dt
+    tisp = ti[idxs.T[0][0]] + 0.5 * dtisp
+    xens = xx[idxs]
+
+    win = signal.get_window(window, NFFT)
+    enbw = NFFT * np.sum(win ** 2) / (np.sum(win) ** 2)
+    CG = np.abs(np.sum(win)) / NFFT
+
+    # CV = CV_overlap(NFFT, NEns, NOV)
+    CV = 1./np.sqrt(NEns)
+
+    freq = fft.fftshift(fft.fftfreq(NFFT, dt))
+
+    fft_x = fft.fftshift(fft.fft(xens * win), axes=2)
+
+    p_xx = np.real(fft_x * fft_x.conj())
+    p_xx_ave = np.mean(p_xx, axis=1)
+    p_xx_std = np.std(p_xx, axis=1, ddof=1)
+    p_xx_rerr = p_xx_std / np.abs(p_xx_ave) * CV
+
+    Fs = 1. / dt
+    psd = p_xx_ave / (Fs * NFFT * enbw * (CG ** 2))
+    psd_std = p_xx_std / (Fs * NFFT * enbw * (CG ** 2))
+    psd_err = np.abs(psd) * p_xx_rerr
+
+    dfreq = 1. / (NFFT * dt)
+    print(f'Power: Time average of x(t)^2 = {np.sum(np.abs(xx[0:Nsamp]) ** 2) / Nsamp:.6f} V^2 '
+          f'@{tisp[0]:.3f}+-{0.5 * dtisp:.3f} s')
+    print(f'Power: Integral of P(f)       = {np.sum(psd[0] * dfreq):.6f} V^2 '
+          f'@{tisp[0]:.3f}+-{0.5 * dtisp:.3f} s')
+
+    return tisp, freq, psd, psd_std, psd_err
+
+def power_spectrogram_2s_v3(ti, xx, dt, NFFT, window, NEns, NOV):
+
+    print(f'Overlap ratio: {NOV / NFFT * 100:.0f}%\n')
+
+    Nsp, Nsamp, Ndat = Nspectra(ti, NFFT, NEns, NOV)
+    ti = ti[:Ndat]
+    xx = xx[:Ndat]
+
+    idxs = make_idxs_for_spectrogram(NFFT, NEns, NOV, Nsp)
+    tisp = time_for_spectrogram(ti, idxs)
+    xens = xx[idxs]
+
+    win, enbw, CG, CV = getWindowAndCoefs(NFFT, window, NEns, NOV)
+
+    freq, fft_x = fourier_components_2s(xens, dt, NFFT, win)
+    psd, psd_std, psd_err = get_psd(fft_x, CV, dt, NFFT, enbw, CG)
+
+    dtisp = Nsamp * dt
+    check_power(NFFT, dt, xx, Nsamp, tisp, dtisp, psd)
+
+    return tisp, freq, psd, psd_std, psd_err
+
+def power_spectrogram_2s_v4(ti, xx, dt, NFFT=2**10, window="hann", NEns=20, NOV=2**9):
+
+    print(f'Overlap ratio: {NOV / NFFT * 100:.0f}%\n')
+
+    Nsp, Nsamp, Ndat = Nspectra_v2(ti, NFFT, NEns, NOV)
+    ti = ti[:Ndat]
+    xx = xx[:Ndat]
+
+    idxs = make_idxs_for_spectrogram_v2(NFFT, NEns, NOV, Nsp)
+    tisp = time_for_spectrogram(ti, idxs)
+    xens = xx[idxs]
+
+    xavg = repeat_and_add_lastdim(np.average(xens, axis=-1), NFFT)
+    xens -= xavg
+
+    win, enbw, CG, CV = getWindowAndCoefs(NFFT, window, NEns, NOV)
+
+    freq, fft_x = fourier_components_2s(xens, dt, NFFT, win)
+    psd, psd_std, psd_err = get_psd(fft_x, CV, dt, NFFT, enbw, CG)
+
+    dtisp = Nsamp * dt
+    check_power(NFFT, dt, xx, Nsamp, tisp, dtisp, psd)
+
+    return tisp, freq, psd, psd_std, psd_err
+
+def power_spectrogram_2s_v5(ti, xx, NFFT=2**10, ovr=0.5, window="hann", NEns=20):
+
+    o = struct()
+
+    o.NFFT = NFFT
+    o.ovr = ovr
+    o.window = window
+    o.NEns = NEns
+
+    o.NOV = int(NFFT * ovr)
+    o.dt = ti[1] - ti[0]
+
+    print(f'Overlap ratio: {o.NOV / NFFT * 100:.0f}%\n')
+
+    o.Nsp, o.Nsamp, o.Ndat = Nspectra_v2(ti, NFFT, NEns, o.NOV)
+    ti = ti[:o.Ndat]
+    xx = xx[:o.Ndat]
+
+    o.ti = ti
+    o.xx = xx
+
+    idxs = make_idxs_for_spectrogram_v2(NFFT, NEns, o.NOV, o.Nsp)
+    o.tsp = time_for_spectrogram(ti, idxs)
+    xens = xx[idxs]
+
+    xavg = repeat_and_add_lastdim(np.average(xens, axis=-1), NFFT)
+    xens -= xavg
+
+    o.win, o.enbw, o.CG, o.CV = getWindowAndCoefs(NFFT, window, NEns, o.NOV)
+
+    o.freq, o.fft_x = fourier_components_2s(xens, o.dt, NFFT, o.win)
+    o.psd, o.psd_std, o.psd_err = get_psd(o.fft_x, o.CV, o.dt, NFFT, o.enbw, o.CG)
+
+    o.dtsp = o.tsp[1] - o.tsp[0]
+    o.dfreq = 1. / (o.Nsamp * o.dt)
+    check_power(NFFT, o.dt, xx, o.Nsamp, o.tsp, o.dtsp, o.psd)
+
+    return o
+
+def get_Sxx(fft_x, CV):
+
+    Sxx = np.real(fft_x * fft_x.conj())
+    Sxx_avg = np.mean(Sxx, axis=-2)
+    Sxx_std = np.std(Sxx, axis=-2, ddof=1)
+    Sxx_err = Sxx_std * CV
+
+    return Sxx_avg, Sxx_std, Sxx_err
+
+def get_psd(fft_x, CV, dt, NFFT, enbw, CG):
+
+    Sxx_ave, Sxx_std, Sxx_err = get_Sxx(fft_x, CV)
+    Sxx_rerr = Sxx_err / np.abs(Sxx_ave)
+
+    Fs = 1. / dt
+    psd = Sxx_ave / (Fs * NFFT * enbw * (CG ** 2))
+    psd_std = Sxx_std / (Fs * NFFT * enbw * (CG ** 2))
+    psd_err = np.abs(psd) * Sxx_rerr
+
+    return psd, psd_std, psd_err
+
+def power_spectrogram_2s_by_dtout(tt, xx, dt, dtout=1e-3, Nfft=2**10, OVR=0.5, window="hann"):
+
+    Nens = Nens_from_dtout(dtout=dtout, dt=dt, Nfft=Nfft, OVR=OVR)
+    print(f"Nens: {Nens}")
+    Nov = int(Nfft * OVR)
+    tisp, freq, psd, psd_std, psd_err = power_spectrogram_2s_v4(tt, xx, dt, NFFT=Nfft, window=window, NEns=Nens, NOV=Nov)
+
+    return tisp, freq, psd, psd_std, psd_err
+
+
+## Cross Spectrum & Spectrogram
+
+def cross_spectrum(t_s, d1, d2, Fs_Hz, tstart, tend, NFFT=2**10, ovr=0.5, window="hann", detrend="constant", unwrap_phase=False):
+
+    cs = struct()
+    cs.tstart = tstart
+    cs.tend = tend
+
+    cs.NFFT = NFFT
+    cs.ovr = ovr
+    cs.NOV = int(cs.NFFT * cs.ovr)
+    cs.window = window
+
+    _, datlist = proc.getTimeIdxsAndDats(t_s, cs.tstart, cs.tend, [t_s, d1, d2])
+    _, cs.d1raw, cs.d2raw = datlist
+    cs.dF = Fs_Hz / cs.NFFT
+    cs.NEns = NEnsFromNSample(cs.NFFT, cs.NOV, cs.d1raw.size)
+
+    return_onesided = not (np.iscomplexobj(d1) or np.iscomplexobj(d2))
+
+    cs.t = (cs.tstart + cs.tend) / 2
+    cs.f, cs.csd = signal.csd(x=cs.d1raw, y=cs.d2raw, fs=Fs_Hz, window=window,
+                                nperseg=cs.NFFT, noverlap=cs.NOV, nfft=None, 
+                                detrend=detrend, scaling="density",
+                                average="mean", return_onesided=return_onesided)
+    _, cs.cohsq = signal.coherence(x=cs.d1raw, y=cs.d2raw, fs=Fs_Hz, window=window,
+                                    nperseg=cs.NFFT, noverlap=cs.NOV, nfft=None, 
+                                    detrend=detrend)
+    if not return_onesided:
+        cs.f = fft.fftshift(cs.f)
+        cs.csd = fft.fftshift(cs.csd)
+    cs.csdamp = amplitude(cs.csd)
+    cs.phase = phase(cs.csd, unwrap=unwrap_phase)
+    cs.coh = np.sqrt(cs.cohsq)
+
+    return cs
+
+def cross_spectre_2s(x, y, Fs, NEns, NFFT, window, NOV):
+
+    # proc.suggestNewVer(2, 'cross_spectre_2s')
+
+    dT = 1. / Fs
+
+    x_arr = toZeroMeanTimeSliceEnsemble(x, NFFT, NEns, NOV)
+    y_arr = toZeroMeanTimeSliceEnsemble(y, NFFT, NEns, NOV)
+
+    win = signal.get_window(window, NFFT)
+    enbw = NFFT * np.sum(win ** 2) / (np.sum(win) ** 2)
+    CG = np.abs(np.sum(win)) / NFFT
+
+    # CV = CV_overlap(NFFT, NEns, NOV)
+    CV = 1./np.sqrt(NEns)
+
+    freq = fft.fftshift(fft.fftfreq(NFFT, dT))
+
+    # https://watlab-blog.com/2020/07/24/coherence-function/
+
+    fft_x = fft.fft(x_arr * win)
+    fft_x = fft.fftshift(fft_x, axes=(1,))
+    fft_y = fft.fft(y_arr * win)
+    fft_y = fft.fftshift(fft_y, axes=(1,))
+
+    c_xy = fft_y * fft_x.conj()
+    p_xx = np.real(fft_x * fft_x.conj())
+    p_yy = np.real(fft_y * fft_y.conj())
+
+    c_xy_ave = np.mean(c_xy, axis=0)
+    p_xx_ave = np.mean(p_xx, axis=0)
+    p_yy_ave = np.mean(p_yy, axis=0)
+    p_xx_err = np.std(p_xx, axis=0, ddof=1)
+    p_yy_err = np.std(p_yy, axis=0, ddof=1)
+    p_xx_rerr = p_xx_err / p_xx_ave * CV
+    p_yy_rerr = p_yy_err / p_yy_ave * CV
+
+    Kxy = np.real(c_xy)
+    Qxy = - np.imag(c_xy)
+    Kxy_ave = np.mean(Kxy, axis=0)
+    Qxy_ave = np.mean(Qxy, axis=0)
+    Kxy_err = np.std(Kxy, axis=0, ddof=1)
+    Qxy_err = np.std(Qxy, axis=0, ddof=1)
+    Kxy_rerr = Kxy_err / Kxy_ave * CV
+    Qxy_rerr = Qxy_err / Qxy_ave * CV
+
+    CSDxy = np.abs(c_xy_ave) / (Fs * NFFT * enbw * CG**2)
+    cs_err = np.sqrt((Kxy_ave * Kxy_err)**2 + (Qxy_ave * Qxy_err)**2) / \
+             np.abs(c_xy_ave)
+    cs_rerr = cs_err / np.abs(c_xy_ave) * CV
+    CSDxy_err = CSDxy * CV
+
+    coh2 = (np.abs(c_xy_ave) ** 2) / (p_xx_ave * p_yy_ave)
+    coh2_rerr = np.sqrt(2 * cs_rerr**2 + p_xx_rerr**2 + p_yy_rerr**2)
+    coh2_err = coh2 * coh2_rerr
+    cohxy = np.sqrt(coh2)
+    cohxy_err = 0.5 / cohxy * coh2_err
+
+    tmp = Qxy_ave / Kxy_ave
+    tmp_rerr = np.sqrt(Qxy_rerr ** 2 + Kxy_rerr ** 2)
+    tmp_err = np.abs(tmp) * tmp_rerr
+    phsxy = np.arctan2(Qxy_ave, Kxy_ave)
+    phsxy_err = 1. / (1. + tmp ** 2) * tmp_err
+
+    return freq, CSDxy, CSDxy_err, cohxy, cohxy_err, phsxy, phsxy_err
+
+def get_crossspectra(XX, YY):
+
+    YXconj = YY * XX.conj()
+    CrossSpec = np.average(YXconj, axis=-2)
+    CrossSpecStd = np.std(YXconj, axis=-2, ddof=1)
+    CrossSpecReStd = np.std(np.real(YXconj), axis=-2, ddof=1)
+    CrossSpecImStd = np.std(np.imag(YXconj), axis=-2, ddof=1)
+
+    return CrossSpec, CrossSpecStd, CrossSpecReStd, CrossSpecImStd
+
+def get_Sxy(XX, YY, CV):
+
+    Sxy = YY * XX.conj()
+    Sxy_avg = np.average(Sxy, axis=-2)
+    Sxy_std = np.std(Sxy, axis=-2, ddof=1)
+    Sxy_Re_std = np.std(np.real(Sxy), axis=-2, ddof=1)
+    Sxy_Im_std = np.std(np.imag(Sxy), axis=-2, ddof=1)
+
+    Sxy_err = Sxy_std * CV
+    Sxy_Re_err = Sxy_Re_std * CV
+    Sxy_Im_err = Sxy_Im_std * CV
+
+    return Sxy_avg, Sxy_std, Sxy_err, Sxy_Re_std, Sxy_Re_err, Sxy_Im_std, Sxy_Im_err
+
+def get_coherenceSq(CrossSpec, CrossSpecStd, XX, YY, CV):
+
+    XAbsSq, XAbsSqAvg, XAbsSqStd, XAbsSqErr = get_Sxx(XX, CV)
+    YAbsSq, YAbsSqAvg, YAbsSqStd, YAbsSqErr = get_Sxx(XX, CV)
+    XAbsSqRer = XAbsSqErr / XAbsSqAvg
+    YAbsSqRer = YAbsSqErr / YAbsSqAvg
+
+    CrossSpecAbsSq = np.real(CrossSpec * CrossSpec.conj())
+    CrossSpecAbsSqStd = 2 * np.abs(CrossSpec) * CrossSpecStd
+    CrossSpecAbsSqRer = CrossSpecAbsSqStd / CrossSpecAbsSq * CV
+
+    cohSq = CrossSpecAbsSq / (XAbsSqAvg * YAbsSqAvg)
+    cohSqRer = np.sqrt(CrossSpecAbsSqRer ** 2 + XAbsSqRer ** 2 + YAbsSqRer ** 2)
+    cohSqErr = cohSq * cohSqRer
+
+    return cohSq, cohSqErr
+
+def get_coherenceSq_v2(Sxy_avg, Sxy_err, Sxx_avg, Sxx_err, Syy_avg, Syy_err):
+
+    Sxy_avg_sq = np.real(Sxy_avg * Sxy_avg.conj())
+    Sxy_avg_sq_err = 2 * np.abs(Sxy_avg) * Sxy_err
+
+    Sxy_avg_sq_rer = Sxy_avg_sq_err / Sxy_avg_sq
+    Sxx_rer = Sxx_err / Sxx_avg
+    Syy_rer = Syy_err / Syy_avg
+
+    coh_sq = Sxy_avg_sq / (Sxx_avg * Syy_avg)
+    coh_sq_rer = np.sqrt(Sxy_avg_sq_rer ** 2 + Sxx_rer ** 2 + Syy_rer ** 2)
+    coh_sq_err = coh_sq * coh_sq_rer
+
+    return coh_sq, coh_sq_err
+
+def get_crossPhase(CrossSpec, CrossSpecReStd, CrossSpecImStd, CV):
+
+    CrossSpecRe = np.real(CrossSpec)
+    CrossSpecIm = np.imag(CrossSpec)
+
+    CrossSpecReRer = CrossSpecReStd / CrossSpecRe * CV
+    CrossSpecImRer = CrossSpecImStd / CrossSpecIm * CV
+
+    CrossSpecImRe = CrossSpecIm / CrossSpecRe
+    CrossSpecImReRer = np.sqrt(CrossSpecImRer ** 2 + CrossSpecReRer ** 2)
+    CrossSpecImReErr = np.abs(CrossSpecImRe * CrossSpecImReRer)
+    crossPhs = np.unwrap(np.arctan2(CrossSpecIm, CrossSpecRe))
+    crossPhsErr = 1. / (1. + CrossSpecImRe ** 2) * CrossSpecImReErr
+
+    return crossPhs, crossPhsErr
+
+def get_crossphase_v2(Sxy_avg, Sxy_Re_err, Sxy_Im_err):
+
+    Sxy_avg_Re = np.real(Sxy_avg)
+    Sxy_avg_Im = np.imag(Sxy_avg)
+
+    Sxy_Re_rer = Sxy_Re_err / Sxy_avg_Re
+    Sxy_Im_rer = Sxy_Im_err / Sxy_avg_Im
+
+    tmp = Sxy_avg_Im / Sxy_avg_Re
+    tmp_rer = np.sqrt(Sxy_Im_rer ** 2 + Sxy_Re_rer ** 2)
+    tmp_err = np.abs(tmp * tmp_rer)
+    if Sxy_avg.size == 1:
+        crossPhs = np.arctan2(Sxy_avg_Im, Sxy_avg_Re)
+    else:
+        crossPhs = np.unwrap(np.arctan2(Sxy_avg_Im, Sxy_avg_Re))
+    crossPhsErr = 1. / (1. + tmp ** 2) * tmp_err
+
+    return crossPhs, crossPhsErr
+
+def crossSpectralAnalysis_2s_v2(xx, yy, dts, NFFTs, NEns, window, NOVs):
+
+    dtx, dty = dts
+    NFFTx, NFFTy = NFFTs
+    NOVx, NOVy = NOVs
+
+    xens = toZeroMeanTimeSliceEnsemble(xx, NFFTx, NEns, NOVx)
+    winx, enbwx, CGx, CV = getWindowAndCoefs(NFFTx, window, NEns, NOVx)
+    freqx, XX = fourier_components_2s(xens, dtx, NFFTx, winx)
+
+    yens = toZeroMeanTimeSliceEnsemble(yy, NFFTy, NEns, NOVy)
+    winy, enbwy, CGy, CV = getWindowAndCoefs(NFFTy, window, NEns, NOVy)
+    freqy, YY = fourier_components_2s(yens, dty, NFFTy, winy)
+
+    # https://watlab-blog.com/2020/07/24/coherence-function/
+
+    if NFFTx > NFFTy:
+        freq = freqy
+        XX = XX[:, (NFFTx - NFFTy)//2:(NFFTx + NFFTy)//2]
+    elif NFFTy > NFFTx:
+        freq = freqx
+        YY = YY[:, (NFFTy - NFFTx) // 2:(NFFTy + NFFTx) // 2]
+    else:
+        freq = freqx
+
+    CrossSpec, CrossSpecStd, CrossSpecReStd, CrossSpecImStd = get_crossspectra(XX, YY)
+
+    cohSq, cohSqErr = get_coherenceSq(CrossSpec, CrossSpecStd, XX, YY, CV)
+    phs, phsErr = get_crossPhase(CrossSpec, CrossSpecReStd, CrossSpecImStd, CV)
+
+    return freq, cohSq, cohSqErr, phs, phsErr
+
+def cross_spectrogram_2s(tt, xx, yy, NFFT=2**10, NEns=20, window='hann', OVR=0.5):
+    # NOTE: xx and yy must have same dts
+
+    NOV = int(NFFT * OVR)
+
+    Nsp, Nsamp, Ndat = Nspectra_v2(tt, NFFT, NEns, NOV)
+    tt = get_intermediate(tt, Ndat)
+    xx = get_intermediate(xx, Ndat)
+    yy = get_intermediate(yy, Ndat)
+
+    idxs = make_idxs_for_spectrogram_v2(NFFT, NEns, NOV, Nsp)
+    tsp = time_for_spectrogram(tt, idxs)
+    xens = xx[idxs]
+    yens = yy[idxs]
+    xens_avg = proc.repeat_and_add_lastdim(np.average(xens, axis=-1), NFFT)
+    yens_avg = proc.repeat_and_add_lastdim(np.average(yens, axis=-1), NFFT)
+    xens = xens - xens_avg
+    yens = yens - yens_avg
+
+    win, enbw, CG, CV = getWindowAndCoefs(NFFT, window, NEns)
+
+    dt = tt[1] - tt[0]
+    freq = get_freq_for_spectrum(NFFT, dt)
+    fft_x = FFT(xens, win)
+    fft_y = FFT(yens, win)
+
+    Sxx_avg, Sxx_std, Sxx_err = get_Sxx(fft_x, CV)
+    Syy_avg, Syy_std, Syy_err = get_Sxx(fft_y, CV)
+
+    Sxy_avg, Sxy_std, Sxy_err, Sxy_Re_std, Sxy_Re_err, Sxy_Im_std, Sxy_Im_err = get_Sxy(fft_x, fft_y, CV)
+
+    coh_sq, coh_sq_err = get_coherenceSq_v2(Sxy_avg, Sxy_err, Sxx_avg, Sxx_err, Syy_avg, Syy_err)
+    phase, phase_err = get_crossphase_v2(Sxy_avg, Sxy_Re_err, Sxy_Im_err)
+
+    o = struct()
+    o.tdat = tt
+    o.xdat = xx
+    o.ydat = yy
+    o.NFFT = NFFT
+    o.NEns = NEns
+    o.window = window
+    o.OVR = OVR
+    o.NOV = NOV
+    o.win = win
+    o.CV = CV
+    o.dt = dt
+    o.tsp = tsp
+    o.dtsp = tsp[1] - tsp[0]
+    o.freq = freq
+    o.Sxx_avg = Sxx_avg
+    o.Sxx_std = Sxx_std
+    o.Sxx_err = Sxx_err
+    o.Syy_avg = Syy_avg
+    o.Syy_std = Syy_std
+    o.Syy_err = Syy_err
+    o.Sxy_avg = Sxy_avg
+    o.Sxy_std = Sxy_std
+    o.Sxy_err = Sxy_err
+    o.Sxy_Re_std = Sxy_Re_std
+    o.Sxy_Re_err = Sxy_Re_err
+    o.Sxy_Im_std = Sxy_Im_std
+    o.Sxy_Im_err = Sxy_Im_err
+    o.coh_sq = coh_sq
+    o.coh_sq_err = coh_sq_err
+    o.phase = phase
+    o.phase_err = phase_err
+
+    return o
+
+def cross_spectre_2s_v2(tt, xx, yy, NFFT=2**10, window="hann", OVR=0.5):
+
+    NOV = int(NFFT * OVR)
+    NEns = NEnsFromNSample(NFFT, NOV, len(tt))
+
+    csg = cross_spectrogram_2s(tt, xx, yy, NFFT=NFFT, NEns=NEns, window=window, OVR=OVR)
+
+    o = struct()
+    o.tdat = csg.tdat
+    o.xdat = csg.xdat
+    o.ydat = csg.ydat
+    o.NFFT = csg.NFFT
+    o.NEns = csg.NEns
+    o.window = csg.window
+    o.NOV = csg.NOV
+    o.win = csg.win
+    o.CV = csg.CV
+    o.dt = csg.dt
+    o.tsp = csg.tsp[0]
+    o.freq = csg.freq
+    o.Sxx_avg = csg.Sxx_avg[0]
+    o.Sxx_std = csg.Sxx_std[0]
+    o.Sxx_err = csg.Sxx_err[0]
+    o.Syy_avg = csg.Syy_avg[0]
+    o.Syy_std = csg.Syy_std[0]
+    o.Syy_err = csg.Syy_err[0]
+    o.Sxy_avg = csg.Sxy_avg[0]
+    o.Sxy_std = csg.Sxy_std[0]
+    o.Sxy_err = csg.Sxy_err[0]
+    o.Sxy_Re_std = csg.Sxy_Re_std[0]
+    o.Sxy_Re_err = csg.Sxy_Re_err[0]
+    o.Sxy_Im_std = csg.Sxy_Im_std[0]
+    o.Sxy_Im_err = csg.Sxy_Im_err[0]
+    o.coh_sq = csg.coh_sq[0]
+    o.coh_sq_err = csg.coh_sq_err[0]
+    o.phase = csg.phase[0]
+    o.phase_err = csg.phase_err[0]
+
+    return o
+
+def lagtime_from_crossphase(freq, crossphase, crossphase_err, Nfit):
+
+    idxs = make_idxs_for_rolling(crossphase.shape[-1], Nfit)
+    freq_ext = np.tile(freq, np.append(crossphase.shape[:-1], 1))
+    freq_roll = rearange_dat_for_rolling(freq, idxs)
+    freq_ext_roll = rearange_dat_for_rolling(freq_ext, idxs)
+    freq_avg = np.average(freq_roll, axis=-1)
+    crossphase_roll = rearange_dat_for_rolling(crossphase, idxs)
+    crossphase_err_roll = rearange_dat_for_rolling(crossphase_err, idxs)
+
+    prms, errs, sigma_y, yHut, yHutErr = polyN_LSM_v2(freq_ext_roll, crossphase_roll, 1, crossphase_err_roll)
+    grad = prms[0]
+    grad_err = errs[0]
+
+    lagtime = grad / (2*np.pi)
+    lagtime_err = grad_err / (2*np.pi)
+
+    return freq_avg, lagtime, lagtime_err
+
+
+## Bi Spectrum
+
+def CVForBiSpecAna(NFFTs, NEns, NOVs):
+    NFFT1, NFFT2, NFFT3 = NFFTs
+    NOV1, NOV2, NOV3 = NOVs
+
+    idxMx3, idxNan = makeIdxsForCrossBiSpectrum(NFFTs)
+
+    NSamp1 = NEns * NFFT1 - (NEns - 1) * NOV1
+    NSamp2 = NEns * NFFT2 - (NEns - 1) * NOV2
+    NSamp3 = NEns * NFFT3 - (NEns - 1) * NOV3
+    randND1 = np.random.normal(size=NSamp1)
+    randND1 = toTimeSliceEnsemble(randND1, NFFT1, NEns, NOV1)
+    randND2 = np.random.normal(size=NSamp2)
+    randND2 = toTimeSliceEnsemble(randND2, NFFT2, NEns, NOV2)
+    randND3 = np.random.normal(size=NSamp3)
+    randND3 = toTimeSliceEnsemble(randND3, NFFT3, NEns, NOV3)
+    ND1 = fft.fft(randND1)
+    ND2 = fft.fft(randND2)
+    ND3 = fft.fft(randND3)
+
+    ND1 = np.reshape(ND1, (NEns, 1, NFFT1))
+    ND2 = np.reshape(ND2, (NEns, NFFT2, 1))
+    ND3 = ND3[:, idxMx3]
+
+    ND2ND1 = np.matmul(ND2, ND1)
+    ND2ND1AbsSq = np.abs(ND2ND1) ** 2
+    ND3AbsSq = np.abs(ND3) ** 2
+
+    CV_ND2ND1 = CV(ND2ND1AbsSq)
+    CV_ND3 = CV(ND3AbsSq)
+
+    return CV_ND2ND1, CV_ND3
+
+def nonaveragedBiSpectrum(X1, X2, X3):
+
+    X2X1 = X2 * X1
+    X3Conj = np.conjugate(X3)
+    X2X1X3Conj = X2X1 * X3Conj
+
+    return X2X1X3Conj
+
+def biSpectrum(X1, X2, X3):
+
+    X2X1X3Conj = nonaveragedBiSpectrum(X1, X2, X3)
+
+    BSpec = np.average(X2X1X3Conj, axis=0)
+    BSpecStd = np.std(X2X1X3Conj, axis=0, ddof=1)
+    BSpecReStd = np.std(np.real(X2X1X3Conj), axis=0, ddof=1)
+    BSpecImStd = np.std(np.imag(X2X1X3Conj), axis=0, ddof=1)
+
+    return BSpec, BSpecStd, BSpecReStd, BSpecImStd
+
+def biCoherenceSq(BSpec, BSpecStd, X1, X2, X3, NFFTs, NEns, NOVs):
+
+    proc.suggestNewVer(2, 'biCoherenceSq')
+
+    CV_X2X1, CV_X3 = CVForBiSpecAna(NFFTs, NEns, NOVs)
+
+    X2X1 = X2 * X1
+    X2X1AbsSq = np.abs(X2X1) ** 2
+    X2X1AbsSqAvg = np.average(X2X1AbsSq, axis=0)
+    X2X1AbsSqStd = np.std(X2X1AbsSq, axis=0, ddof=1)
+    X2X1AbsSqRer = X2X1AbsSqStd / X2X1AbsSqAvg * CV_X2X1
+
+    X3AbsSq = np.abs(X3) ** 2
+    X3AbsSqAvg = np.average(X3AbsSq, axis=0)
+    X3AbsSqStd = np.std(X3AbsSq, axis=0, ddof=1)
+    X3AbsSqRer = X3AbsSqStd / X3AbsSqAvg * CV_X3
+
+    BSpecAbsSq = np.abs(BSpec) ** 2
+    BSpecAbsSqStd = 2 * np.abs(BSpec) * BSpecStd
+    BSpecAbsSqRer = BSpecAbsSqStd / BSpecAbsSq
+
+    biCohSq = BSpecAbsSq / (X2X1AbsSqAvg * X3AbsSqAvg)
+    biCohSqRer = np.sqrt(BSpecAbsSqRer ** 2 + X2X1AbsSqRer ** 2 + X3AbsSqRer ** 2)
+    biCohSqErr = biCohSq * biCohSqRer
+
+    return biCohSq, biCohSqErr
+
+def biCoherenceSq_v2(BSpec, BSpecStd, X1, X2, X3, NEns):
+
+    CV = 1. / NEns
+
+    X2X1 = X2 * X1
+    X2X1AbsSq = np.abs(X2X1) ** 2
+    X2X1AbsSqAvg = np.average(X2X1AbsSq, axis=0)
+    X2X1AbsSqStd = np.std(X2X1AbsSq, axis=0, ddof=1)
+    X2X1AbsSqRer = X2X1AbsSqStd / X2X1AbsSqAvg * CV
+
+    X3AbsSq = np.abs(X3) ** 2
+    X3AbsSqAvg = np.average(X3AbsSq, axis=0)
+    X3AbsSqStd = np.std(X3AbsSq, axis=0, ddof=1)
+    X3AbsSqRer = X3AbsSqStd / X3AbsSqAvg * CV
+
+    BSpecAbsSq = np.abs(BSpec) ** 2
+    BSpecAbsSqStd = 2 * np.abs(BSpec) * BSpecStd
+    BSpecAbsSqRer = BSpecAbsSqStd / BSpecAbsSq * CV
+
+    biCohSq = BSpecAbsSq / (X2X1AbsSqAvg * X3AbsSqAvg)
+    biCohSqRer = np.sqrt(BSpecAbsSqRer ** 2 + X2X1AbsSqRer ** 2 + X3AbsSqRer ** 2)
+    biCohSqErr = biCohSq * biCohSqRer
+
+    return biCohSq, biCohSqErr
+
+def biPhase(BSpec, BSpecReStd, BSpecImStd):
+
+    proc.suggestNewVer(2, 'biPhase')
+
+    BSpecRe = np.real(BSpec)
+    BSpecIm = np.imag(BSpec)
+
+    BSpecReRer = BSpecReStd / BSpecRe
+    BSpecImRer = BSpecImStd / BSpecIm
+
+    BSpecImRe = BSpecIm / BSpecRe
+    BSpecImReRer = np.sqrt(BSpecImRer ** 2 + BSpecReRer ** 2)
+    BSpecImReErr = np.abs(BSpecImRe * BSpecImReRer)
+    biPhs = np.arctan2(BSpecIm, BSpecRe)
+    biPhsErr = 1. / (1. + BSpecImRe ** 2) * BSpecImReErr
+
+    return biPhs, biPhsErr
+
+def biPhase_v2(BSpec, BSpecReStd, BSpecImStd, NEns):
+
+    CV = 1./np.sqrt(NEns)
+
+    BSpecRe = np.real(BSpec)
+    BSpecIm = np.imag(BSpec)
+
+    BSpecReRer = BSpecReStd / BSpecRe * CV
+    BSpecImRer = BSpecImStd / BSpecIm * CV
+
+    BSpecImRe = BSpecIm / BSpecRe
+    BSpecImReRer = np.sqrt(BSpecImRer ** 2 + BSpecReRer ** 2)
+    BSpecImReErr = np.abs(BSpecImRe * BSpecImReRer)
+    biPhs = np.arctan2(BSpecIm, BSpecRe)
+    biPhsErr = 1. / (1. + BSpecImRe ** 2) * BSpecImReErr
+
+    return biPhs, biPhsErr
+
+def autoBiSpectralAnalysis(freq, XX, NFFT, NEns, NOV):
+
+    idxMx3, idxNan = makeIdxsForAutoBiSpectrum(NFFT)
+
+    X1 = np.reshape(XX, (NEns, 1, NFFT))
+    X2 = np.reshape(XX, (NEns, NFFT, 1))
+    X3 = XX[:, idxMx3]
+    BSpec, BSpecStd, BSpecReStd, BSpecImStd = biSpectrum(X1, X2, X3)
+
+    NFFTs = (NFFT, NFFT, NFFT)
+
+    biCohSq, biCohSqErr = biCoherenceSq(BSpec, BSpecStd, X1, X2, X3, NFFTs, NEns, NOV)
+    biPhs, biPhsErr = biPhase(BSpec, BSpecReStd, BSpecImStd)
+
+    # symmetry
+    freq1 = np.tile(freq, (NFFT, 1))
+    freq2 = freq1.T
+    # idxNan2 = np.where((freq2 >= freq1) | (freq2 < - 0.5 * freq1))
+    idxNan2 = np.where(freq2 >= freq1)
+
+    biCohSq[idxNan] = np.nan
+    biCohSqErr[idxNan] = np.nan
+    biPhs[idxNan] = np.nan
+    biPhsErr[idxNan] = np.nan
+    biCohSq[idxNan2] = np.nan
+    biCohSqErr[idxNan2] = np.nan
+    biPhs[idxNan2] = np.nan
+    biPhsErr[idxNan2] = np.nan
+
+    return biCohSq, biCohSqErr, biPhs, biPhsErr
+
+def crossBiSpecAna(freqs, XX, YY, ZZ, NFFTs, NEns, NOVs):
+
+    proc.suggestNewVer(2, 'crossBiSpecAna')
+
+    freqx, freqy, freqz = freqs
+
+    NFFTx, NFFTy, NFFTz = NFFTs
+    NOVx, NOVy, NOVz = NOVs
+    idxMxz, idxNan = makeIdxsForCrossBiSpectrum(NFFTs)
+
+    XX = np.reshape(XX, (NEns, 1, NFFTx))
+    YY = np.reshape(YY, (NEns, NFFTy, 1))
+    ZZ = ZZ[:, idxMxz]
+
+    BSpec, BSpecStd, BSpecReStd, BSpecImStd = biSpectrum(XX, YY, ZZ)
+
+    biCohSq, biCohSqErr = biCoherenceSq_v2(BSpec, BSpecStd, XX, YY, ZZ, NEns)
+    biPhs, biPhsErr = biPhase_v2(BSpec, BSpecReStd, BSpecImStd, NEns)
+
+    # symmetry
+    freq1 = np.tile(freqx, (NFFTy, 1))
+    freq2 = np.tile(freqy, (NFFTx, 1)).T
+    # idxNan2 = np.where((freq2 >= freq1) | (freq2 < - 0.5 * freq1))
+    idxNan2 = np.where(freq2 >= freq1)
+
+    biCohSq[idxNan] = np.nan
+    biCohSqErr[idxNan] = np.nan
+    biPhs[idxNan] = np.nan
+    biPhsErr[idxNan] = np.nan
+    biCohSq[idxNan2] = np.nan
+    biCohSqErr[idxNan2] = np.nan
+    biPhs[idxNan2] = np.nan
+    biPhsErr[idxNan2] = np.nan
+
+    return biCohSq, biCohSqErr, biPhs, biPhsErr
+
+def crossBiSpecAna_v2(freqs, XX0, YY0, ZZ0, NFFTs, NEns, NOVs, iscomplex=False):
+
+    freqx, freqy, freqz = freqs
+    NFFTx, NFFTy, NFFTz = NFFTs
+    NOVx, NOVy, NOVz = NOVs
+    idxMxz, idxNan = makeIdxsForCrossBiSpectrum(NFFTs)
+
+    XX = np.reshape(XX0, (NEns, 1, NFFTx))
+    YY = np.reshape(YY0, (NEns, NFFTy, 1))
+    ZZ = ZZ0[:, idxMxz]
+
+    BSpec, BSpecStd, BSpecReStd, BSpecImStd = biSpectrum(XX, YY, ZZ)
+
+    biCohSq, biCohSqErr = biCoherenceSq_v2(BSpec, BSpecStd, XX, YY, ZZ, NEns)
+    biPhs, biPhsErr = biPhase_v2(BSpec, BSpecReStd, BSpecImStd, NEns)
+
+    biCohSq[idxNan] = np.nan
+    biCohSqErr[idxNan] = np.nan
+    biPhs[idxNan] = np.nan
+    biPhsErr[idxNan] = np.nan
+
+    # symmetry
+    freq1 = np.tile(freqx, (NFFTy, 1))
+    freq2 = np.tile(freqy, (NFFTx, 1)).T
+
+    if (XX0 == YY0).all():
+        if iscomplex:
+            idxNan2 = np.where(freq2 > freq1)
+        else:
+            idxNan2 = np.where((freq2 > freq1) | (freq1 < 0) | (freq2 < - freq1))
+    else:
+        if iscomplex:
+            idxNan2 = []
+        else:
+            idxNan2 = np.where((freq1 < 0) | (freq2 < 0))
+
+    biCohSq[idxNan2] = np.nan
+    biCohSqErr[idxNan2] = np.nan
+    biPhs[idxNan2] = np.nan
+    biPhsErr[idxNan2] = np.nan
+
+
+    return biCohSq, biCohSqErr, biPhs, biPhsErr
+
+def cross_bispectrum(freqx, freqy, XX0, YY0, ZZ0, NFFTx, NFFTy, NFFTz, NEns,
+                     Fsx, Fsy, Fsz, flimx=None, flimy=None):
+
+    idxMxz, _ = makeIdxsForCrossBiSpectrum(NFFTx, NFFTy, NFFTz)
+
+    freq1 = np.repeat(a=freqx[np.newaxis, :], repeats=NFFTy, axis=0)
+    freq2 = np.repeat(a=freqy[:, np.newaxis], repeats=NFFTx, axis=1)
+
+    XX = np.repeat(a=XX0[:, np.newaxis, :], repeats=NFFTy, axis=1)
+    YY = np.repeat(a=YY0[:, :, np.newaxis], repeats=NFFTx, axis=2)
+    ZZ = ZZ0[:, idxMxz]
+
+    # limitation
+    if flimx is not None:
+        fidx_x = np.where(np.abs(freqx) < flimx)[0]
+        freqx = freqx[fidx_x]
+        freq1 = freq1[:, fidx_x]
+        freq2 = freq2[:, fidx_x]
+        XX = XX[:, :, fidx_x]
+        ZZ = ZZ[:, :, fidx_x]
+    if flimy is not None:
+        fidx_y = np.where(np.abs(freqy) < flimy)[0]
+        freqy = freqy[fidx_y]
+        freq1 = freq1[fidx_y, :]
+        freq2 = freq2[fidx_y, :]
+        YY = YY[:, fidx_y, :]
+        ZZ = ZZ[:, fidx_y, :]
+
+    # symmetry
+    iscomplex = np.iscomplex(XX).any()
+
+    if (XX0 == YY0).all():
+        fidx_x = np.where(freqx >= - 0.5 * 0.5 * Fsx)[0]
+        fidx_y = np.where(freqy <= 0.5 * 0.5 * Fsy)[0]
+        if not iscomplex:
+            fidx_x = np.where(freqx >= 0)[0]
+            fidx_y = np.where(freqy <= 0.5 * 0.5 * Fsy)[0]
+            if (XX0 == ZZ0).all():
+                fidx_y = np.where((freqy <= 0.5 * 0.5 * Fsy)&(freqy >= 0.5 * 0.5 * Fsy))[0]
+
+        freqx = freqx[fidx_x]
+        freqy = freqy[fidx_y]
+        freq1 = freq1[:, fidx_x]
+        freq1 = freq1[fidx_y, :]
+        freq2 = freq2[:, fidx_x]
+        freq2 = freq2[fidx_y, :]
+        XX = XX[:, :, fidx_x]
+        YY = YY[:, fidx_y, :]
+        ZZ = ZZ[:, :, fidx_x]
+        ZZ = ZZ[:, fidx_y, :]
+
+    # assign nan value
+    if (XX0 == YY0).all():
+        idxNan = np.where((np.abs(freq2 + freq1) > Fsz / 2) | (freq2 > freq1))
+        if not iscomplex:
+            idxNan = np.where((np.abs(freq2 + freq1) > Fsz / 2) | (freq2 > freq1) | (freq2 < - freq1))
+            if (XX0 == ZZ0).all():
+                idxNan = np.where((np.abs(freq2 + freq1) > Fsz / 2) | (freq2 > freq1)
+                                  | (freq2 < - freq1) | (freq2 < - 0.5 * freq1))
+    else:
+        idxNan = np.where(np.abs(freq2 + freq1) > Fsz / 2)
+
+    BSpec, BSpecStd, BSpecReStd, BSpecImStd = biSpectrum(XX, YY, ZZ)
+    biCohSq, biCohSqErr = biCoherenceSq_v2(BSpec, BSpecStd, XX, YY, ZZ, NEns)
+    biPhs, biPhsErr = biPhase_v2(BSpec, BSpecReStd, BSpecImStd, NEns)
+
+    biCohSq[idxNan] = np.nan
+    biCohSqErr[idxNan] = np.nan
+    biPhs[idxNan] = np.nan
+    biPhsErr[idxNan] = np.nan
+
+    return freqx, freqy, biCohSq, biCohSqErr, biPhs, biPhsErr
+
+def cross_bispectrum_at_f3(f3_at, freqx, freqy, freqz, XX0, YY0, ZZ0, NFFTx, NFFTy, NFFTz, NEns,
+                           Fsx, Fsy, flimx=None, flimy=None):
+
+    idxMxz, _ = makeIdxsForCrossBiSpectrum(NFFTx, NFFTy, NFFTz)
+    freq3 = freqz[idxMxz]
+
+    XX = XX0
+    YY = YY0
+    ZZ = ZZ0[:, idxMxz]
+
+
+    # limitation
+    if flimx is not None:
+        fidx_x = np.where(np.abs(freqx) < flimx)[0]
+        freqx = freqx[fidx_x]
+        freq3 = freq3[:, fidx_x]
+        XX = XX[:, fidx_x]
+        ZZ = ZZ[:, :, fidx_x]
+    if flimy is not None:
+        fidx_y = np.where(np.abs(freqy) < flimy)[0]
+        freqy = freqy[fidx_y]
+        freq3 = freq3[fidx_y, :]
+        YY = YY[:, fidx_y]
+        ZZ = ZZ[:, fidx_y, :]
+
+    # symmetry
+    iscomplex = np.iscomplex(XX).any()
+
+    if (XX0 == YY0).all():
+        fidx_x = np.where(freqx >= - 0.5 * 0.5 * Fsx)[0]
+        fidx_y = np.where(freqy <= 0.5 * 0.5 * Fsy)[0]
+        if not iscomplex:
+            fidx_x = np.where(freqx >= 0)[0]
+            fidx_y = np.where(freqy <= 0.5 * 0.5 * Fsy)[0]
+            if (XX0 == ZZ0).all():
+                fidx_y = np.where((freqy <= 0.5 * 0.5 * Fsy)&(freqy >= 0.5 * 0.5 * Fsy))[0]
+
+        freqx = freqx[fidx_x]
+        freqy = freqy[fidx_y]
+        freq3 = freq3[:, fidx_x]
+        freq3 = freq3[fidx_y, :]
+        XX = XX[:, fidx_x]
+        YY = YY[:, fidx_y]
+        ZZ = ZZ[:, :, fidx_x]
+        ZZ = ZZ[:, fidx_y, :]
+
+    f3_at = freqz[np.argmin(np.abs(freqz - f3_at))]
+    idxs_f3_at = np.where(freq3 == f3_at)
+
+    XX = XX[:, idxs_f3_at[1]]
+    YY = YY[:, idxs_f3_at[0]]
+    ZZ = ZZ[:, idxs_f3_at[0], idxs_f3_at[1]]
+
+    BSpec, BSpecStd, BSpecReStd, BSpecImStd = biSpectrum(XX, YY, ZZ)
+    biCohSq, biCohSqErr = biCoherenceSq_v2(BSpec, BSpecStd, XX, YY, ZZ, NEns)
+    biPhs, biPhsErr = biPhase_v2(BSpec, BSpecReStd, BSpecImStd, NEns)
+
+    return f3_at, biCohSq, biCohSqErr, biPhs, biPhsErr
+
+def cross_bispectrum_in_f_range(fmin, fmax, freqx, freqy, freqz, XX0, YY0, ZZ0, NFFTx, NFFTy, NFFTz, NEns,
+                                Fsx, Fsy, flimx=None, flimy=None):
+    # flimx, flimy: int, float as fmax or tuple, list as (fmin, fmax), [fmin, fmax]
+
+    idxMxz, _ = makeIdxsForCrossBiSpectrum(NFFTx, NFFTy, NFFTz)
+    freq3 = freqz[idxMxz]
+
+    XX = XX0
+    YY = YY0
+    ZZ = ZZ0[:, idxMxz]
+
+    # limitation
+    if flimx is not None:
+        if isinstance(flimx, tuple) or isinstance(flimx, list):
+            fidx_x = np.where((np.abs(freqx) < flimx[1]) & (np.abs(freqx) > flimx[0]))[0]
+        else:
+            fidx_x = np.where(np.abs(freqx) < flimx)[0]
+        freqx = freqx[fidx_x]
+        freq3 = freq3[:, fidx_x]
+        XX = XX[:, fidx_x]
+        ZZ = ZZ[:, :, fidx_x]
+    if flimy is not None:
+        if isinstance(flimy, tuple) or isinstance(flimy, list):
+            fidx_y = np.where((np.abs(freqy) < flimy[1]) & (np.abs(freqy) > flimy[0]))[0]
+        else:
+            fidx_y = np.where(np.abs(freqy) < flimy)[0]
+        freqy = freqy[fidx_y]
+        freq3 = freq3[fidx_y, :]
+        YY = YY[:, fidx_y]
+        ZZ = ZZ[:, fidx_y, :]
+
+    # symmetry
+    iscomplex = np.iscomplex(XX).any()
+
+    if (XX0 == YY0).all():
+        fidx_x = np.where(freqx >= - 0.5 * 0.5 * Fsx)[0]
+        fidx_y = np.where(freqy <= 0.5 * 0.5 * Fsy)[0]
+        if not iscomplex:
+            fidx_x = np.where(freqx >= 0)[0]
+            fidx_y = np.where(freqy <= 0.5 * 0.5 * Fsy)[0]
+            if (XX0 == ZZ0).all():
+                fidx_y = np.where((freqy <= 0.5 * 0.5 * Fsy)&(freqy >= 0.5 * 0.5 * Fsy))[0]
+
+        freqx = freqx[fidx_x]
+        freqy = freqy[fidx_y]
+        freq3 = freq3[:, fidx_x]
+        freq3 = freq3[fidx_y, :]
+        XX = XX[:, fidx_x]
+        YY = YY[:, fidx_y]
+        ZZ = ZZ[:, :, fidx_x]
+        ZZ = ZZ[:, fidx_y, :]
+
+    idxs_f3_at = np.where((np.abs(freq3) > fmin) & (np.abs(freq3) < fmax))
+
+    XX = XX[:, idxs_f3_at[1]]
+    YY = YY[:, idxs_f3_at[0]]
+    ZZ = ZZ[:, idxs_f3_at[0], idxs_f3_at[1]]
+
+    BSpec, BSpecStd, BSpecReStd, BSpecImStd = biSpectrum(XX, YY, ZZ)
+    biCohSq, biCohSqErr = biCoherenceSq_v2(BSpec, BSpecStd, XX, YY, ZZ, NEns)
+    biPhs, biPhsErr = biPhase_v2(BSpec, BSpecReStd, BSpecImStd, NEns)
+
+    return biCohSq, biCohSqErr, biPhs, biPhsErr
+
+def cross_bispectral_analysis(xx, yy, zz, dtx, dty, dtz,
+                              NFFTx, NFFTy, NFFTz, flimx=None, flimy=None,
+                              OVR=0.5, window="hann"):
+
+    o = struct()
+
+    o.NFFTx = NFFTx
+    o.NFFTy = NFFTy
+    o.NFFTz = NFFTz
+    o.OVR = OVR
+    o.window = window
+
+    o.NOVx = int(NFFTx * OVR)
+    o.NOVy = int(NFFTy * OVR)
+    o.NOVz = int(NFFTz * OVR)
+
+    o.Tx = NFFTx * dtx  # Analysis time
+    o.Ty = NFFTy * dty  # Analysis time
+    o.Tz = NFFTz * dtz  # Analysis time
+    if o.Tx != o.Ty or o.Tx != o.Tz or o.Tz != o.Tx:
+        filename, lineno = proc.get_current_file_and_line()
+        print(f"file: {filename}, line: {lineno}")
+        print('Frequency bin widths are different. \n')
+        exit()
+
+    # Bi-Spectral Analysis
+    xidxs = sliding_window_view(np.arange(xx.size), NFFTx)[::NFFTx - o.NOVx]
+    o.NEns = xidxs.shape[-2]
+    o.xens = xx[xidxs]
+    o.xens = o.xens - o.xens.mean(axis=-1, keepdims=True)
+    o.winx, o.enbwx, o.CGx, o.CVx = getWindowAndCoefs(NFFTx, window, o.NEns)
+    o.freqx, o.XX = fourier_components_2s(o.xens, dtx, NFFTx, o.winx)
+
+    yidxs = sliding_window_view(np.arange(yy.size), NFFTy)[::NFFTy - o.NOVy]
+    o.yens = yy[yidxs]
+    o.yens = o.yens - o.yens.mean(axis=-1, keepdims=True)
+    o.winy, o.enbwy, o.CGy, o.CVy = getWindowAndCoefs(NFFTy, window, o.NEns)
+    o.freqy, o.YY = fourier_components_2s(o.yens, dty, NFFTy, o.winy)
+
+    zidxs = sliding_window_view(np.arange(zz.size), NFFTz)[::NFFTz - o.NOVz]
+    o.zens = zz[zidxs]
+    o.zens = o.zens - o.zens.mean(axis=-1, keepdims=True)
+    o.winz, o.enbwz, o.CGz, o.CVz = getWindowAndCoefs(NFFTz, window, o.NEns)
+    _, o.ZZ = fourier_components_2s(o.zens, dtz, NFFTz, o.winz)
+
+    o.freqx = o.freqx.astype(np.float32)
+    o.freqy = o.freqy.astype(np.float32)
+    o.XX = o.XX.astype(np.complex64)
+    o.YY = o.YY.astype(np.complex64)
+    o.ZZ = o.ZZ.astype(np.complex64)
+    o.freqx, o.freqy, o.biCohSq, o.biCohSqErr, o.biPhs, o.biPhsErr \
+        = cross_bispectrum(o.freqx, o.freqy, o.XX, o.YY, o.ZZ,
+                           NFFTx, NFFTy, NFFTz, o.NEns,
+                           1./dtx, 1./dty, 1./dtz, flimx=flimx, flimy=flimy)
+    o.biCohSqRer = o.biCohSqErr / o.biCohSq
+
+    return o
+
+def cross_bispectral_analysis_at_f3(f3_at, xx, yy, zz, dtx, dty, dtz,
+                                    NFFTx, NFFTy, NFFTz, flimx=None, flimy=None,
+                                    OVR=0.5, window="hann"):
+
+    o = struct()
+
+    o.f3_at = f3_at
+
+    o.NFFTx = NFFTx
+    o.NFFTy = NFFTy
+    o.NFFTz = NFFTz
+    o.OVR = OVR
+    o.window = window
+
+    o.NOVx = int(NFFTx * OVR)
+    o.NOVy = int(NFFTy * OVR)
+    o.NOVz = int(NFFTz * OVR)
+
+    o.Tx = NFFTx * dtx  # Analysis time
+    o.Ty = NFFTy * dty  # Analysis time
+    o.Tz = NFFTz * dtz  # Analysis time
+    if o.Tx != o.Ty or o.Tx != o.Tz or o.Tz != o.Tx:
+        filename, lineno = proc.get_current_file_and_line()
+        print(f"file: {filename}, line: {lineno}")
+        print('Frequency bin widths are different. \n')
+        exit()
+
+    # Bi-Spectral Analysis
+    xidxs = sliding_window_view(np.arange(xx.size), NFFTx)[::NFFTx - o.NOVx]
+    o.NEns = xidxs.shape[-2]
+    o.xens = xx[xidxs]
+    o.xens = o.xens - o.xens.mean(axis=-1, keepdims=True)
+    o.winx, o.enbwx, o.CGx, o.CVx = getWindowAndCoefs(NFFTx, window, o.NEns)
+    o.freqx, o.XX = fourier_components_2s(o.xens, dtx, NFFTx, o.winx)
+
+    yidxs = sliding_window_view(np.arange(yy.size), NFFTy)[::NFFTy - o.NOVy]
+    o.yens = yy[yidxs]
+    o.yens = o.yens - o.yens.mean(axis=-1, keepdims=True)
+    o.winy, o.enbwy, o.CGy, o.CVy = getWindowAndCoefs(NFFTy, window, o.NEns)
+    o.freqy, o.YY = fourier_components_2s(o.yens, dty, NFFTy, o.winy)
+
+    zidxs = sliding_window_view(np.arange(zz.size), NFFTz)[::NFFTz - o.NOVz]
+    o.zens = zz[zidxs]
+    o.zens = o.zens - o.zens.mean(axis=-1, keepdims=True)
+    o.winz, o.enbwz, o.CGz, o.CVz = getWindowAndCoefs(NFFTz, window, o.NEns)
+    o.freqz, o.ZZ = fourier_components_2s(o.zens, dtz, NFFTz, o.winz)
+
+    o.freqx = o.freqx.astype(np.float32)
+    o.freqy = o.freqy.astype(np.float32)
+    o.freqz = o.freqz.astype(np.float32)
+    o.XX = o.XX.astype(np.complex64)
+    o.YY = o.YY.astype(np.complex64)
+    o.ZZ = o.ZZ.astype(np.complex64)
+    o.f3_at, o.biCohSq, o.biCohSqErr, o.biPhs, o.biPhsErr \
+        = cross_bispectrum_at_f3(f3_at, o.freqx, o.freqy, o.freqz, o.XX, o.YY, o.ZZ,
+                                 NFFTx, NFFTy, NFFTz, o.NEns,
+                                 1./dtx, 1./dty, flimx=flimx, flimy=flimy)
+    o.biCohSq_total = np.sum(o.biCohSq)
+    o.biCohSq_stastd = o.biCohSq.size / o.NEns
+    o.biPhs_avg = np.average(o.biPhs)
+    o.biPhs_avg_err = np.sqrt(np.average(o.biPhsErr**2))
+
+    return o
+
+def cross_bispectral_analysis_in_f_range(fmin, fmax, xx, yy, zz, dtx, dty, dtz,
+                                         NFFTx, NFFTy, NFFTz, flimx=None, flimy=None,
+                                         OVR=0.5, window="hann", coef_OV=1.0):
+
+    o = struct()
+
+    o.fmin = fmin
+    o.fmax = fmax
+
+    o.NFFTx = NFFTx
+    o.NFFTy = NFFTy
+    o.NFFTz = NFFTz
+    o.OVR = OVR
+    o.window = window
+
+    o.NOVx = int(NFFTx * OVR)
+    o.NOVy = int(NFFTy * OVR)
+    o.NOVz = int(NFFTz * OVR)
+
+    o.Tx = NFFTx * dtx  # Analysis time
+    o.Ty = NFFTy * dty  # Analysis time
+    o.Tz = NFFTz * dtz  # Analysis time
+    if o.Tx != o.Ty or o.Tx != o.Tz or o.Tz != o.Tx:
+        filename, lineno = proc.get_current_file_and_line()
+        print(f"file: {filename}, line: {lineno}")
+        print('Frequency bin widths are different. \n')
+        exit()
+
+    # Bi-Spectral Analysis
+    xidxs = sliding_window_view(np.arange(xx.size), NFFTx)[::NFFTx - o.NOVx]
+    o.NEns = xidxs.shape[-2]
+    o.xens = xx[xidxs]
+    o.xens = o.xens - o.xens.mean(axis=-1, keepdims=True)
+    o.winx, o.enbwx, o.CGx, o.CVx = getWindowAndCoefs(NFFTx, window, o.NEns)
+    o.freqx, o.XX = fourier_components_2s(o.xens, dtx, NFFTx, o.winx)
+
+    yidxs = sliding_window_view(np.arange(yy.size), NFFTy)[::NFFTy - o.NOVy]
+    o.yens = yy[yidxs]
+    o.yens = o.yens - o.yens.mean(axis=-1, keepdims=True)
+    o.winy, o.enbwy, o.CGy, o.CVy = getWindowAndCoefs(NFFTy, window, o.NEns)
+    o.freqy, o.YY = fourier_components_2s(o.yens, dty, NFFTy, o.winy)
+
+    zidxs = sliding_window_view(np.arange(zz.size), NFFTz)[::NFFTz - o.NOVz]
+    o.zens = zz[zidxs]
+    o.zens = o.zens - o.zens.mean(axis=-1, keepdims=True)
+    o.winz, o.enbwz, o.CGz, o.CVz = getWindowAndCoefs(NFFTz, window, o.NEns)
+    o.freqz, o.ZZ = fourier_components_2s(o.zens, dtz, NFFTz, o.winz)
+
+    o.freqx = o.freqx.astype(np.float32)
+    o.freqy = o.freqy.astype(np.float32)
+    o.freqz = o.freqz.astype(np.float32)
+    o.XX = o.XX.astype(np.complex64)
+    o.YY = o.YY.astype(np.complex64)
+    o.ZZ = o.ZZ.astype(np.complex64)
+    o.biCohSq, o.biCohSqErr, o.biPhs, o.biPhsErr \
+        = cross_bispectrum_in_f_range(fmin, fmax, o.freqx, o.freqy, o.freqz, o.XX, o.YY, o.ZZ,
+                                      NFFTx, NFFTy, NFFTz, o.NEns,
+                                      1./dtx, 1./dty, flimx=flimx, flimy=flimy)
+    o.biCohSq_total = np.sum(o.biCohSq)
+    o.biCohSq_stastd = o.biCohSq.size / o.NEns * coef_OV
+    o.biPhs_avg = np.average(o.biPhs)
+    o.biPhs_avg_err = np.sqrt(np.average(o.biPhsErr**2))
+
+    return o
+
+def auto_bispectral_analysis(xx, dt, NFFT, OVR=0.5, window="hann", NEns=20):  # not completed
+
+    o = struct()
+
+    o.xx = xx
+    o.dt = dt
+    o.NFFT = NFFT
+    o.OVR = OVR
+    o.window = window
+    o.NEns = NEns
+
+    o.NOV = int(NFFT * OVR)
+
+    o.T = NFFT * dt  # Analysis time
+
+    # Bi-Spectral Analysis
+    o.xens = np.lib.stride_tricks.sliding_window_view(xx, window_shape=NFFT)[::NFFT - o.NOV]
+    o.xens = o.xens - o.xens.mean(axis=-1, keepdims=True)
+    o.win, o.enbw, o.CG, o.CV = getWindowAndCoefs(NFFT, window, NEns)
+    o.freq, o.XX = fourier_components_2s(o.xens, dt, NFFT, o.win)
+
+    o.biCohSq, o.biCohSqErr, o.biPhs, o.biPhsErr = cross_bispectrum(o.freq, o.freq, o.XX, o.XX, o.XX,
+                                                                    NFFT, NFFT, NFFT, NEns,
+                                                                    iscomplex=np.iscomplex(xx).any())
+    o.biCohSqRer = o.biCohSqErr / o.biCohSq
+
+    return o
+
+def autoBiSpecAna_v2(freq, X0, NFFT, NEns, NOV, iscomplex=False):
+
+    idxMxz, idxNan = makeIdxsForCrossBiSpectrum((NFFT, NFFT, NFFT))
+
+    XX = np.reshape(X0, (NEns, 1, NFFT))
+    YY = np.reshape(X0, (NEns, NFFT, 1))
+    ZZ = X0[:, idxMxz]
+
+    BSpec, BSpecStd, BSpecReStd, BSpecImStd = biSpectrum(XX, YY, ZZ)
+
+    biCohSq, biCohSqErr = biCoherenceSq_v2(BSpec, BSpecStd, XX, YY, ZZ, NEns)
+    biPhs, biPhsErr = biPhase_v2(BSpec, BSpecReStd, BSpecImStd, NEns)
+
+    biCohSq[idxNan] = np.nan
+    biCohSqErr[idxNan] = np.nan
+    biPhs[idxNan] = np.nan
+    biPhsErr[idxNan] = np.nan
+
+    # symmetry
+    freq1 = np.tile(freq, (NFFT, 1))
+    freq2 = np.tile(freq, (NFFT, 1)).T
+    if iscomplex:
+        idxNan2 = np.where(freq2 > freq1)
+    else:
+        idxNan2 = np.where((freq2 > freq1) | (freq1 < 0) | (freq2 < - freq1))
+
+    biCohSq[idxNan2] = np.nan
+    biCohSqErr[idxNan2] = np.nan
+    biPhs[idxNan2] = np.nan
+    biPhsErr[idxNan2] = np.nan
+
+    return biCohSq, biCohSqErr, biPhs, biPhsErr
+
+def average_bicoherence_at_f3(freq1, freq2, bicoherence):
+    N1 = len(freq1)
+    N2 = len(freq2)
+    dfreq = freq1[1] - freq1[0]
+    idxs = np.arange((N1 + N2) - 1) - (N1 - 1)
+    freq3 = dfreq * idxs
+    bicoh_f3 = np.array([np.nanmean(np.diagonal(bicoherence, offset=i)) for i in idxs])
+    return freq3, bicoh_f3
+
+def total_bicoherence(freq1, freq2, bicoherence):
+    N1 = len(freq1)
+    N2 = len(freq2)
+    dfreq = freq1[1] - freq1[0]
+    idxs = np.arange((N1 + N2) - 1) - (N1 - 1)
+    freq3 = dfreq * idxs
+    bicoh_f3 = np.array([np.nansum(np.diagonal(bicoherence, offset=i)) for i in idxs])
+    countarray = bicoherence
+    countarray[~np.isnan(countarray)] = 1
+    N_components = np.array([np.nansum(np.diagonal(countarray, offset=i)) for i in idxs])
+    return freq3, bicoh_f3, N_components
+
+def average_bicoherence_at_f3_withErr(freq1, freq2, bicoherence, bicoherence_Err):
+    N1 = len(freq1)
+    N2 = len(freq2)
+    dfreq = freq1[1] - freq1[0]
+    idxs = np.arange((N1 + N2) - 5) - (N1 - 3)
+    freq3 = dfreq * idxs
+    bicoh_f3 = np.array([np.nanmean(np.diagonal(np.flipud(bicoherence), offset=i)) for i in idxs])
+    bicoh_f3_err = np.array([np.sqrt(np.nanvar(np.diagonal(np.flipud(bicoherence), offset=i)) +
+                                     np.nanmean(np.diagonal(np.flipud(bicoherence_Err)**2, offset=i))) for i in idxs])
+    return freq3, bicoh_f3, bicoh_f3_err
+
+
+
 
 
 
@@ -1120,7 +2793,7 @@ def firfilter_zerodelay(t, sig, samplingFreq, cutoffFreq, bandtype="lowpass", or
 
 
 
-
+### Correlation Analysis Tools ###
 
 def THDF(rfreq, rpsd, FF, maxH):
 
@@ -1134,7 +2807,6 @@ def THDF(rfreq, rpsd, FF, maxH):
           f'up to {maxH:d} order harmonics\n')
 
     return THDF
-
 
 def phase_delay(dat, ref, dt, wavfreq):
 
@@ -1154,432 +2826,10 @@ def phase_delay(dat, ref, dt, wavfreq):
 
     return phdeg_delay
 
-
-def calibIQComp2(datI, datQ, VAR, VOS_I, VOS_Q, phDif):
-    phDifErr = phDif - 90
-
-    datICalib = datI - VOS_I
-    datQCalib = (VAR * (datQ - VOS_Q) + datICalib * np.sin(np.radians(phDifErr))) / np.cos(np.radians(phDifErr))
-
-    return datICalib, datQCalib
-
-
-"""
-# def power_spectrogram_1s(ti, xx, dt, NFFT, window, Ndiv, Ntisp):
-#
-#     idxs = np.arange(0, NFFT * Ndiv * Ntisp)
-#     idxs = idxs.reshape((Ntisp, Ndiv, NFFT))
-#
-#     dtisp = Ndiv * NFFT * dt
-#     tisp = ti[idxs.T[0][0]] + 0.5 * dtisp
-#     xens = xx[idxs]
-#
-#     win = signal.get_window(window, NFFT)
-#     enbw = NFFT * np.sum(win ** 2) / (np.sum(win) ** 2)
-#     CG = np.abs(np.sum(win)) / NFFT
-#
-#     div_CV = np.sqrt(1. / Ndiv)  # 分割平均平滑化による相対誤差の変化率
-#     sp_CV = div_CV
-#
-#     rfreq = fft.rfftfreq(NFFT, dt)
-#
-#     rfft_x = fft.rfft(xens * win)
-#
-#     p_xx = np.real(rfft_x * rfft_x.conj())
-#     p_xx[:, :, 1:-1] *= 2
-#     p_xx_ave = np.mean(p_xx, axis=1)
-#     p_xx_err = np.std(p_xx, axis=1, ddof=1)
-#     p_xx_rerr = p_xx_err / np.abs(p_xx_ave) * sp_CV
-#
-#     Fs = 1. / dt
-#     psd = p_xx_ave / (Fs * NFFT * enbw * (CG ** 2))
-#     psd_err = np.abs(psd) * p_xx_rerr
-#
-#     dfreq = 1. / (NFFT * dt)
-#     print(f'Power x^2_bar             = {np.sum(xx[idxs][0] ** 2) / (NFFT * Ndiv):.3f}V^2 '
-#           f'@{tisp[0]:.3f}+-{0.5 * dtisp:.3f}s')
-#     print(f'Power integral of P(f)*df = {np.sum(psd[0] * dfreq):.3f}V^2'
-#           f' @{tisp[0]:.3f}+-{0.5 * dtisp:.3f}s')
-#
-#     return tisp, rfreq, psd, psd_err
-"""
-
-
-def power_spectrogram_1s(ti, xx, dt, NFFT, window, NEns, NOV):
-
-    print(f'Overlap ratio: {NOV/NFFT*100:.0f}%\n')
-
-    Nsamp = NEns * NFFT - (NEns - 1) * NOV
-    Nsp = int(len(ti) / Nsamp + 0.5)
-
-    if len(xx) % Nsamp != 0 or len(ti) % Nsamp != 0 or len(xx) != len(ti):
-        print('The number of data points is improper. \n')
-        sys.exit()
-    else:
-        print(f'The number of samples a spectrum: {Nsamp:d}')
-        print(f'The number of spectra: {Nsp:d}\n')
-
-    if NOV != 0:
-        tmp = (np.reshape(np.arange(NEns * NFFT), (NEns, NFFT)).T - np.arange(0, NEns * NOV, NOV)).T
-    else:
-        tmp = np.reshape(np.arange(NEns * NFFT), (NEns, NFFT))
-    idxs = np.transpose(np.tile(tmp, (Nsp, 1, 1)).T + np.arange(0, Nsp*Nsamp, Nsamp))
-
-    dtisp = Nsamp * dt
-    tisp = ti[idxs.T[0][0]] + 0.5 * dtisp
-    xens = xx[idxs]
-
-    win = signal.get_window(window, NFFT)
-    enbw = NFFT * np.sum(win ** 2) / (np.sum(win) ** 2)
-    CG = np.abs(np.sum(win)) / NFFT
-
-    CV = CV_overlap(NFFT, NEns, NOV)
-
-    rfreq = fft.rfftfreq(NFFT, dt)
-
-    fft_x = fft.rfft(xens * win)
-
-    p_xx = np.real(fft_x * fft_x.conj())
-    p_xx_ave = np.mean(p_xx, axis=1)
-    p_xx_err = np.std(p_xx, axis=1, ddof=1)
-    p_xx_rerr = p_xx_err / np.abs(p_xx_ave) * CV
-
-    Fs = 1. / dt
-    psd = p_xx_ave / (Fs * NFFT * enbw * (CG ** 2))
-    psd_err = np.abs(psd) * p_xx_rerr
-
-    dfreq = 1. / (NFFT * dt)
-    print(f'Power: Time average of x(t)^2 = {np.sum(np.abs(xx[0:Nsamp])**2) / Nsamp:.6f} V^2 '
-          f'@{tisp[0]:.3f}+-{0.5 * dtisp:.3f} s')
-    print(f'Power: Integral of P(f)       = {np.sum(psd[0] * dfreq):.6f} V^2 '
-          f'@{tisp[0]:.3f}+-{0.5 * dtisp:.3f} s')
-
-    return tisp, rfreq, psd, psd_err
-
-
-def power_spectrogram_2s(ti, xx, dt, NFFT, window, NEns, NOV):
-
-    proc.suggestNewVer(2, 'power_spectrogram_2s')
-
-    print(f'Overlap ratio: {NOV/NFFT*100:.0f}%\n')
-
-    Nsamp = NEns * NFFT - (NEns - 1) * NOV
-    Nsp = int(len(ti) / Nsamp + 0.5)
-
-    if len(xx) % Nsamp != 0 or len(ti) % Nsamp != 0 or len(xx) != len(ti):
-        print('The number of data points is improper. \n')
-        sys.exit()
-    else:
-        print(f'The number of samples a spectrum: {Nsamp:d}')
-        print(f'The number of spectra: {Nsp:d}\n')
-
-    if NOV != 0:
-        tmp = (np.reshape(np.arange(NEns * NFFT), (NEns, NFFT)).T - np.arange(0, NEns * NOV, NOV)).T
-    else:
-        tmp = np.reshape(np.arange(NEns * NFFT), (NEns, NFFT))
-    idxs = np.transpose(np.tile(tmp, (Nsp, 1, 1)).T + np.arange(0, Nsp*Nsamp, Nsamp))
-
-    dtisp = Nsamp * dt
-    tisp = ti[idxs.T[0][0]] + 0.5 * dtisp
-    xens = xx[idxs]
-
-    win = signal.get_window(window, NFFT)
-    enbw = NFFT * np.sum(win ** 2) / (np.sum(win) ** 2)
-    CG = np.abs(np.sum(win)) / NFFT
-
-    CV = CV_overlap(NFFT, NEns, NOV)
-
-    freq = fft.fftshift(fft.fftfreq(NFFT, dt))
-
-    fft_x = fft.fftshift(fft.fft(xens * win), axes=2)
-
-    p_xx = np.real(fft_x * fft_x.conj())
-    p_xx_ave = np.mean(p_xx, axis=1)
-    p_xx_err = np.std(p_xx, axis=1, ddof=1)
-    p_xx_rerr = p_xx_err / np.abs(p_xx_ave) * CV
-
-    Fs = 1. / dt
-    psd = p_xx_ave / (Fs * NFFT * enbw * (CG ** 2))
-    psd_err = np.abs(psd) * p_xx_rerr
-
-    dfreq = 1. / (NFFT * dt)
-    print(f'Power: Time average of x(t)^2 = {np.sum(np.abs(xx[0:Nsamp])**2) / Nsamp:.6f} V^2 '
-          f'@{tisp[0]:.3f}+-{0.5 * dtisp:.3f} s')
-    print(f'Power: Integral of P(f)       = {np.sum(psd[0] * dfreq):.6f} V^2 '
-          f'@{tisp[0]:.3f}+-{0.5 * dtisp:.3f} s')
-
-    return tisp, freq, psd, psd_err
-
-
-def Nspectra(time, NFFT, NEns, NOV):
-
-    Nsample = NEns * NFFT - (NEns - 1) * NOV
-    Nspectra = len(time) // Nsample
-    Ndat = Nsample * Nspectra
-
-    print(f'The number of samples per a spectrum: {Nsample:d}')
-    print(f'The number of spectra: {Nspectra:d}\n')
-
-    return Nspectra, Nsample, Ndat
-
-
-def Nspectra_v2(time, NFFT, NEns, NOV):
-
-    Nsample = NSampleForFFT(NFFT, NEns, NOV)
-    Nsp = NspFromNdat(Nsample, NOV, len(time))
-    Ndat = NdatForFFT(Nsample, Nsp, NOV)
-
-    print(f'The number of samples per a spectrum: {Nsample:d}')
-    print(f'The number of spectra: {Nsp:d}\n')
-
-    return Nsp, Nsample, Ndat
-
-
-def power_spectrogram_2s_v2(ti, xx, dt, NFFT, window, NEns, NOV):
-
-    proc.suggestNewVer(3, 'power_spectrogram_2s')
-
-    print(f'Overlap ratio: {NOV / NFFT * 100:.0f}%\n')
-
-    Nsp, Nsamp, Ndat = Nspectra(ti, NFFT, NEns, NOV)
-
-    if len(xx) % Nsamp != 0 or len(ti) % Nsamp != 0 or len(xx) != len(ti):
-        print('The number of data points is improper. \n')
-        sys.exit()
-    else:
-        print(f'The number of samples a spectrum: {Nsamp:d}')
-        print(f'The number of spectra: {Nsp:d}\n')
-
-    if NOV != 0:
-        tmp = (np.reshape(np.arange(NEns * NFFT), (NEns, NFFT)).T - np.arange(0, NEns * NOV, NOV)).T
-    else:
-        tmp = np.reshape(np.arange(NEns * NFFT), (NEns, NFFT))
-    idxs = np.transpose(np.tile(tmp, (Nsp, 1, 1)).T + np.arange(0, Nsp * Nsamp, Nsamp))
-
-    dtisp = Nsamp * dt
-    tisp = ti[idxs.T[0][0]] + 0.5 * dtisp
-    xens = xx[idxs]
-
-    win = signal.get_window(window, NFFT)
-    enbw = NFFT * np.sum(win ** 2) / (np.sum(win) ** 2)
-    CG = np.abs(np.sum(win)) / NFFT
-
-    # CV = CV_overlap(NFFT, NEns, NOV)
-    CV = 1./np.sqrt(NEns)
-
-    freq = fft.fftshift(fft.fftfreq(NFFT, dt))
-
-    fft_x = fft.fftshift(fft.fft(xens * win), axes=2)
-
-    p_xx = np.real(fft_x * fft_x.conj())
-    p_xx_ave = np.mean(p_xx, axis=1)
-    p_xx_std = np.std(p_xx, axis=1, ddof=1)
-    p_xx_rerr = p_xx_std / np.abs(p_xx_ave) * CV
-
-    Fs = 1. / dt
-    psd = p_xx_ave / (Fs * NFFT * enbw * (CG ** 2))
-    psd_std = p_xx_std / (Fs * NFFT * enbw * (CG ** 2))
-    psd_err = np.abs(psd) * p_xx_rerr
-
-    dfreq = 1. / (NFFT * dt)
-    print(f'Power: Time average of x(t)^2 = {np.sum(np.abs(xx[0:Nsamp]) ** 2) / Nsamp:.6f} V^2 '
-          f'@{tisp[0]:.3f}+-{0.5 * dtisp:.3f} s')
-    print(f'Power: Integral of P(f)       = {np.sum(psd[0] * dfreq):.6f} V^2 '
-          f'@{tisp[0]:.3f}+-{0.5 * dtisp:.3f} s')
-
-    return tisp, freq, psd, psd_std, psd_err
-
-
-def make_idxs_for_spectrogram(NFFT, NEns, NOV, Nsp):
-
-    if NOV != 0:
-        tmp = (np.reshape(np.arange(NEns * NFFT), (NEns, NFFT)).T - np.arange(0, NEns * NOV, NOV)).T
-    else:
-        tmp = np.reshape(np.arange(NEns * NFFT), (NEns, NFFT))
-    Nsamp = NSampleForFFT(NFFT, NEns, NOV)
-    idxs = np.transpose(np.tile(tmp, (Nsp, 1, 1)).T + np.arange(0, Nsp * Nsamp, Nsamp))
-
-    return idxs
-
-
-def make_idxs_for_spectrogram_v2(Nfft, Nens, Nov, Nsp):
-
-    tmp1 = np.reshape(np.arange(Nsp*Nens*Nfft), (Nsp, Nens, Nfft))
-    tmp2 = np.reshape(repeat_and_add_lastdim(Nov * np.arange(Nens * Nsp), Nfft), (Nsp, Nens, Nfft))
-    idxs = tmp1 - tmp2
-
-    return idxs
-
-
-def make_idxs_for_spectrogram_wo_EnsembleAVG(NFFT, NOV, Nsp):
-
-    if NOV != 0:
-        tmp = (np.reshape(np.arange(Nsp * NFFT), (Nsp, NFFT)).T - np.arange(0, Nsp * NOV, NOV)).T
-    else:
-        tmp = np.reshape(np.arange(Nsp * NFFT), (Nsp, NFFT))
-    Ndat = NSampleForFFT(NFFT, Nsp, NOV)
-    idxs = np.transpose(np.tile(tmp, (1, 1)).T + np.arange(0, Ndat, Ndat))
-
-    return idxs
-
-
-def time_for_spectrogram(time, idxs_for_spectrogram):
-
-    tisp = np.average(np.array([time[idxs_for_spectrogram][:, 0, 0], time[idxs_for_spectrogram][:, -1, -1]]), axis=0)
-
-    return tisp
-
-
-def time_for_spectrogram_wo_ensembleAVG(time, idxs_for_spectrogram):
-
-    tisp = np.average(time[idxs_for_spectrogram], axis=-1)
-
-    return tisp
-
-
-def get_Sxx(fft_x, CV):
-
-    Sxx = np.real(fft_x * fft_x.conj())
-    Sxx_avg = np.mean(Sxx, axis=-2)
-    Sxx_std = np.std(Sxx, axis=-2, ddof=1)
-    Sxx_err = Sxx_std * CV
-
-    return Sxx_avg, Sxx_std, Sxx_err
-
-
-def get_psd(fft_x, CV, dt, NFFT, enbw, CG):
-
-    Sxx_ave, Sxx_std, Sxx_err = get_Sxx(fft_x, CV)
-    Sxx_rerr = Sxx_err / np.abs(Sxx_ave)
-
-    Fs = 1. / dt
-    psd = Sxx_ave / (Fs * NFFT * enbw * (CG ** 2))
-    psd_std = Sxx_std / (Fs * NFFT * enbw * (CG ** 2))
-    psd_err = np.abs(psd) * Sxx_rerr
-
-    return psd, psd_std, psd_err
-
-
-def check_power(NFFT, dt, xx, Nsamp, tisp, dtisp, psd):
-
-    dfreq = 1. / (NFFT * dt)
-    print(f'Power: Time average of x(t)^2 = {np.sum(np.abs(xx[0:Nsamp]) ** 2) / Nsamp:.6f} V^2 '
-          f'@{tisp[0]:.3f}+-{0.5 * dtisp:.3f} s')
-    print(f'Power: Integral of P(f)       = {np.sum(psd[0] * dfreq):.6f} V^2 '
-          f'@{tisp[0]:.3f}+-{0.5 * dtisp:.3f} s')
-
-    return
-
-
-def power_spectrogram_2s_v3(ti, xx, dt, NFFT, window, NEns, NOV):
-
-    print(f'Overlap ratio: {NOV / NFFT * 100:.0f}%\n')
-
-    Nsp, Nsamp, Ndat = Nspectra(ti, NFFT, NEns, NOV)
-    ti = ti[:Ndat]
-    xx = xx[:Ndat]
-
-    idxs = make_idxs_for_spectrogram(NFFT, NEns, NOV, Nsp)
-    tisp = time_for_spectrogram(ti, idxs)
-    xens = xx[idxs]
-
-    win, enbw, CG, CV = getWindowAndCoefs(NFFT, window, NEns, NOV)
-
-    freq, fft_x = fourier_components_2s(xens, dt, NFFT, win)
-    psd, psd_std, psd_err = get_psd(fft_x, CV, dt, NFFT, enbw, CG)
-
-    dtisp = Nsamp * dt
-    check_power(NFFT, dt, xx, Nsamp, tisp, dtisp, psd)
-
-    return tisp, freq, psd, psd_std, psd_err
-
-
-def power_spectrogram_2s_v4(ti, xx, dt, NFFT=2**10, window="hann", NEns=20, NOV=2**9):
-
-    print(f'Overlap ratio: {NOV / NFFT * 100:.0f}%\n')
-
-    Nsp, Nsamp, Ndat = Nspectra_v2(ti, NFFT, NEns, NOV)
-    ti = ti[:Ndat]
-    xx = xx[:Ndat]
-
-    idxs = make_idxs_for_spectrogram_v2(NFFT, NEns, NOV, Nsp)
-    tisp = time_for_spectrogram(ti, idxs)
-    xens = xx[idxs]
-
-    xavg = repeat_and_add_lastdim(np.average(xens, axis=-1), NFFT)
-    xens -= xavg
-
-    win, enbw, CG, CV = getWindowAndCoefs(NFFT, window, NEns, NOV)
-
-    freq, fft_x = fourier_components_2s(xens, dt, NFFT, win)
-    psd, psd_std, psd_err = get_psd(fft_x, CV, dt, NFFT, enbw, CG)
-
-    dtisp = Nsamp * dt
-    check_power(NFFT, dt, xx, Nsamp, tisp, dtisp, psd)
-
-    return tisp, freq, psd, psd_std, psd_err
-
-
-def power_spectrogram_2s_v5(ti, xx, NFFT=2**10, ovr=0.5, window="hann", NEns=20):
-
-    o = struct()
-
-    o.NFFT = NFFT
-    o.ovr = ovr
-    o.window = window
-    o.NEns = NEns
-
-    o.NOV = int(NFFT * ovr)
-    o.dt = ti[1] - ti[0]
-
-    print(f'Overlap ratio: {o.NOV / NFFT * 100:.0f}%\n')
-
-    o.Nsp, o.Nsamp, o.Ndat = Nspectra_v2(ti, NFFT, NEns, o.NOV)
-    ti = ti[:o.Ndat]
-    xx = xx[:o.Ndat]
-
-    o.ti = ti
-    o.xx = xx
-
-    idxs = make_idxs_for_spectrogram_v2(NFFT, NEns, o.NOV, o.Nsp)
-    o.tsp = time_for_spectrogram(ti, idxs)
-    xens = xx[idxs]
-
-    xavg = repeat_and_add_lastdim(np.average(xens, axis=-1), NFFT)
-    xens -= xavg
-
-    o.win, o.enbw, o.CG, o.CV = getWindowAndCoefs(NFFT, window, NEns, o.NOV)
-
-    o.freq, o.fft_x = fourier_components_2s(xens, o.dt, NFFT, o.win)
-    o.psd, o.psd_std, o.psd_err = get_psd(o.fft_x, o.CV, o.dt, NFFT, o.enbw, o.CG)
-
-    o.dtsp = o.tsp[1] - o.tsp[0]
-    o.dfreq = 1. / (o.Nsamp * o.dt)
-    check_power(NFFT, o.dt, xx, o.Nsamp, o.tsp, o.dtsp, o.psd)
-
-    return o
-
-
-def calib_dbs9O(chDiag, pathCalib, Idat, Qdat):
-    dictIF = {'27.7G': 40, '29.1G': 80, '30.5G': 120, '32.0G': 160,
-              '33.4G': 200, '34.8G': 240, '36.9G': 300, '38.3G': 340}
-    frLO = dictIF[chDiag]
-    lvLO = float(input('LO Power [dBm] >>> '))
-    vgaLO = float(input('LO VGA [V] >>> '))
-    vgaRF = float(input('RF VGA [V] >>> '))
-    calibPrms_df = read.calibPrms_df(pathCalib)
-    VAR, VOS_I, VOS_Q, phDif = calibPrms_df.loc[(frLO, lvLO, vgaLO, vgaRF)]
-
-    Idat, Qdat = calibIQComp2(Idat, Qdat, VAR, VOS_I, VOS_Q, phDif)
-
-    return Idat, Qdat
-
-
 def interpolate_nan(array):
     nans, x = np.isnan(array), lambda z: z.nonzero()[0]
     array[nans] = np.interp(x(nans), x(~nans), array[~nans])
     return array
-
 
 def cross_correlation_analysis(sig, ref, dt, window_len=1, mode="ccc"):
     # mode = "envelope", "ccc"
@@ -1603,7 +2853,6 @@ def cross_correlation_analysis(sig, ref, dt, window_len=1, mode="ccc"):
 
     return cc
 
-
 def cross_correlation(sig, ref, dt, mode="same"):
 
     sig_norm = (sig - sig.mean()) / sig.std()
@@ -1625,7 +2874,6 @@ def cross_correlation(sig, ref, dt, mode="same"):
 
     return o
 
-
 def delay_by_ccc(lags, ccc, window_len=1):
 
     ccc_ma = moving_average(ccc, window_len, mode="same")
@@ -1639,8 +2887,6 @@ def delay_by_ccc(lags, ccc, window_len=1):
     delay_min = lags[idx_min]
 
     return idx_max, idx_min, ccc_max, ccc_min, delay_max, delay_min
-
-
 
 def cross_correlation_analysis_temporal(sig, ref, tt, Nsample=10000, mode="full", delay_by_ccc_amp=False):
 
@@ -1671,7 +2917,6 @@ def cross_correlation_analysis_temporal(sig, ref, tt, Nsample=10000, mode="full"
 
     return np.array(tout), lags, np.array(ccf_list), np.array(ccc_list), np.array(ccc_amp_list), np.array(lag_list)
 
-
 def get_dat_for_cross_correlation_around_tat(tt, sig, ref, tat, Nsample=10000):
 
     idx_at = np.argmin(np.abs(tt - tat))
@@ -1681,7 +2926,6 @@ def get_dat_for_cross_correlation_around_tat(tt, sig, ref, tat, Nsample=10000):
     tref_tlim = tt[idx_at - Nsample // 2: idx_at + Nsample // 2]
 
     return tsig_tlim, sig_tlim, tref_tlim, ref_tlim
-
 
 def corrcoef_series(time, sig1, sig2, Nsamp):
 
@@ -1703,8 +2947,6 @@ def corrcoef_series(time, sig1, sig2, Nsamp):
     corrcoef = sig12_cov / np.sqrt(sig1_var * sig2_var)
 
     return time_cor, corrcoef
-
-
 
 """
 # try:
@@ -1730,338 +2972,11 @@ def corrcoef_series(time, sig1, sig2, Nsamp):
 #     print('error in curve fit ... skipping this set')
 """
 
-
-def cross_spectre_2s(x, y, Fs, NEns, NFFT, window, NOV):
-
-    # proc.suggestNewVer(2, 'cross_spectre_2s')
-
-    dT = 1. / Fs
-
-    x_arr = toZeroMeanTimeSliceEnsemble(x, NFFT, NEns, NOV)
-    y_arr = toZeroMeanTimeSliceEnsemble(y, NFFT, NEns, NOV)
-
-    win = signal.get_window(window, NFFT)
-    enbw = NFFT * np.sum(win ** 2) / (np.sum(win) ** 2)
-    CG = np.abs(np.sum(win)) / NFFT
-
-    # CV = CV_overlap(NFFT, NEns, NOV)
-    CV = 1./np.sqrt(NEns)
-
-    freq = fft.fftshift(fft.fftfreq(NFFT, dT))
-
-    # https://watlab-blog.com/2020/07/24/coherence-function/
-
-    fft_x = fft.fft(x_arr * win)
-    fft_x = fft.fftshift(fft_x, axes=(1,))
-    fft_y = fft.fft(y_arr * win)
-    fft_y = fft.fftshift(fft_y, axes=(1,))
-
-    c_xy = fft_y * fft_x.conj()
-    p_xx = np.real(fft_x * fft_x.conj())
-    p_yy = np.real(fft_y * fft_y.conj())
-
-    c_xy_ave = np.mean(c_xy, axis=0)
-    p_xx_ave = np.mean(p_xx, axis=0)
-    p_yy_ave = np.mean(p_yy, axis=0)
-    p_xx_err = np.std(p_xx, axis=0, ddof=1)
-    p_yy_err = np.std(p_yy, axis=0, ddof=1)
-    p_xx_rerr = p_xx_err / p_xx_ave * CV
-    p_yy_rerr = p_yy_err / p_yy_ave * CV
-
-    Kxy = np.real(c_xy)
-    Qxy = - np.imag(c_xy)
-    Kxy_ave = np.mean(Kxy, axis=0)
-    Qxy_ave = np.mean(Qxy, axis=0)
-    Kxy_err = np.std(Kxy, axis=0, ddof=1)
-    Qxy_err = np.std(Qxy, axis=0, ddof=1)
-    Kxy_rerr = Kxy_err / Kxy_ave * CV
-    Qxy_rerr = Qxy_err / Qxy_ave * CV
-
-    CSDxy = np.abs(c_xy_ave) / (Fs * NFFT * enbw * CG**2)
-    cs_err = np.sqrt((Kxy_ave * Kxy_err)**2 + (Qxy_ave * Qxy_err)**2) / \
-             np.abs(c_xy_ave)
-    cs_rerr = cs_err / np.abs(c_xy_ave) * CV
-    CSDxy_err = CSDxy * CV
-
-    coh2 = (np.abs(c_xy_ave) ** 2) / (p_xx_ave * p_yy_ave)
-    coh2_rerr = np.sqrt(2 * cs_rerr**2 + p_xx_rerr**2 + p_yy_rerr**2)
-    coh2_err = coh2 * coh2_rerr
-    cohxy = np.sqrt(coh2)
-    cohxy_err = 0.5 / cohxy * coh2_err
-
-    tmp = Qxy_ave / Kxy_ave
-    tmp_rerr = np.sqrt(Qxy_rerr ** 2 + Kxy_rerr ** 2)
-    tmp_err = np.abs(tmp) * tmp_rerr
-    phsxy = np.arctan2(Qxy_ave, Kxy_ave)
-    phsxy_err = 1. / (1. + tmp ** 2) * tmp_err
-
-    return freq, CSDxy, CSDxy_err, cohxy, cohxy_err, phsxy, phsxy_err
-
-
-def get_crossspectra(XX, YY):
-
-    YXconj = YY * XX.conj()
-    CrossSpec = np.average(YXconj, axis=-2)
-    CrossSpecStd = np.std(YXconj, axis=-2, ddof=1)
-    CrossSpecReStd = np.std(np.real(YXconj), axis=-2, ddof=1)
-    CrossSpecImStd = np.std(np.imag(YXconj), axis=-2, ddof=1)
-
-    return CrossSpec, CrossSpecStd, CrossSpecReStd, CrossSpecImStd
-
-
-def get_Sxy(XX, YY, CV):
-
-    Sxy = YY * XX.conj()
-    Sxy_avg = np.average(Sxy, axis=-2)
-    Sxy_std = np.std(Sxy, axis=-2, ddof=1)
-    Sxy_Re_std = np.std(np.real(Sxy), axis=-2, ddof=1)
-    Sxy_Im_std = np.std(np.imag(Sxy), axis=-2, ddof=1)
-
-    Sxy_err = Sxy_std * CV
-    Sxy_Re_err = Sxy_Re_std * CV
-    Sxy_Im_err = Sxy_Im_std * CV
-
-    return Sxy_avg, Sxy_std, Sxy_err, Sxy_Re_std, Sxy_Re_err, Sxy_Im_std, Sxy_Im_err
-
-
-def get_coherenceSq(CrossSpec, CrossSpecStd, XX, YY, CV):
-
-    XAbsSq, XAbsSqAvg, XAbsSqStd, XAbsSqErr = get_Sxx(XX, CV)
-    YAbsSq, YAbsSqAvg, YAbsSqStd, YAbsSqErr = get_Sxx(XX, CV)
-    XAbsSqRer = XAbsSqErr / XAbsSqAvg
-    YAbsSqRer = YAbsSqErr / YAbsSqAvg
-
-    CrossSpecAbsSq = np.real(CrossSpec * CrossSpec.conj())
-    CrossSpecAbsSqStd = 2 * np.abs(CrossSpec) * CrossSpecStd
-    CrossSpecAbsSqRer = CrossSpecAbsSqStd / CrossSpecAbsSq * CV
-
-    cohSq = CrossSpecAbsSq / (XAbsSqAvg * YAbsSqAvg)
-    cohSqRer = np.sqrt(CrossSpecAbsSqRer ** 2 + XAbsSqRer ** 2 + YAbsSqRer ** 2)
-    cohSqErr = cohSq * cohSqRer
-
-    return cohSq, cohSqErr
-
-
-def get_coherenceSq_v2(Sxy_avg, Sxy_err, Sxx_avg, Sxx_err, Syy_avg, Syy_err):
-
-    Sxy_avg_sq = np.real(Sxy_avg * Sxy_avg.conj())
-    Sxy_avg_sq_err = 2 * np.abs(Sxy_avg) * Sxy_err
-
-    Sxy_avg_sq_rer = Sxy_avg_sq_err / Sxy_avg_sq
-    Sxx_rer = Sxx_err / Sxx_avg
-    Syy_rer = Syy_err / Syy_avg
-
-    coh_sq = Sxy_avg_sq / (Sxx_avg * Syy_avg)
-    coh_sq_rer = np.sqrt(Sxy_avg_sq_rer ** 2 + Sxx_rer ** 2 + Syy_rer ** 2)
-    coh_sq_err = coh_sq * coh_sq_rer
-
-    return coh_sq, coh_sq_err
-
-
-def get_crossPhase(CrossSpec, CrossSpecReStd, CrossSpecImStd, CV):
-
-    CrossSpecRe = np.real(CrossSpec)
-    CrossSpecIm = np.imag(CrossSpec)
-
-    CrossSpecReRer = CrossSpecReStd / CrossSpecRe * CV
-    CrossSpecImRer = CrossSpecImStd / CrossSpecIm * CV
-
-    CrossSpecImRe = CrossSpecIm / CrossSpecRe
-    CrossSpecImReRer = np.sqrt(CrossSpecImRer ** 2 + CrossSpecReRer ** 2)
-    CrossSpecImReErr = np.abs(CrossSpecImRe * CrossSpecImReRer)
-    crossPhs = np.unwrap(np.arctan2(CrossSpecIm, CrossSpecRe))
-    crossPhsErr = 1. / (1. + CrossSpecImRe ** 2) * CrossSpecImReErr
-
-    return crossPhs, crossPhsErr
-
-
-def get_crossphase_v2(Sxy_avg, Sxy_Re_err, Sxy_Im_err):
-
-    Sxy_avg_Re = np.real(Sxy_avg)
-    Sxy_avg_Im = np.imag(Sxy_avg)
-
-    Sxy_Re_rer = Sxy_Re_err / Sxy_avg_Re
-    Sxy_Im_rer = Sxy_Im_err / Sxy_avg_Im
-
-    tmp = Sxy_avg_Im / Sxy_avg_Re
-    tmp_rer = np.sqrt(Sxy_Im_rer ** 2 + Sxy_Re_rer ** 2)
-    tmp_err = np.abs(tmp * tmp_rer)
-    if Sxy_avg.size == 1:
-        crossPhs = np.arctan2(Sxy_avg_Im, Sxy_avg_Re)
-    else:
-        crossPhs = np.unwrap(np.arctan2(Sxy_avg_Im, Sxy_avg_Re))
-    crossPhsErr = 1. / (1. + tmp ** 2) * tmp_err
-
-    return crossPhs, crossPhsErr
-
-
-def crossSpectralAnalysis_2s_v2(xx, yy, dts, NFFTs, NEns, window, NOVs):
-
-    dtx, dty = dts
-    NFFTx, NFFTy = NFFTs
-    NOVx, NOVy = NOVs
-
-    xens = toZeroMeanTimeSliceEnsemble(xx, NFFTx, NEns, NOVx)
-    winx, enbwx, CGx, CV = getWindowAndCoefs(NFFTx, window, NEns, NOVx)
-    freqx, XX = fourier_components_2s(xens, dtx, NFFTx, winx)
-
-    yens = toZeroMeanTimeSliceEnsemble(yy, NFFTy, NEns, NOVy)
-    winy, enbwy, CGy, CV = getWindowAndCoefs(NFFTy, window, NEns, NOVy)
-    freqy, YY = fourier_components_2s(yens, dty, NFFTy, winy)
-
-    # https://watlab-blog.com/2020/07/24/coherence-function/
-
-    if NFFTx > NFFTy:
-        freq = freqy
-        XX = XX[:, (NFFTx - NFFTy)//2:(NFFTx + NFFTy)//2]
-    elif NFFTy > NFFTx:
-        freq = freqx
-        YY = YY[:, (NFFTy - NFFTx) // 2:(NFFTy + NFFTx) // 2]
-    else:
-        freq = freqx
-
-    CrossSpec, CrossSpecStd, CrossSpecReStd, CrossSpecImStd = get_crossspectra(XX, YY)
-
-    cohSq, cohSqErr = get_coherenceSq(CrossSpec, CrossSpecStd, XX, YY, CV)
-    phs, phsErr = get_crossPhase(CrossSpec, CrossSpecReStd, CrossSpecImStd, CV)
-
-    return freq, cohSq, cohSqErr, phs, phsErr
-
-
-def get_freq_for_spectrum(NFFT, dt):
-
-    freq = fft.fftfreq(NFFT, dt)
-    freq = fft.fftshift(freq)
-
-    return freq
-
-
-def FFT(xens, win):
-
-    fft_x = fft.fft(xens * win)
-    fft_x = fft.fftshift(fft_x, axes=-1)
-
-    return fft_x
-
-
-def cross_spectrogram_2s(tt, xx, yy, NFFT=2**10, NEns=20, window='hann', OVR=0.5):
-    # NOTE: xx and yy must have same dts
-
-    NOV = int(NFFT * OVR)
-
-    Nsp, Nsamp, Ndat = Nspectra_v2(tt, NFFT, NEns, NOV)
-    tt = get_intermediate(tt, Ndat)
-    xx = get_intermediate(xx, Ndat)
-    yy = get_intermediate(yy, Ndat)
-
-    idxs = make_idxs_for_spectrogram_v2(NFFT, NEns, NOV, Nsp)
-    tsp = time_for_spectrogram(tt, idxs)
-    xens = xx[idxs]
-    yens = yy[idxs]
-    xens_avg = proc.repeat_and_add_lastdim(np.average(xens, axis=-1), NFFT)
-    yens_avg = proc.repeat_and_add_lastdim(np.average(yens, axis=-1), NFFT)
-    xens = xens - xens_avg
-    yens = yens - yens_avg
-
-    win, enbw, CG, CV = getWindowAndCoefs(NFFT, window, NEns)
-
-    dt = tt[1] - tt[0]
-    freq = get_freq_for_spectrum(NFFT, dt)
-    fft_x = FFT(xens, win)
-    fft_y = FFT(yens, win)
-
-    Sxx_avg, Sxx_std, Sxx_err = get_Sxx(fft_x, CV)
-    Syy_avg, Syy_std, Syy_err = get_Sxx(fft_y, CV)
-
-    Sxy_avg, Sxy_std, Sxy_err, Sxy_Re_std, Sxy_Re_err, Sxy_Im_std, Sxy_Im_err = get_Sxy(fft_x, fft_y, CV)
-
-    coh_sq, coh_sq_err = get_coherenceSq_v2(Sxy_avg, Sxy_err, Sxx_avg, Sxx_err, Syy_avg, Syy_err)
-    phase, phase_err = get_crossphase_v2(Sxy_avg, Sxy_Re_err, Sxy_Im_err)
-
-    o = struct()
-    o.tdat = tt
-    o.xdat = xx
-    o.ydat = yy
-    o.NFFT = NFFT
-    o.NEns = NEns
-    o.window = window
-    o.OVR = OVR
-    o.NOV = NOV
-    o.win = win
-    o.CV = CV
-    o.dt = dt
-    o.tsp = tsp
-    o.dtsp = tsp[1] - tsp[0]
-    o.freq = freq
-    o.Sxx_avg = Sxx_avg
-    o.Sxx_std = Sxx_std
-    o.Sxx_err = Sxx_err
-    o.Syy_avg = Syy_avg
-    o.Syy_std = Syy_std
-    o.Syy_err = Syy_err
-    o.Sxy_avg = Sxy_avg
-    o.Sxy_std = Sxy_std
-    o.Sxy_err = Sxy_err
-    o.Sxy_Re_std = Sxy_Re_std
-    o.Sxy_Re_err = Sxy_Re_err
-    o.Sxy_Im_std = Sxy_Im_std
-    o.Sxy_Im_err = Sxy_Im_err
-    o.coh_sq = coh_sq
-    o.coh_sq_err = coh_sq_err
-    o.phase = phase
-    o.phase_err = phase_err
-
-    return o
-
-
-def cross_spectre_2s_v2(tt, xx, yy, NFFT=2**10, window="hann", OVR=0.5):
-
-    NOV = int(NFFT * OVR)
-    NEns = NEnsFromNSample(NFFT, NOV, len(tt))
-
-    csg = cross_spectrogram_2s(tt, xx, yy, NFFT=NFFT, NEns=NEns, window=window, OVR=OVR)
-
-    o = struct()
-    o.tdat = csg.tdat
-    o.xdat = csg.xdat
-    o.ydat = csg.ydat
-    o.NFFT = csg.NFFT
-    o.NEns = csg.NEns
-    o.window = csg.window
-    o.NOV = csg.NOV
-    o.win = csg.win
-    o.CV = csg.CV
-    o.dt = csg.dt
-    o.tsp = csg.tsp[0]
-    o.freq = csg.freq
-    o.Sxx_avg = csg.Sxx_avg[0]
-    o.Sxx_std = csg.Sxx_std[0]
-    o.Sxx_err = csg.Sxx_err[0]
-    o.Syy_avg = csg.Syy_avg[0]
-    o.Syy_std = csg.Syy_std[0]
-    o.Syy_err = csg.Syy_err[0]
-    o.Sxy_avg = csg.Sxy_avg[0]
-    o.Sxy_std = csg.Sxy_std[0]
-    o.Sxy_err = csg.Sxy_err[0]
-    o.Sxy_Re_std = csg.Sxy_Re_std[0]
-    o.Sxy_Re_err = csg.Sxy_Re_err[0]
-    o.Sxy_Im_std = csg.Sxy_Im_std[0]
-    o.Sxy_Im_err = csg.Sxy_Im_err[0]
-    o.coh_sq = csg.coh_sq[0]
-    o.coh_sq_err = csg.coh_sq_err[0]
-    o.phase = csg.phase[0]
-    o.phase_err = csg.phase_err[0]
-
-    return o
-
-
 def ACFfit(x, a, sigma, bck):
     return a*np.exp(-np.log(2)*(x/sigma)**2) + bck
 
-
 def CCFfit(x, a, delay, sigma, bck):
     return a*np.exp(-np.log(2)*((x-delay)/sigma)**2) + bck
-
 
 def TauCalc(popt, ccfx, tlags):
 
@@ -2076,865 +2991,9 @@ def TauCalc(popt, ccfx, tlags):
 
 
 
-def Nens_from_dtout(dtout, dt, Nfft=2**10, OVR=0.5):
 
-    Nov = int(Nfft * OVR)
-    sampledatlen = int(np.round(dtout / dt))
-    Nens = NEnsFromNSample(Nfft, Nov, sampledatlen)
 
-    return Nens
-
-
-def power_spectrogram_2s_by_dtout(tt, xx, dt, dtout=1e-3, Nfft=2**10, OVR=0.5, window="hann"):
-
-    Nens = Nens_from_dtout(dtout=dtout, dt=dt, Nfft=Nfft, OVR=OVR)
-    print(f"Nens: {Nens}")
-    Nov = int(Nfft * OVR)
-    tisp, freq, psd, psd_std, psd_err = power_spectrogram_2s_v4(tt, xx, dt, NFFT=Nfft, window=window, NEns=Nens, NOV=Nov)
-
-    return tisp, freq, psd, psd_std, psd_err
-
-
-"""
-# def matrix_for_1stDerivative_by_5pointsStencil_finiteDiff(Ndat, h):
-
-#     Mstencil = np.zeros((Ndat, Ndat))
-#     np.fill_diagonal(Mstencil[1:], -8)
-#     np.fill_diagonal(Mstencil[2:], 1)
-#     np.fill_diagonal(Mstencil[:, 1:], 8)
-#     np.fill_diagonal(Mstencil[:, 2:], -1)
-
-#     Mstencil[0, :] = 0
-#     Mstencil[1, :] = 0
-#     Mstencil[-1, :] = 0
-#     Mstencil[-2, :] = 0
-
-#     Mstencil /= 12 * h
-
-#     return Mstencil
-
-
-# def function_of_1stDerivative_by_5pointsStencil_finiteDiff(x1d, h):
-#     return (1 * x1d[0] - 8 * x1d[1] + 8 * x1d[3] - 1 * x1d[4]) / (12 * h)
-"""
-
-def firstDerivative_by_5pointsStencil_finiteDiff(tt, xx):
-
-    dt = tt[1] - tt[0]
-
-    xdot = (np.roll(xx, 2, axis=-1) - 8 * np.roll(xx, 1, axis=-1) + 8 * np.roll(xx, -1, axis=-1) - np.roll(xx, -2, axis=-1)) / (12 * dt)
-    xdot = xdot[2: -2]
-    t_short = tt[2: -2]
-
-    return t_short, xdot
-
-
-def lagtime_from_crossphase(freq, crossphase, crossphase_err, Nfit):
-
-    idxs = make_idxs_for_rolling(crossphase.shape[-1], Nfit)
-    freq_ext = np.tile(freq, np.append(crossphase.shape[:-1], 1))
-    freq_roll = rearange_dat_for_rolling(freq, idxs)
-    freq_ext_roll = rearange_dat_for_rolling(freq_ext, idxs)
-    freq_avg = np.average(freq_roll, axis=-1)
-    crossphase_roll = rearange_dat_for_rolling(crossphase, idxs)
-    crossphase_err_roll = rearange_dat_for_rolling(crossphase_err, idxs)
-
-    prms, errs, sigma_y, yHut, yHutErr = polyN_LSM_v2(freq_ext_roll, crossphase_roll, 1, crossphase_err_roll)
-    grad = prms[0]
-    grad_err = errs[0]
-
-    lagtime = grad / (2*np.pi)
-    lagtime_err = grad_err / (2*np.pi)
-
-    return freq_avg, lagtime, lagtime_err
-
-
-def phasederivative(phase, dt):
-    return firstDerivative_by_5pointsStencil_finiteDiff(phase, dt)
-
-
-def pulsepair(t, iq, Nsample=100, ovr=0.5):
-
-    dt = t[1] - t[0]
-    Nov = int(Nsample*ovr)
-    Ndat = len(t)
-    Nout = NspFromNdat(Nsample, Nov, Ndat)
-    idxs = make_idxs_for_spectrogram_wo_EnsembleAVG(Nsample, Nov, Nout)
-
-    tout = time_for_spectrogram_wo_ensembleAVG(t, idxs)
-    iqtmp = iq[idxs]
-    re = np.real(iqtmp)
-    im = np.imag(iqtmp)
-
-    reacf = np.sum(np.delete(re * np.roll(re, -1, axis=-1) + im * np.roll(im, -1, axis=-1), -1, axis=-1), axis=-1)
-    imacf = np.sum(np.delete(re * np.roll(im, -1, axis=-1) - np.roll(re, -1, axis=-1) * im, -1, axis=-1), axis=-1)
-    iqacf = reacf + 1.j * imacf
-    acf0 = np.average(np.real(iqtmp*np.conjugate(iqtmp)), axis=-1)
-
-    fd = 1 / (2*np.pi*dt) * np.angle(iqacf)
-    fdstd = 1 / (np.sqrt(2) * np.pi * dt) * np.sqrt(1-(np.abs(iqacf))/acf0)
-
-    o = struct()
-    o.t = tout
-    o.fd = fd
-    o.fdstd = fdstd
-
-    return o
-
-
-def nonaveragedBiSpectrum(X1, X2, X3):
-
-    X2X1 = X2 * X1
-    X3Conj = np.conjugate(X3)
-    X2X1X3Conj = X2X1 * X3Conj
-
-    return X2X1X3Conj
-
-
-def biSpectrum(X1, X2, X3):
-
-    X2X1X3Conj = nonaveragedBiSpectrum(X1, X2, X3)
-
-    BSpec = np.average(X2X1X3Conj, axis=0)
-    BSpecStd = np.std(X2X1X3Conj, axis=0, ddof=1)
-    BSpecReStd = np.std(np.real(X2X1X3Conj), axis=0, ddof=1)
-    BSpecImStd = np.std(np.imag(X2X1X3Conj), axis=0, ddof=1)
-
-    return BSpec, BSpecStd, BSpecReStd, BSpecImStd
-
-
-def biCoherenceSq(BSpec, BSpecStd, X1, X2, X3, NFFTs, NEns, NOVs):
-
-    proc.suggestNewVer(2, 'biCoherenceSq')
-
-    CV_X2X1, CV_X3 = CVForBiSpecAna(NFFTs, NEns, NOVs)
-
-    X2X1 = X2 * X1
-    X2X1AbsSq = np.abs(X2X1) ** 2
-    X2X1AbsSqAvg = np.average(X2X1AbsSq, axis=0)
-    X2X1AbsSqStd = np.std(X2X1AbsSq, axis=0, ddof=1)
-    X2X1AbsSqRer = X2X1AbsSqStd / X2X1AbsSqAvg * CV_X2X1
-
-    X3AbsSq = np.abs(X3) ** 2
-    X3AbsSqAvg = np.average(X3AbsSq, axis=0)
-    X3AbsSqStd = np.std(X3AbsSq, axis=0, ddof=1)
-    X3AbsSqRer = X3AbsSqStd / X3AbsSqAvg * CV_X3
-
-    BSpecAbsSq = np.abs(BSpec) ** 2
-    BSpecAbsSqStd = 2 * np.abs(BSpec) * BSpecStd
-    BSpecAbsSqRer = BSpecAbsSqStd / BSpecAbsSq
-
-    biCohSq = BSpecAbsSq / (X2X1AbsSqAvg * X3AbsSqAvg)
-    biCohSqRer = np.sqrt(BSpecAbsSqRer ** 2 + X2X1AbsSqRer ** 2 + X3AbsSqRer ** 2)
-    biCohSqErr = biCohSq * biCohSqRer
-
-    return biCohSq, biCohSqErr
-
-
-def biCoherenceSq_v2(BSpec, BSpecStd, X1, X2, X3, NEns):
-
-    CV = 1. / NEns
-
-    X2X1 = X2 * X1
-    X2X1AbsSq = np.abs(X2X1) ** 2
-    X2X1AbsSqAvg = np.average(X2X1AbsSq, axis=0)
-    X2X1AbsSqStd = np.std(X2X1AbsSq, axis=0, ddof=1)
-    X2X1AbsSqRer = X2X1AbsSqStd / X2X1AbsSqAvg * CV
-
-    X3AbsSq = np.abs(X3) ** 2
-    X3AbsSqAvg = np.average(X3AbsSq, axis=0)
-    X3AbsSqStd = np.std(X3AbsSq, axis=0, ddof=1)
-    X3AbsSqRer = X3AbsSqStd / X3AbsSqAvg * CV
-
-    BSpecAbsSq = np.abs(BSpec) ** 2
-    BSpecAbsSqStd = 2 * np.abs(BSpec) * BSpecStd
-    BSpecAbsSqRer = BSpecAbsSqStd / BSpecAbsSq * CV
-
-    biCohSq = BSpecAbsSq / (X2X1AbsSqAvg * X3AbsSqAvg)
-    biCohSqRer = np.sqrt(BSpecAbsSqRer ** 2 + X2X1AbsSqRer ** 2 + X3AbsSqRer ** 2)
-    biCohSqErr = biCohSq * biCohSqRer
-
-    return biCohSq, biCohSqErr
-
-
-def biPhase(BSpec, BSpecReStd, BSpecImStd):
-
-    proc.suggestNewVer(2, 'biPhase')
-
-    BSpecRe = np.real(BSpec)
-    BSpecIm = np.imag(BSpec)
-
-    BSpecReRer = BSpecReStd / BSpecRe
-    BSpecImRer = BSpecImStd / BSpecIm
-
-    BSpecImRe = BSpecIm / BSpecRe
-    BSpecImReRer = np.sqrt(BSpecImRer ** 2 + BSpecReRer ** 2)
-    BSpecImReErr = np.abs(BSpecImRe * BSpecImReRer)
-    biPhs = np.arctan2(BSpecIm, BSpecRe)
-    biPhsErr = 1. / (1. + BSpecImRe ** 2) * BSpecImReErr
-
-    return biPhs, biPhsErr
-
-
-def biPhase_v2(BSpec, BSpecReStd, BSpecImStd, NEns):
-
-    CV = 1./np.sqrt(NEns)
-
-    BSpecRe = np.real(BSpec)
-    BSpecIm = np.imag(BSpec)
-
-    BSpecReRer = BSpecReStd / BSpecRe * CV
-    BSpecImRer = BSpecImStd / BSpecIm * CV
-
-    BSpecImRe = BSpecIm / BSpecRe
-    BSpecImReRer = np.sqrt(BSpecImRer ** 2 + BSpecReRer ** 2)
-    BSpecImReErr = np.abs(BSpecImRe * BSpecImReRer)
-    biPhs = np.arctan2(BSpecIm, BSpecRe)
-    biPhsErr = 1. / (1. + BSpecImRe ** 2) * BSpecImReErr
-
-    return biPhs, biPhsErr
-
-
-def makeIdxsForAutoBiSpectrum(NFFT):
-
-    idxf0 = int(NFFT / 2 + 0.5)
-    idxMx1 = np.tile(np.arange(NFFT), (NFFT, 1))
-    idxMx2 = idxMx1.T
-    coefMx1 = idxMx1 - idxf0
-    coefMx2 = idxMx2 - idxf0
-    coefMx3 = coefMx1 + coefMx2
-    idxMx3 = coefMx3 + idxf0
-    idxNan = np.where(((idxMx3 < 0) | (idxMx3 >= NFFT)))
-    idxMx3[idxNan] = False
-
-    return idxMx3, idxNan
-
-
-def makeIdxsForCrossBiSpectrum(NFFTx, NFFTy, NFFTz):
-
-    idxf0x = NFFTx // 2
-    idxf0y = NFFTy // 2
-    idxf0z = NFFTz // 2
-
-    idxMx1 = np.tile(np.arange(NFFTx), (NFFTy, 1))
-    idxMx2 = np.tile(np.arange(NFFTy), (NFFTx, 1)).T
-    coefMx1 = idxMx1 - idxf0x
-    coefMx2 = idxMx2 - idxf0y
-    coefMx3 = coefMx1 + coefMx2
-    idxMx3 = coefMx3 + idxf0z
-    idxNan = np.where(((idxMx3 < 0) | (idxMx3 >= NFFTz)))
-    idxMx3[idxNan] = 0
-
-    del idxMx1
-    del idxMx2
-    del coefMx1
-    del coefMx2
-    del coefMx3
-    gc.collect()
-
-    return idxMx3, idxNan
-
-
-def autoBiSpectralAnalysis(freq, XX, NFFT, NEns, NOV):
-
-    idxMx3, idxNan = makeIdxsForAutoBiSpectrum(NFFT)
-
-    X1 = np.reshape(XX, (NEns, 1, NFFT))
-    X2 = np.reshape(XX, (NEns, NFFT, 1))
-    X3 = XX[:, idxMx3]
-    BSpec, BSpecStd, BSpecReStd, BSpecImStd = biSpectrum(X1, X2, X3)
-
-    NFFTs = (NFFT, NFFT, NFFT)
-
-    biCohSq, biCohSqErr = biCoherenceSq(BSpec, BSpecStd, X1, X2, X3, NFFTs, NEns, NOV)
-    biPhs, biPhsErr = biPhase(BSpec, BSpecReStd, BSpecImStd)
-
-    # symmetry
-    freq1 = np.tile(freq, (NFFT, 1))
-    freq2 = freq1.T
-    # idxNan2 = np.where((freq2 >= freq1) | (freq2 < - 0.5 * freq1))
-    idxNan2 = np.where(freq2 >= freq1)
-
-    biCohSq[idxNan] = np.nan
-    biCohSqErr[idxNan] = np.nan
-    biPhs[idxNan] = np.nan
-    biPhsErr[idxNan] = np.nan
-    biCohSq[idxNan2] = np.nan
-    biCohSqErr[idxNan2] = np.nan
-    biPhs[idxNan2] = np.nan
-    biPhsErr[idxNan2] = np.nan
-
-    return biCohSq, biCohSqErr, biPhs, biPhsErr
-
-
-def crossBiSpecAna(freqs, XX, YY, ZZ, NFFTs, NEns, NOVs):
-
-    proc.suggestNewVer(2, 'crossBiSpecAna')
-
-    freqx, freqy, freqz = freqs
-
-    NFFTx, NFFTy, NFFTz = NFFTs
-    NOVx, NOVy, NOVz = NOVs
-    idxMxz, idxNan = makeIdxsForCrossBiSpectrum(NFFTs)
-
-    XX = np.reshape(XX, (NEns, 1, NFFTx))
-    YY = np.reshape(YY, (NEns, NFFTy, 1))
-    ZZ = ZZ[:, idxMxz]
-
-    BSpec, BSpecStd, BSpecReStd, BSpecImStd = biSpectrum(XX, YY, ZZ)
-
-    biCohSq, biCohSqErr = biCoherenceSq_v2(BSpec, BSpecStd, XX, YY, ZZ, NEns)
-    biPhs, biPhsErr = biPhase_v2(BSpec, BSpecReStd, BSpecImStd, NEns)
-
-    # symmetry
-    freq1 = np.tile(freqx, (NFFTy, 1))
-    freq2 = np.tile(freqy, (NFFTx, 1)).T
-    # idxNan2 = np.where((freq2 >= freq1) | (freq2 < - 0.5 * freq1))
-    idxNan2 = np.where(freq2 >= freq1)
-
-    biCohSq[idxNan] = np.nan
-    biCohSqErr[idxNan] = np.nan
-    biPhs[idxNan] = np.nan
-    biPhsErr[idxNan] = np.nan
-    biCohSq[idxNan2] = np.nan
-    biCohSqErr[idxNan2] = np.nan
-    biPhs[idxNan2] = np.nan
-    biPhsErr[idxNan2] = np.nan
-
-    return biCohSq, biCohSqErr, biPhs, biPhsErr
-
-
-def crossBiSpecAna_v2(freqs, XX0, YY0, ZZ0, NFFTs, NEns, NOVs, iscomplex=False):
-
-    freqx, freqy, freqz = freqs
-    NFFTx, NFFTy, NFFTz = NFFTs
-    NOVx, NOVy, NOVz = NOVs
-    idxMxz, idxNan = makeIdxsForCrossBiSpectrum(NFFTs)
-
-    XX = np.reshape(XX0, (NEns, 1, NFFTx))
-    YY = np.reshape(YY0, (NEns, NFFTy, 1))
-    ZZ = ZZ0[:, idxMxz]
-
-    BSpec, BSpecStd, BSpecReStd, BSpecImStd = biSpectrum(XX, YY, ZZ)
-
-    biCohSq, biCohSqErr = biCoherenceSq_v2(BSpec, BSpecStd, XX, YY, ZZ, NEns)
-    biPhs, biPhsErr = biPhase_v2(BSpec, BSpecReStd, BSpecImStd, NEns)
-
-    biCohSq[idxNan] = np.nan
-    biCohSqErr[idxNan] = np.nan
-    biPhs[idxNan] = np.nan
-    biPhsErr[idxNan] = np.nan
-
-    # symmetry
-    freq1 = np.tile(freqx, (NFFTy, 1))
-    freq2 = np.tile(freqy, (NFFTx, 1)).T
-
-    if (XX0 == YY0).all():
-        if iscomplex:
-            idxNan2 = np.where(freq2 > freq1)
-        else:
-            idxNan2 = np.where((freq2 > freq1) | (freq1 < 0) | (freq2 < - freq1))
-    else:
-        if iscomplex:
-            idxNan2 = []
-        else:
-            idxNan2 = np.where((freq1 < 0) | (freq2 < 0))
-
-    biCohSq[idxNan2] = np.nan
-    biCohSqErr[idxNan2] = np.nan
-    biPhs[idxNan2] = np.nan
-    biPhsErr[idxNan2] = np.nan
-
-
-    return biCohSq, biCohSqErr, biPhs, biPhsErr
-
-
-def cross_bispectrum(freqx, freqy, XX0, YY0, ZZ0, NFFTx, NFFTy, NFFTz, NEns,
-                     Fsx, Fsy, Fsz, flimx=None, flimy=None):
-
-    idxMxz, _ = makeIdxsForCrossBiSpectrum(NFFTx, NFFTy, NFFTz)
-
-    freq1 = np.repeat(a=freqx[np.newaxis, :], repeats=NFFTy, axis=0)
-    freq2 = np.repeat(a=freqy[:, np.newaxis], repeats=NFFTx, axis=1)
-
-    XX = np.repeat(a=XX0[:, np.newaxis, :], repeats=NFFTy, axis=1)
-    YY = np.repeat(a=YY0[:, :, np.newaxis], repeats=NFFTx, axis=2)
-    ZZ = ZZ0[:, idxMxz]
-
-    # limitation
-    if flimx is not None:
-        fidx_x = np.where(np.abs(freqx) < flimx)[0]
-        freqx = freqx[fidx_x]
-        freq1 = freq1[:, fidx_x]
-        freq2 = freq2[:, fidx_x]
-        XX = XX[:, :, fidx_x]
-        ZZ = ZZ[:, :, fidx_x]
-    if flimy is not None:
-        fidx_y = np.where(np.abs(freqy) < flimy)[0]
-        freqy = freqy[fidx_y]
-        freq1 = freq1[fidx_y, :]
-        freq2 = freq2[fidx_y, :]
-        YY = YY[:, fidx_y, :]
-        ZZ = ZZ[:, fidx_y, :]
-
-    # symmetry
-    iscomplex = np.iscomplex(XX).any()
-
-    if (XX0 == YY0).all():
-        fidx_x = np.where(freqx >= - 0.5 * 0.5 * Fsx)[0]
-        fidx_y = np.where(freqy <= 0.5 * 0.5 * Fsy)[0]
-        if not iscomplex:
-            fidx_x = np.where(freqx >= 0)[0]
-            fidx_y = np.where(freqy <= 0.5 * 0.5 * Fsy)[0]
-            if (XX0 == ZZ0).all():
-                fidx_y = np.where((freqy <= 0.5 * 0.5 * Fsy)&(freqy >= 0.5 * 0.5 * Fsy))[0]
-
-        freqx = freqx[fidx_x]
-        freqy = freqy[fidx_y]
-        freq1 = freq1[:, fidx_x]
-        freq1 = freq1[fidx_y, :]
-        freq2 = freq2[:, fidx_x]
-        freq2 = freq2[fidx_y, :]
-        XX = XX[:, :, fidx_x]
-        YY = YY[:, fidx_y, :]
-        ZZ = ZZ[:, :, fidx_x]
-        ZZ = ZZ[:, fidx_y, :]
-
-    # assign nan value
-    if (XX0 == YY0).all():
-        idxNan = np.where((np.abs(freq2 + freq1) > Fsz / 2) | (freq2 > freq1))
-        if not iscomplex:
-            idxNan = np.where((np.abs(freq2 + freq1) > Fsz / 2) | (freq2 > freq1) | (freq2 < - freq1))
-            if (XX0 == ZZ0).all():
-                idxNan = np.where((np.abs(freq2 + freq1) > Fsz / 2) | (freq2 > freq1)
-                                  | (freq2 < - freq1) | (freq2 < - 0.5 * freq1))
-    else:
-        idxNan = np.where(np.abs(freq2 + freq1) > Fsz / 2)
-
-    BSpec, BSpecStd, BSpecReStd, BSpecImStd = biSpectrum(XX, YY, ZZ)
-    biCohSq, biCohSqErr = biCoherenceSq_v2(BSpec, BSpecStd, XX, YY, ZZ, NEns)
-    biPhs, biPhsErr = biPhase_v2(BSpec, BSpecReStd, BSpecImStd, NEns)
-
-    biCohSq[idxNan] = np.nan
-    biCohSqErr[idxNan] = np.nan
-    biPhs[idxNan] = np.nan
-    biPhsErr[idxNan] = np.nan
-
-    return freqx, freqy, biCohSq, biCohSqErr, biPhs, biPhsErr
-
-
-def cross_bispectrum_at_f3(f3_at, freqx, freqy, freqz, XX0, YY0, ZZ0, NFFTx, NFFTy, NFFTz, NEns,
-                           Fsx, Fsy, flimx=None, flimy=None):
-
-    idxMxz, _ = makeIdxsForCrossBiSpectrum(NFFTx, NFFTy, NFFTz)
-    freq3 = freqz[idxMxz]
-
-    XX = XX0
-    YY = YY0
-    ZZ = ZZ0[:, idxMxz]
-
-
-    # limitation
-    if flimx is not None:
-        fidx_x = np.where(np.abs(freqx) < flimx)[0]
-        freqx = freqx[fidx_x]
-        freq3 = freq3[:, fidx_x]
-        XX = XX[:, fidx_x]
-        ZZ = ZZ[:, :, fidx_x]
-    if flimy is not None:
-        fidx_y = np.where(np.abs(freqy) < flimy)[0]
-        freqy = freqy[fidx_y]
-        freq3 = freq3[fidx_y, :]
-        YY = YY[:, fidx_y]
-        ZZ = ZZ[:, fidx_y, :]
-
-    # symmetry
-    iscomplex = np.iscomplex(XX).any()
-
-    if (XX0 == YY0).all():
-        fidx_x = np.where(freqx >= - 0.5 * 0.5 * Fsx)[0]
-        fidx_y = np.where(freqy <= 0.5 * 0.5 * Fsy)[0]
-        if not iscomplex:
-            fidx_x = np.where(freqx >= 0)[0]
-            fidx_y = np.where(freqy <= 0.5 * 0.5 * Fsy)[0]
-            if (XX0 == ZZ0).all():
-                fidx_y = np.where((freqy <= 0.5 * 0.5 * Fsy)&(freqy >= 0.5 * 0.5 * Fsy))[0]
-
-        freqx = freqx[fidx_x]
-        freqy = freqy[fidx_y]
-        freq3 = freq3[:, fidx_x]
-        freq3 = freq3[fidx_y, :]
-        XX = XX[:, fidx_x]
-        YY = YY[:, fidx_y]
-        ZZ = ZZ[:, :, fidx_x]
-        ZZ = ZZ[:, fidx_y, :]
-
-    f3_at = freqz[np.argmin(np.abs(freqz - f3_at))]
-    idxs_f3_at = np.where(freq3 == f3_at)
-
-    XX = XX[:, idxs_f3_at[1]]
-    YY = YY[:, idxs_f3_at[0]]
-    ZZ = ZZ[:, idxs_f3_at[0], idxs_f3_at[1]]
-
-    BSpec, BSpecStd, BSpecReStd, BSpecImStd = biSpectrum(XX, YY, ZZ)
-    biCohSq, biCohSqErr = biCoherenceSq_v2(BSpec, BSpecStd, XX, YY, ZZ, NEns)
-    biPhs, biPhsErr = biPhase_v2(BSpec, BSpecReStd, BSpecImStd, NEns)
-
-    return f3_at, biCohSq, biCohSqErr, biPhs, biPhsErr
-
-
-def cross_bispectrum_in_f_range(fmin, fmax, freqx, freqy, freqz, XX0, YY0, ZZ0, NFFTx, NFFTy, NFFTz, NEns,
-                                Fsx, Fsy, flimx=None, flimy=None):
-    # flimx, flimy: int, float as fmax or tuple, list as (fmin, fmax), [fmin, fmax]
-
-    idxMxz, _ = makeIdxsForCrossBiSpectrum(NFFTx, NFFTy, NFFTz)
-    freq3 = freqz[idxMxz]
-
-    XX = XX0
-    YY = YY0
-    ZZ = ZZ0[:, idxMxz]
-
-    # limitation
-    if flimx is not None:
-        if isinstance(flimx, tuple) or isinstance(flimx, list):
-            fidx_x = np.where((np.abs(freqx) < flimx[1]) & (np.abs(freqx) > flimx[0]))[0]
-        else:
-            fidx_x = np.where(np.abs(freqx) < flimx)[0]
-        freqx = freqx[fidx_x]
-        freq3 = freq3[:, fidx_x]
-        XX = XX[:, fidx_x]
-        ZZ = ZZ[:, :, fidx_x]
-    if flimy is not None:
-        if isinstance(flimy, tuple) or isinstance(flimy, list):
-            fidx_y = np.where((np.abs(freqy) < flimy[1]) & (np.abs(freqy) > flimy[0]))[0]
-        else:
-            fidx_y = np.where(np.abs(freqy) < flimy)[0]
-        freqy = freqy[fidx_y]
-        freq3 = freq3[fidx_y, :]
-        YY = YY[:, fidx_y]
-        ZZ = ZZ[:, fidx_y, :]
-
-    # symmetry
-    iscomplex = np.iscomplex(XX).any()
-
-    if (XX0 == YY0).all():
-        fidx_x = np.where(freqx >= - 0.5 * 0.5 * Fsx)[0]
-        fidx_y = np.where(freqy <= 0.5 * 0.5 * Fsy)[0]
-        if not iscomplex:
-            fidx_x = np.where(freqx >= 0)[0]
-            fidx_y = np.where(freqy <= 0.5 * 0.5 * Fsy)[0]
-            if (XX0 == ZZ0).all():
-                fidx_y = np.where((freqy <= 0.5 * 0.5 * Fsy)&(freqy >= 0.5 * 0.5 * Fsy))[0]
-
-        freqx = freqx[fidx_x]
-        freqy = freqy[fidx_y]
-        freq3 = freq3[:, fidx_x]
-        freq3 = freq3[fidx_y, :]
-        XX = XX[:, fidx_x]
-        YY = YY[:, fidx_y]
-        ZZ = ZZ[:, :, fidx_x]
-        ZZ = ZZ[:, fidx_y, :]
-
-    idxs_f3_at = np.where((np.abs(freq3) > fmin) & (np.abs(freq3) < fmax))
-
-    XX = XX[:, idxs_f3_at[1]]
-    YY = YY[:, idxs_f3_at[0]]
-    ZZ = ZZ[:, idxs_f3_at[0], idxs_f3_at[1]]
-
-    BSpec, BSpecStd, BSpecReStd, BSpecImStd = biSpectrum(XX, YY, ZZ)
-    biCohSq, biCohSqErr = biCoherenceSq_v2(BSpec, BSpecStd, XX, YY, ZZ, NEns)
-    biPhs, biPhsErr = biPhase_v2(BSpec, BSpecReStd, BSpecImStd, NEns)
-
-    return biCohSq, biCohSqErr, biPhs, biPhsErr
-
-
-def cross_bispectral_analysis(xx, yy, zz, dtx, dty, dtz,
-                              NFFTx, NFFTy, NFFTz, flimx=None, flimy=None,
-                              OVR=0.5, window="hann"):
-
-    o = struct()
-
-    o.NFFTx = NFFTx
-    o.NFFTy = NFFTy
-    o.NFFTz = NFFTz
-    o.OVR = OVR
-    o.window = window
-
-    o.NOVx = int(NFFTx * OVR)
-    o.NOVy = int(NFFTy * OVR)
-    o.NOVz = int(NFFTz * OVR)
-
-    o.Tx = NFFTx * dtx  # Analysis time
-    o.Ty = NFFTy * dty  # Analysis time
-    o.Tz = NFFTz * dtz  # Analysis time
-    if o.Tx != o.Ty or o.Tx != o.Tz or o.Tz != o.Tx:
-        filename, lineno = proc.get_current_file_and_line()
-        print(f"file: {filename}, line: {lineno}")
-        print('Frequency bin widths are different. \n')
-        exit()
-
-    # Bi-Spectral Analysis
-    xidxs = sliding_window_view(np.arange(xx.size), NFFTx)[::NFFTx - o.NOVx]
-    o.NEns = xidxs.shape[-2]
-    o.xens = xx[xidxs]
-    o.xens = o.xens - o.xens.mean(axis=-1, keepdims=True)
-    o.winx, o.enbwx, o.CGx, o.CVx = getWindowAndCoefs(NFFTx, window, o.NEns)
-    o.freqx, o.XX = fourier_components_2s(o.xens, dtx, NFFTx, o.winx)
-
-    yidxs = sliding_window_view(np.arange(yy.size), NFFTy)[::NFFTy - o.NOVy]
-    o.yens = yy[yidxs]
-    o.yens = o.yens - o.yens.mean(axis=-1, keepdims=True)
-    o.winy, o.enbwy, o.CGy, o.CVy = getWindowAndCoefs(NFFTy, window, o.NEns)
-    o.freqy, o.YY = fourier_components_2s(o.yens, dty, NFFTy, o.winy)
-
-    zidxs = sliding_window_view(np.arange(zz.size), NFFTz)[::NFFTz - o.NOVz]
-    o.zens = zz[zidxs]
-    o.zens = o.zens - o.zens.mean(axis=-1, keepdims=True)
-    o.winz, o.enbwz, o.CGz, o.CVz = getWindowAndCoefs(NFFTz, window, o.NEns)
-    _, o.ZZ = fourier_components_2s(o.zens, dtz, NFFTz, o.winz)
-
-    o.freqx = o.freqx.astype(np.float32)
-    o.freqy = o.freqy.astype(np.float32)
-    o.XX = o.XX.astype(np.complex64)
-    o.YY = o.YY.astype(np.complex64)
-    o.ZZ = o.ZZ.astype(np.complex64)
-    o.freqx, o.freqy, o.biCohSq, o.biCohSqErr, o.biPhs, o.biPhsErr \
-        = cross_bispectrum(o.freqx, o.freqy, o.XX, o.YY, o.ZZ,
-                           NFFTx, NFFTy, NFFTz, o.NEns,
-                           1./dtx, 1./dty, 1./dtz, flimx=flimx, flimy=flimy)
-    o.biCohSqRer = o.biCohSqErr / o.biCohSq
-
-    return o
-
-
-def cross_bispectral_analysis_at_f3(f3_at, xx, yy, zz, dtx, dty, dtz,
-                                    NFFTx, NFFTy, NFFTz, flimx=None, flimy=None,
-                                    OVR=0.5, window="hann"):
-
-    o = struct()
-
-    o.f3_at = f3_at
-
-    o.NFFTx = NFFTx
-    o.NFFTy = NFFTy
-    o.NFFTz = NFFTz
-    o.OVR = OVR
-    o.window = window
-
-    o.NOVx = int(NFFTx * OVR)
-    o.NOVy = int(NFFTy * OVR)
-    o.NOVz = int(NFFTz * OVR)
-
-    o.Tx = NFFTx * dtx  # Analysis time
-    o.Ty = NFFTy * dty  # Analysis time
-    o.Tz = NFFTz * dtz  # Analysis time
-    if o.Tx != o.Ty or o.Tx != o.Tz or o.Tz != o.Tx:
-        filename, lineno = proc.get_current_file_and_line()
-        print(f"file: {filename}, line: {lineno}")
-        print('Frequency bin widths are different. \n')
-        exit()
-
-    # Bi-Spectral Analysis
-    xidxs = sliding_window_view(np.arange(xx.size), NFFTx)[::NFFTx - o.NOVx]
-    o.NEns = xidxs.shape[-2]
-    o.xens = xx[xidxs]
-    o.xens = o.xens - o.xens.mean(axis=-1, keepdims=True)
-    o.winx, o.enbwx, o.CGx, o.CVx = getWindowAndCoefs(NFFTx, window, o.NEns)
-    o.freqx, o.XX = fourier_components_2s(o.xens, dtx, NFFTx, o.winx)
-
-    yidxs = sliding_window_view(np.arange(yy.size), NFFTy)[::NFFTy - o.NOVy]
-    o.yens = yy[yidxs]
-    o.yens = o.yens - o.yens.mean(axis=-1, keepdims=True)
-    o.winy, o.enbwy, o.CGy, o.CVy = getWindowAndCoefs(NFFTy, window, o.NEns)
-    o.freqy, o.YY = fourier_components_2s(o.yens, dty, NFFTy, o.winy)
-
-    zidxs = sliding_window_view(np.arange(zz.size), NFFTz)[::NFFTz - o.NOVz]
-    o.zens = zz[zidxs]
-    o.zens = o.zens - o.zens.mean(axis=-1, keepdims=True)
-    o.winz, o.enbwz, o.CGz, o.CVz = getWindowAndCoefs(NFFTz, window, o.NEns)
-    o.freqz, o.ZZ = fourier_components_2s(o.zens, dtz, NFFTz, o.winz)
-
-    o.freqx = o.freqx.astype(np.float32)
-    o.freqy = o.freqy.astype(np.float32)
-    o.freqz = o.freqz.astype(np.float32)
-    o.XX = o.XX.astype(np.complex64)
-    o.YY = o.YY.astype(np.complex64)
-    o.ZZ = o.ZZ.astype(np.complex64)
-    o.f3_at, o.biCohSq, o.biCohSqErr, o.biPhs, o.biPhsErr \
-        = cross_bispectrum_at_f3(f3_at, o.freqx, o.freqy, o.freqz, o.XX, o.YY, o.ZZ,
-                                 NFFTx, NFFTy, NFFTz, o.NEns,
-                                 1./dtx, 1./dty, flimx=flimx, flimy=flimy)
-    o.biCohSq_total = np.sum(o.biCohSq)
-    o.biCohSq_stastd = o.biCohSq.size / o.NEns
-    o.biPhs_avg = np.average(o.biPhs)
-    o.biPhs_avg_err = np.sqrt(np.average(o.biPhsErr**2))
-
-    return o
-
-
-def cross_bispectral_analysis_in_f_range(fmin, fmax, xx, yy, zz, dtx, dty, dtz,
-                                         NFFTx, NFFTy, NFFTz, flimx=None, flimy=None,
-                                         OVR=0.5, window="hann", coef_OV=1.0):
-
-    o = struct()
-
-    o.fmin = fmin
-    o.fmax = fmax
-
-    o.NFFTx = NFFTx
-    o.NFFTy = NFFTy
-    o.NFFTz = NFFTz
-    o.OVR = OVR
-    o.window = window
-
-    o.NOVx = int(NFFTx * OVR)
-    o.NOVy = int(NFFTy * OVR)
-    o.NOVz = int(NFFTz * OVR)
-
-    o.Tx = NFFTx * dtx  # Analysis time
-    o.Ty = NFFTy * dty  # Analysis time
-    o.Tz = NFFTz * dtz  # Analysis time
-    if o.Tx != o.Ty or o.Tx != o.Tz or o.Tz != o.Tx:
-        filename, lineno = proc.get_current_file_and_line()
-        print(f"file: {filename}, line: {lineno}")
-        print('Frequency bin widths are different. \n')
-        exit()
-
-    # Bi-Spectral Analysis
-    xidxs = sliding_window_view(np.arange(xx.size), NFFTx)[::NFFTx - o.NOVx]
-    o.NEns = xidxs.shape[-2]
-    o.xens = xx[xidxs]
-    o.xens = o.xens - o.xens.mean(axis=-1, keepdims=True)
-    o.winx, o.enbwx, o.CGx, o.CVx = getWindowAndCoefs(NFFTx, window, o.NEns)
-    o.freqx, o.XX = fourier_components_2s(o.xens, dtx, NFFTx, o.winx)
-
-    yidxs = sliding_window_view(np.arange(yy.size), NFFTy)[::NFFTy - o.NOVy]
-    o.yens = yy[yidxs]
-    o.yens = o.yens - o.yens.mean(axis=-1, keepdims=True)
-    o.winy, o.enbwy, o.CGy, o.CVy = getWindowAndCoefs(NFFTy, window, o.NEns)
-    o.freqy, o.YY = fourier_components_2s(o.yens, dty, NFFTy, o.winy)
-
-    zidxs = sliding_window_view(np.arange(zz.size), NFFTz)[::NFFTz - o.NOVz]
-    o.zens = zz[zidxs]
-    o.zens = o.zens - o.zens.mean(axis=-1, keepdims=True)
-    o.winz, o.enbwz, o.CGz, o.CVz = getWindowAndCoefs(NFFTz, window, o.NEns)
-    o.freqz, o.ZZ = fourier_components_2s(o.zens, dtz, NFFTz, o.winz)
-
-    o.freqx = o.freqx.astype(np.float32)
-    o.freqy = o.freqy.astype(np.float32)
-    o.freqz = o.freqz.astype(np.float32)
-    o.XX = o.XX.astype(np.complex64)
-    o.YY = o.YY.astype(np.complex64)
-    o.ZZ = o.ZZ.astype(np.complex64)
-    o.biCohSq, o.biCohSqErr, o.biPhs, o.biPhsErr \
-        = cross_bispectrum_in_f_range(fmin, fmax, o.freqx, o.freqy, o.freqz, o.XX, o.YY, o.ZZ,
-                                      NFFTx, NFFTy, NFFTz, o.NEns,
-                                      1./dtx, 1./dty, flimx=flimx, flimy=flimy)
-    o.biCohSq_total = np.sum(o.biCohSq)
-    o.biCohSq_stastd = o.biCohSq.size / o.NEns * coef_OV
-    o.biPhs_avg = np.average(o.biPhs)
-    o.biPhs_avg_err = np.sqrt(np.average(o.biPhsErr**2))
-
-    return o
-
-
-def auto_bispectral_analysis(xx, dt, NFFT, OVR=0.5, window="hann", NEns=20):  # not completed
-
-    o = struct()
-
-    o.xx = xx
-    o.dt = dt
-    o.NFFT = NFFT
-    o.OVR = OVR
-    o.window = window
-    o.NEns = NEns
-
-    o.NOV = int(NFFT * OVR)
-
-    o.T = NFFT * dt  # Analysis time
-
-    # Bi-Spectral Analysis
-    o.xens = np.lib.stride_tricks.sliding_window_view(xx, window_shape=NFFT)[::NFFT - o.NOV]
-    o.xens = o.xens - o.xens.mean(axis=-1, keepdims=True)
-    o.win, o.enbw, o.CG, o.CV = getWindowAndCoefs(NFFT, window, NEns)
-    o.freq, o.XX = fourier_components_2s(o.xens, dt, NFFT, o.win)
-
-    o.biCohSq, o.biCohSqErr, o.biPhs, o.biPhsErr = cross_bispectrum(o.freq, o.freq, o.XX, o.XX, o.XX,
-                                                                    NFFT, NFFT, NFFT, NEns,
-                                                                    iscomplex=np.iscomplex(xx).any())
-    o.biCohSqRer = o.biCohSqErr / o.biCohSq
-
-    return o
-
-
-def autoBiSpecAna_v2(freq, X0, NFFT, NEns, NOV, iscomplex=False):
-
-    idxMxz, idxNan = makeIdxsForCrossBiSpectrum((NFFT, NFFT, NFFT))
-
-    XX = np.reshape(X0, (NEns, 1, NFFT))
-    YY = np.reshape(X0, (NEns, NFFT, 1))
-    ZZ = X0[:, idxMxz]
-
-    BSpec, BSpecStd, BSpecReStd, BSpecImStd = biSpectrum(XX, YY, ZZ)
-
-    biCohSq, biCohSqErr = biCoherenceSq_v2(BSpec, BSpecStd, XX, YY, ZZ, NEns)
-    biPhs, biPhsErr = biPhase_v2(BSpec, BSpecReStd, BSpecImStd, NEns)
-
-    biCohSq[idxNan] = np.nan
-    biCohSqErr[idxNan] = np.nan
-    biPhs[idxNan] = np.nan
-    biPhsErr[idxNan] = np.nan
-
-    # symmetry
-    freq1 = np.tile(freq, (NFFT, 1))
-    freq2 = np.tile(freq, (NFFT, 1)).T
-    if iscomplex:
-        idxNan2 = np.where(freq2 > freq1)
-    else:
-        idxNan2 = np.where((freq2 > freq1) | (freq1 < 0) | (freq2 < - freq1))
-
-    biCohSq[idxNan2] = np.nan
-    biCohSqErr[idxNan2] = np.nan
-    biPhs[idxNan2] = np.nan
-    biPhsErr[idxNan2] = np.nan
-
-    return biCohSq, biCohSqErr, biPhs, biPhsErr
-
-
-def average_bicoherence_at_f3(freq1, freq2, bicoherence):
-    N1 = len(freq1)
-    N2 = len(freq2)
-    dfreq = freq1[1] - freq1[0]
-    idxs = np.arange((N1 + N2) - 1) - (N1 - 1)
-    freq3 = dfreq * idxs
-    bicoh_f3 = np.array([np.nanmean(np.diagonal(bicoherence, offset=i)) for i in idxs])
-    return freq3, bicoh_f3
-
-
-def total_bicoherence(freq1, freq2, bicoherence):
-    N1 = len(freq1)
-    N2 = len(freq2)
-    dfreq = freq1[1] - freq1[0]
-    idxs = np.arange((N1 + N2) - 1) - (N1 - 1)
-    freq3 = dfreq * idxs
-    bicoh_f3 = np.array([np.nansum(np.diagonal(bicoherence, offset=i)) for i in idxs])
-    countarray = bicoherence
-    countarray[~np.isnan(countarray)] = 1
-    N_components = np.array([np.nansum(np.diagonal(countarray, offset=i)) for i in idxs])
-    return freq3, bicoh_f3, N_components
-
-
-def average_bicoherence_at_f3_withErr(freq1, freq2, bicoherence, bicoherence_Err):
-    N1 = len(freq1)
-    N2 = len(freq2)
-    dfreq = freq1[1] - freq1[0]
-    idxs = np.arange((N1 + N2) - 5) - (N1 - 3)
-    freq3 = dfreq * idxs
-    bicoh_f3 = np.array([np.nanmean(np.diagonal(np.flipud(bicoherence), offset=i)) for i in idxs])
-    bicoh_f3_err = np.array([np.sqrt(np.nanvar(np.diagonal(np.flipud(bicoherence), offset=i)) +
-                                     np.nanmean(np.diagonal(np.flipud(bicoherence_Err)**2, offset=i))) for i in idxs])
-    return freq3, bicoh_f3, bicoh_f3_err
-
+### Fitting ###
 
 def LSM1(x, y, y_err):
 
@@ -2965,7 +3024,6 @@ def LSM1(x, y, y_err):
     errs = np.reshape(errs, (Nt, 2)).T
 
     return prms, errs
-
 
 def poly1_LSM(x, y, y_err):
 
@@ -3004,7 +3062,6 @@ def poly1_LSM(x, y, y_err):
     errs = np.transpose(errs, axes=tuple(np.concatenate([others_ndim, np.arange(others_ndim)], axis=None)))
 
     return prms, errs
-
 
 def poly2_LSM(x, y, y_err):
 
@@ -3053,7 +3110,6 @@ def poly2_LSM(x, y, y_err):
 
     return prms, errs
 
-
 def polyN_LSM(x, y, y_err, polyN):
 
     proc.suggestNewVer(2)
@@ -3097,7 +3153,6 @@ def polyN_LSM(x, y, y_err, polyN):
     errs = np.transpose(errs, axes=tuple(np.concatenate([others_ndim, np.arange(others_ndim)], axis=None)))
 
     return prms, errs
-
 
 def polyN_LSM_v2(xx, yy, polyN, yErr=np.array([False])):
 
@@ -3149,7 +3204,6 @@ def polyN_LSM_v2(xx, yy, polyN, yErr=np.array([False])):
     errs = np.transpose(errs, axes=tuple(np.concatenate([others_ndim, np.arange(others_ndim)], axis=None)))
 
     return prms, errs, sigma_y, yHut, yHutErr
-
 
 """
 # def datMatrix_for_movingLLSM_from_dat1d(dat1d, Nfit):
@@ -3219,14 +3273,12 @@ def polyN_LSM_v2(xx, yy, polyN, yErr=np.array([False])):
 #     return datMat
 """
 
-
 def get_Xmatrix_forLLSM(xx, deg):
 
     tmp = np.array([xx ** i for i in np.flip(np.arange(deg + 1))])
     Xmat = np.transpose(tmp, np.append(np.arange(len(xx.shape)) + 1, 0))
 
     return Xmat
-
 
 def get_Xpsinv(WW, XX):
 
@@ -3238,7 +3290,6 @@ def get_Xpsinv(WW, XX):
     Xpsinv = np.matmul(XtWXinv, WXt)
 
     return Xpsinv
-
 
 """
 # def NthPolyfit_by_movingLLSM(xx, yy, Nfit, deg, y_err=np.array([False])):
@@ -3290,7 +3341,6 @@ def transposeLast2Dims(ndarray):
 
     return ndarrayT
 
-
 def turnLastDimToColumnVector(array):
 
     temp = list(array.shape)
@@ -3299,7 +3349,6 @@ def turnLastDimToColumnVector(array):
 
     return np.reshape(array, newShape)
 
-
 def turnLastColumnVectorToDim(array):
 
     temp = list(array.shape)
@@ -3307,7 +3356,6 @@ def turnLastColumnVectorToDim(array):
     newShape = tuple(temp)
 
     return np.reshape(array, newShape)
-
 
 def gauss_LS(x, y, y_err):
 
@@ -3373,7 +3421,6 @@ def gauss_LS(x, y, y_err):
 
     return popt, perr
 
-
 def gauss_LS_v2(x, y, y_err):
 
     Y = np.log(y)
@@ -3401,7 +3448,6 @@ def gauss_LS_v2(x, y, y_err):
 
     return popt, perr, y_hut, y_hut_err
 
-
 def gradient(R, reff, rho, dat, err, Nfit):
 
     Nt, NR = reff.shape
@@ -3427,7 +3473,6 @@ def gradient(R, reff, rho, dat, err, Nfit):
 
     return R_f, reff_f, rho_f, dat_grad, err_grad
 
-
 def make_idxs_for_MovingLSM(data_len, window_len):
 
     output_len = data_len - window_len + 1
@@ -3436,7 +3481,6 @@ def make_idxs_for_MovingLSM(data_len, window_len):
     output_idxs = output_idxs.T
 
     return output_idxs
-
 
 def make_idxs_for_rolling(data_len, window_len):
 
@@ -3447,7 +3491,6 @@ def make_idxs_for_rolling(data_len, window_len):
 
 
     return output_idxs
-
 
 def rearange_dat_for_rolling(xx, idxs):
 
@@ -3462,7 +3505,6 @@ def rearange_dat_for_rolling(xx, idxs):
         sys.exit()
 
     return x_roll
-
 
 def rolling_average(xx, yy, Nwin, y_err=np.array([False])):
 
@@ -3486,7 +3528,6 @@ def rolling_average(xx, yy, Nwin, y_err=np.array([False])):
 
     return x_avg, y_avg, y_std, y_err
 
-
 def gradient_by_roll_avg(xx, yy, Nwin, y_err=np.array([False])):
 
     if y_err.any():
@@ -3498,7 +3539,6 @@ def gradient_by_roll_avg(xx, yy, Nwin, y_err=np.array([False])):
     grad_y, grad_y_err = firstDerivative_by_5pointsStencil_finiteDiff(y_avg, y_err, dx)
 
     return x_avg, y_avg, y_std, y_err, grad_y, grad_y_err
-
 
 def gradient_reg_reff(reff, dat, err, Nfit):
 
@@ -3527,11 +3567,9 @@ def gradient_reg_reff(reff, dat, err, Nfit):
 
     return reff_f, dat_grad, err_grad, dat_reg, err_reg
 
-
 def repeat_and_add_lastdim(Array, Nrepeat):
     tmp = tuple(np.concatenate([np.array(Array.shape), 1], axis=None).astype(int))
     return np.repeat(np.reshape(Array, tmp), Nrepeat, axis=-1)
-
 
 def make_fitted_profiles_with_MovingPolyLSM(reff, raw_profiles, profiles_errs, window_len, poly=2):
 
@@ -3582,7 +3620,6 @@ def make_fitted_profiles_with_MovingPolyLSM(reff, raw_profiles, profiles_errs, w
 
     return reff_avgs, fitted_profiles, fitted_profiles_errs, fitted_profs_gradients, fitted_profs_grads_errs
 
-
 def make_fitted_profiles_with_MovingPolyLSM_v2(reff, raw_profiles, profiles_errs, window_len, poly=1):
 
     if reff.shape != raw_profiles.shape:
@@ -3606,7 +3643,6 @@ def make_fitted_profiles_with_MovingPolyLSM_v2(reff, raw_profiles, profiles_errs
 
     return reff_cent, fitted_profiles, fitted_profiles_errs, fitted_profs_gradients, fitted_profs_grads_errs
 
-
 def make_radialAxes_for_MovingPolyLSM(reff, window_len):
 
     # profiles_count, profile_len = reff.shape
@@ -3617,7 +3653,6 @@ def make_radialAxes_for_MovingPolyLSM(reff, window_len):
     reff_for_fitting = reff_for_Moving - repeat_and_add_lastdim(reff_avgs, window_len)
 
     return reff_avgs
-
 
 def make_fitted_profiles_with_MovingPolyLSM_1d(reff, raw_profiles, profiles_errs, window_len, poly=2):
 
@@ -3667,7 +3702,6 @@ def make_fitted_profiles_with_MovingPolyLSM_1d(reff, raw_profiles, profiles_errs
 
     return reff_avgs, fitted_profiles, fitted_profiles_errs, fitted_profs_gradients, fitted_profs_grads_errs
 
-
 def linInterp1dOf2dDat(x2d, y1d, x2d_ref):
 
     Nt, Ny = x2d.shape
@@ -3692,131 +3726,6 @@ def linInterp1dOf2dDat(x2d, y1d, x2d_ref):
     y2d_ref = (y2 - y1) / (x2 - x1) * (x2d_ref - x1) + y1
 
     return y2d_ref
-
-
-# 2022/3/28 define Tratio as Ti / Te ( from tau = Te / Ti )
-# 2022/6/14 redefine Tratio as Te / Ti
-def Tratio(Te, Ti, Te_err, Ti_err):
-
-    Tratio = Te / Ti
-
-    Te_rerr = Te_err / Te
-    Ti_rerr = Ti_err / Ti
-    Tratio_rerr = np.sqrt(Te_rerr ** 2 + Ti_rerr ** 2)
-    Tratio_err = Tratio * Tratio_rerr
-
-    return Tratio, Tratio_err
-
-
-"""
-# def weighted_average_1D(x1D, weight1D):
-#     Sw = np.sum(weight1D)
-#     wx = x1D * weight1D
-#     Swx = np.sum(wx)
-#     xm = Swx / Sw
-#     w2 = weight1D ** 2
-#     Sw2 = np.sum(w2)
-#     errsq = (x1D - np.full(x1D.T.shape, xm).T) ** 2
-#     werrsq = weight1D * errsq
-#     Swerrsq = np.sum(werrsq)
-#     U = Sw / (Sw ** 2 - Sw2) * Swerrsq
-#     xerr = np.sqrt(U)
-#
-#     wwerrsq = weight1D * werrsq
-#     Swwerrsq = np.sum(wwerrsq)
-#     Um = Sw / (Sw ** 2 - Sw2) * Swwerrsq / Sw
-#     xmerr = np.sqrt(Um)
-#
-#     return xm, xerr, xmerr
-#
-#
-# def weighted_average_2D(x2D, weight2D):
-#
-#     areNotNansInX = (~np.isnan(x2D)).astype(np.int8)
-#     areNotNansInWgt = (~np.isnan(weight2D)).astype(np.int8)
-#     x2D = np.nan_to_num(x2D) * areNotNansInWgt
-#     weight2D = np.nan_to_num(weight2D) * areNotNansInX
-#
-#     Sw = np.sum(weight2D, axis=1)
-#     wx = x2D * weight2D
-#     Swx = np.sum(wx, axis=1)
-#     xm = Swx / Sw
-#     w2 = weight2D ** 2
-#     Sw2 = np.sum(w2, axis=1)
-#     errsq = (x2D - np.full(x2D.T.shape, xm).T) ** 2
-#     werrsq = weight2D * errsq
-#     Swerrsq = np.sum(werrsq, axis=1)
-#     U = Sw / (Sw ** 2 - Sw2) * Swerrsq
-#     xerr = np.sqrt(U)
-#
-#     wwerrsq = weight2D * werrsq
-#     Swwerrsq = np.sum(wwerrsq, axis=1)
-#     Um = Sw / (Sw ** 2 - Sw2) * Swwerrsq / Sw
-#     xmerr = np.sqrt(Um)
-#
-#     return xm, xerr, xmerr
-"""
-
-
-def envelope(sig):
-    analytic_signal = signal.hilbert(sig)
-    amplitude_envelope = np.abs(analytic_signal)
-    return amplitude_envelope
-
-
-def amplitude(signal):
-
-	if np.iscomplexobj(signal):
-		amp = np.abs(signal)
-	else:
-		amp = envelope(signal)
-
-	return amp
-
-
-def phase(complex_signal, unwrap=True):
-    if unwrap:
-        phase = np.unwrap(np.angle(complex_signal)) 
-    else:
-        phase = np.angle(complex_signal)
-    return phase
-
-
-def turnLastDimToDiagMat(array):
-    rawdatshape = array.shape
-    last_dim_size = rawdatshape[-1]
-    result_array = np.zeros(rawdatshape + (last_dim_size,), dtype=array.dtype)
-    for i in range(last_dim_size):
-        result_array[..., i, i] = array[..., i]
-    return result_array
-
-
-def EMwaveInPlasma(freqin, ne, B):
-
-    e = 1.602176634e-19
-    const.me = 9.1093837e-31
-    const.eps0 = 8.85418782e-12
-
-    o = struct()
-    o.fin = freqin
-    o.ne = ne
-    o.B = B
-
-    o.omgp = np.sqrt(ne * e ** 2 / (const.eps0 * const.me))
-    o.omgc = e * B / const.me
-    o.omguh = np.sqrt(o.omgp ** 2 + o.omgc ** 2)
-    o.omgL = 0.5 * (-o.omgc + np.sqrt(o.omgc ** 2 + 4 * o.omgp ** 2))
-    o.omgR = 0.5 * (o.omgc + np.sqrt(o.omgc ** 2 + 4 * o.omgp ** 2))
-
-    o.omgin = 2 * np.pi * o.fin
-
-    o.NO = np.sqrt(1 - (o.omgp ** 2) / (o.omgin ** 2))
-    o.NX = np.sqrt((o.omgin ** 2 - o.omgL ** 2) *
-                   (o.omgin ** 2 - o.omgR ** 2) /
-                   (o.omgin ** 2 * (o.omgin ** 2 - o.omguh ** 2)))
-
-    return o
-
 
 def gradient_reg(R, reff, a99, dat, err, Nfit, poly):
 
@@ -4039,6 +3948,51 @@ def polyN_LSM_der(xx, yy, polyN=10, yErr=None, parity=None):  #parity = None, "e
     return o
 
 
+
+
+
+
+### Physical Quantity ###
+
+# 2022/3/28 define Tratio as Ti / Te ( from tau = Te / Ti )
+# 2022/6/14 redefine Tratio as Te / Ti
+def Tratio(Te, Ti, Te_err, Ti_err):
+
+    Tratio = Te / Ti
+
+    Te_rerr = Te_err / Te
+    Ti_rerr = Ti_err / Ti
+    Tratio_rerr = np.sqrt(Te_rerr ** 2 + Ti_rerr ** 2)
+    Tratio_err = Tratio * Tratio_rerr
+
+    return Tratio, Tratio_err
+
+def EMwaveInPlasma(freqin, ne, B):
+
+    e = 1.602176634e-19
+    const.me = 9.1093837e-31
+    const.eps0 = 8.85418782e-12
+
+    o = struct()
+    o.fin = freqin
+    o.ne = ne
+    o.B = B
+
+    o.omgp = np.sqrt(ne * e ** 2 / (const.eps0 * const.me))
+    o.omgc = e * B / const.me
+    o.omguh = np.sqrt(o.omgp ** 2 + o.omgc ** 2)
+    o.omgL = 0.5 * (-o.omgc + np.sqrt(o.omgc ** 2 + 4 * o.omgp ** 2))
+    o.omgR = 0.5 * (o.omgc + np.sqrt(o.omgc ** 2 + 4 * o.omgp ** 2))
+
+    o.omgin = 2 * np.pi * o.fin
+
+    o.NO = np.sqrt(1 - (o.omgp ** 2) / (o.omgin ** 2))
+    o.NX = np.sqrt((o.omgin ** 2 - o.omgL ** 2) *
+                   (o.omgin ** 2 - o.omgR ** 2) /
+                   (o.omgin ** 2 * (o.omgin ** 2 - o.omguh ** 2)))
+
+    return o
+
 # 2022/3/28 define R as Rax (changed from measured position)
 def Lscale(dat, dat_grad, Rax, err=None, err_grad=None):
 
@@ -4057,7 +4011,6 @@ def Lscale(dat, dat_grad, Rax, err=None, err_grad=None):
 
     return dat_L, err_L, dat_RpL, err_RpL
 
-
 def eta(dat_LT, err_LT, dat_Ln, err_Ln):
 
     rer_LT = np.abs(err_LT / dat_LT)
@@ -4069,7 +4022,6 @@ def eta(dat_LT, err_LT, dat_Ln, err_Ln):
 
     return dat_eta, err_eta
 
-
 def dMdreff(dMdR, dreffdR, dMdR_err=None):
     dMdreff = dMdR / dreffdR
     if dMdR_err is not None:
@@ -4077,7 +4029,6 @@ def dMdreff(dMdR, dreffdR, dMdR_err=None):
     else:
         dMdreff_err = None
     return dMdreff, dMdreff_err
-
 
 def gyroradius(T_keV, B_T, kind="electron", A=1, Z=1, T_err=None):
     # T [keV], B [T]
@@ -4105,73 +4056,8 @@ def gyroradius(T_keV, B_T, kind="electron", A=1, Z=1, T_err=None):
 
     return o
 
-
-def moving_average(data, window_size, mode="same"):
-    # window_size must be odd number.
-    # mode = "same", "valid"
-
-    if window_size == 1:
-        moving_average = data
-    else:
-        if mode == "same":
-            cumsum = np.insert(np.cumsum(np.append(np.insert(data, 0, [0] * ((window_size - 1)//2)),
-                                                   [0] * ((window_size - 1)//2))), 0, 0)
-        elif mode == "valid":
-            cumsum = np.insert(np.cumsum(data), 0, 0)
-        else:
-            print("please input correct mode. 'same' or 'valid'")
-            exit()
-        moving_average = (cumsum[window_size:] - cumsum[:-window_size]) / window_size
-
-    return moving_average
-
-
-def divide(nu, de, n_err=None, d_err=None):
-
-    quo = nu / de
-    if n_err is None:
-        if d_err is None:
-            quo_err = None
-        else:
-            quo_err = np.abs(d_err/de * quo)
-    else:
-        if d_err is None:
-            quo_err = np.abs(n_err/nu * quo)
-        else:
-            quo_err = np.abs(np.sqrt((n_err/nu)**2 + (d_err/de)**2) * quo)
-
-    return quo, quo_err
-
-
-def multiple(A, B, A_err=None, B_err=None):
-    pro = A * B
-    if A_err is None:
-        if B_err is None:
-            pro_err = None
-        else:
-            pro_err = np.abs(B_err / B * pro)
-    else:
-        if B_err is None:
-            pro_err = np.abs(A_err / A * pro)
-        else:
-            pro_err = np.abs(np.sqrt((A_err / A)**2 + (B_err / B)**2) * pro)
-    return pro, pro_err
-
-
-def power(x, e, x_err=None):
-
-    pow = x ** e
-    if x_err is None:
-        pow_err = None
-    else:
-        pow_err = np.abs(e * (x ** (e - 1)) * x_err)
-
-    return pow, pow_err
-
-
 def ion_mass(Zi, Ai):
     return const.mp * Zi + const.mn * (1 - Ai)
-
 
 def scaled_RI_growthrate(resistivity, dPdr, Zi, Ai, resistivity_err=None, dPdr_err=None):
 
@@ -4187,3 +4073,30 @@ def scaled_RI_growthrate(resistivity, dPdr, Zi, Ai, resistivity_err=None, dPdr_e
     gamma, gamma_err = multiple(A, B, A_err, B_err)
 
     return gamma, gamma_err
+
+def Er_vExB_1ion(Ti, LTi, Lne, Vtor, Vpol, Btor, Bpol, Zi,
+                 Ti_er, LTi_er, Lne_er, Vtor_er, Vpol_er, Btor_er, Bpol_er):
+    # [keV, keV/m, e19m^-3, e19m^-4, km/s, km/s, T, T, -]
+
+    gradTi, gradTi_er = inverseDat_andErr(LTi, LTi_er)
+    gradne, gradne_er = inverseDat_andErr(Lne, Lne_er)
+    sumgrad = gradTi + gradne
+    sumgrad_er = sumErr([gradTi_er, gradne_er])
+    Er_gradp = Ti * sumgrad / Zi
+    Er_gradp_err = multiRer([Ti, sumgrad], [Ti_er, sumgrad_er]) * np.abs(Er_gradp)
+    VtBp = Vtor * Bpol
+    VtBp_err = multiRer([Vtor, Bpol], [Vtor_er, Bpol_er]) * np.abs(VtBp)
+    VpBt = Vpol * Btor
+    VpBt_err = multiRer([Vpol, Btor], [Vpol_er, Btor_er]) * np.abs(VpBt)
+    Er_lorenz = - (VtBp - VpBt)
+    Er_lorenz_err = sumErr([VtBp_err, VpBt_err])
+    print(f'grad p term: {Er_gradp} pm {Er_gradp_err}')
+    print(f'lorenz term: {Er_lorenz} pm {Er_lorenz_err}')
+
+    Er = Er_gradp + Er_lorenz   # [k V/m = k N/C]
+    Er_err = sumErr([Er_gradp_err, Er_lorenz_err])
+
+    vExB = Er / Btor  # [km/s]
+    vExB_err = multiRer([Er, Btor], [Er_err, Btor_er]) * np.abs(vExB)
+
+    return Er, Er_err, vExB, vExB_err   # [kV/m, km/s]
