@@ -2241,67 +2241,73 @@ def bispectrum_in_f_range(fmin, fmax, freqx, freqy, freqz, XX0, YY0, ZZ0, NFFTx,
 
     return biCohSq, biCohSqErr, biPhs, biPhsErr
 
-def cross_bispectrum(xx, yy, zz, Fsx, Fsy, Fsz,
-                              NFFTx=1024, NFFTy=1024, NFFTz=1024, flimx=None, flimy=None,
-                              OVR=0.5, window="hann"):
+def cross_bispectrum(t1_s, t2_s, t3_s, d1, d2, d3, Fs1_Hz, Fs2_Hz, Fs3_Hz, tstart, tend, 
+                    NFFT1=2**10, NFFT2=2**10, NFFT3=2**10, ovr=0.5, window='hann', 
+                    flim1=None, flim2=None):
 
-    o = struct()
+    bs = struct()
+    bs.tstart = tstart
+    bs.tend = tend
 
-    o.NFFTx = NFFTx
-    o.NFFTy = NFFTy
-    o.NFFTz = NFFTz
-    o.OVR = OVR
-    o.window = window
+    bs.NFFT1 = NFFT1
+    bs.NFFT2 = NFFT2
+    bs.NFFT3 = NFFT3
+    bs.ovr = ovr
+    bs.window = window
+    bs.NOV1 = int(bs.NFFT1 * bs.ovr)
+    bs.NOV2 = int(bs.NFFT2 * bs.ovr)
+    bs.NOV3 = int(bs.NFFT3 * bs.ovr)
 
-    o.NOVx = int(NFFTx * OVR)
-    o.NOVy = int(NFFTy * OVR)
-    o.NOVz = int(NFFTz * OVR)
+    bs.flim1 = flim1
+    bs.flim2 = flim2
 
-    dtx = 1./Fsx
-    dty = 1./Fsy
-    dtz = 1./Fsz
+    _, datlist = proc.getTimeIdxsAndDats(t1_s, bs.tstart, bs.tend, [t1_s, d1])
+    _, bs.d1raw = datlist
+    _, datlist = proc.getTimeIdxsAndDats(t2_s, bs.tstart, bs.tend, [t2_s, d2])
+    _, bs.d2raw = datlist
+    _, datlist = proc.getTimeIdxsAndDats(t3_s, bs.tstart, bs.tend, [t3_s, d3])
+    _, bs.d3raw = datlist
+    
+    _dF1 = Fs1_Hz / bs.NFFT1
+    _dF2 = Fs2_Hz / bs.NFFT2
+    _dF3 = Fs3_Hz / bs.NFFT3
+    if np.isclose(_dF1, _dF2) and np.isclose(_dF2, _dF3) and np.isclose(_dF3, _dF1):
+        bs.dF = _dF1
+    else:
+        raise Exception('Time segment widths are different. \n')
 
-    o.Tx = NFFTx * dtx  # Analysis time
-    o.Ty = NFFTy * dty  # Analysis time
-    o.Tz = NFFTz * dtz  # Analysis time
-    if o.Tx != o.Ty or o.Tx != o.Tz or o.Tz != o.Tx:
-        filename, lineno = proc.get_current_file_and_line()
-        print(f"file: {filename}, line: {lineno}")
-        print('Frequency bin widths are different. \n')
-        exit()
+    _idxs1 = sliding_window_view(np.arange(bs.d1raw.size), bs.NFFT1)[::bs.NFFT1 - bs.NOV1]
+    bs.NEns = _idxs1.shape[-2]
+    bs.d1seg = bs.d1raw[_idxs1]
+    bs.d1seg = bs.d1seg - bs.d1seg.mean(axis=-1, keepdims=True)
+    bs.win1, _, _, _ = getWindowAndCoefs(bs.NFFT1, bs.window, bs.NEns1)
+    bs.f1, bs.fc1 = fourier_components_2s(bs.d1seg, 1./Fs1_Hz, bs.NFFT1, bs.win1)
 
-    # Bi-Spectral Analysis
-    xidxs = sliding_window_view(np.arange(xx.size), NFFTx)[::NFFTx - o.NOVx]
-    o.NEns = xidxs.shape[-2]
-    o.xens = xx[xidxs]
-    o.xens = o.xens - o.xens.mean(axis=-1, keepdims=True)
-    o.winx, o.enbwx, o.CGx, o.CVx = getWindowAndCoefs(NFFTx, window, o.NEns)
-    o.freqx, o.XX = fourier_components_2s(o.xens, dtx, NFFTx, o.winx)
+    _idxs2 = sliding_window_view(np.arange(bs.d2raw.size), bs.NFFT2)[::bs.NFFT2 - bs.NOV2]
+    bs.d2seg = bs.d2raw[_idxs2]
+    bs.d2seg = bs.d2seg - bs.d2seg.mean(axis=-1, keepdims=True)
+    bs.win2, _, _, _ = getWindowAndCoefs(bs.NFFT2, bs.window, bs.NEns2)
+    bs.f2, bs.fc2 = fourier_components_2s(bs.d2seg, 1./Fs2_Hz, bs.NFFT2, bs.win2)
 
-    yidxs = sliding_window_view(np.arange(yy.size), NFFTy)[::NFFTy - o.NOVy]
-    o.yens = yy[yidxs]
-    o.yens = o.yens - o.yens.mean(axis=-1, keepdims=True)
-    o.winy, o.enbwy, o.CGy, o.CVy = getWindowAndCoefs(NFFTy, window, o.NEns)
-    o.freqy, o.YY = fourier_components_2s(o.yens, dty, NFFTy, o.winy)
+    _idxs3 = sliding_window_view(np.arange(bs.d3raw.size), bs.NFFT3)[::bs.NFFT3 - bs.NOV3]
+    bs.NEns = _idxs3.shape[-2]
+    bs.d3seg = bs.d3raw[_idxs3]
+    bs.d3seg = bs.d3seg - bs.d3seg.mean(axis=-1, keepdims=True)
+    bs.win3, _, _, _ = getWindowAndCoefs(bs.NFFT3, bs.window, bs.NEns3)
+    bs.f3, bs.fc3 = fourier_components_2s(bs.d3seg, 1./Fs3_Hz, bs.NFFT3, bs.win3)
 
-    zidxs = sliding_window_view(np.arange(zz.size), NFFTz)[::NFFTz - o.NOVz]
-    o.zens = zz[zidxs]
-    o.zens = o.zens - o.zens.mean(axis=-1, keepdims=True)
-    o.winz, o.enbwz, o.CGz, o.CVz = getWindowAndCoefs(NFFTz, window, o.NEns)
-    _, o.ZZ = fourier_components_2s(o.zens, dtz, NFFTz, o.winz)
+    bs.f1 = bs.f1.astype(np.float32)
+    bs.f2 = bs.f2.astype(np.float32)
+    bs.fc1 = bs.fc1.astype(np.complex64)
+    bs.fc2 = bs.fc2.astype(np.complex64)
+    bs.fc3 = bs.fc3.astype(np.complex64)
+    bs.f1, bs.f2, bs.bicohsq, bs.bicohsq_err, bs.biphase, bs.biphase_err \
+        = bispectrum(bs.f1, bs.f2, bs.fc1, bs.fc2, bs.fc3,
+                    bs.NFFT1, bs.NFFT2, bs.NFFT3, bs.NEns,
+                    Fs1_Hz, Fs2_Hz, Fs3_Hz, flimx=bs.flim1, flimy=bs.flim2)
+    bs.bicohsq_rer = bs.bicohsq_err / bs.bicohsq
 
-    o.freqx = o.freqx.astype(np.float32)
-    o.freqy = o.freqy.astype(np.float32)
-    o.XX = o.XX.astype(np.complex64)
-    o.YY = o.YY.astype(np.complex64)
-    o.ZZ = o.ZZ.astype(np.complex64)
-    o.freqx, o.freqy, o.biCohSq, o.biCohSqErr, o.biPhs, o.biPhsErr \
-        = bispectrum(o.freqx, o.freqy, o.XX, o.YY, o.ZZ,
-                           NFFTx, NFFTy, NFFTz, o.NEns,
-                           1./dtx, 1./dty, 1./dtz, flimx=flimx, flimy=flimy)
-    o.biCohSqRer = o.biCohSqErr / o.biCohSq
-
-    return o
+    return bs
 
 def cross_bispectrum_at_f3(f3_at, xx, yy, zz, dtx, dty, dtz,
                                     NFFTx, NFFTy, NFFTz, flimx=None, flimy=None,
@@ -2459,8 +2465,6 @@ def auto_bispectrum(xx, dt, NFFT, OVR=0.5, window="hann", NEns=20):  # not compl
     o.biCohSqRer = o.biCohSqErr / o.biCohSq
 
     return o
-
-
 
 
 
