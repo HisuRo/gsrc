@@ -1,15 +1,14 @@
 import numpy as np  # type: ignore
 from numpy.lib.stride_tricks import sliding_window_view  # type: ignore
-from scipy import signal, fft, ifft, interpolate, optimize  # type: ignore
+from scipy import signal, fft, interpolate, optimize  # type: ignore
 from scipy.signal import welch  # type: ignore
 import gc
 import matplotlib.pyplot as plt  # type: ignore
 from nasu import proc, plot, getShotInfo, myEgdb, read, const
 import os
 import sys
-import inspect
-import traceback
-import time
+
+
 
 
 class struct:

@@ -1,12 +1,11 @@
-import pandas as pd
+import pandas as pd # type: ignore
 import numpy as np
-from scipy.interpolate import interp1d
+from scipy.interpolate import interp1d # type: ignore
 import os
-# from parse import parse # temporarily omit to avoid error in omega
+from parse import parse # temporarily omit to avoid error in omega # type: ignore
 from nasu.myEgdb import LoadEG
 import nasu.LHDRetrieve as LHDR
 from nasu import getShotInfo, proc, myEgdb
-import inspect
 
 
 class struct:

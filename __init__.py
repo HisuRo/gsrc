@@ -1,10 +1,10 @@
 import os
-from pkg_resources import get_distribution
+from pkg_resources import get_distribution  # type: ignore
 from sys import version
 import csv
 
 ### input ###
-working_server = "omega"
+working_server = "Precision3450"
 
 ### main ###
 current_python_version = version.split()[0]
