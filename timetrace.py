@@ -1,5 +1,6 @@
 from nasu import calc
 import numpy as np # type: ignore
+from scipy.signal import find_peaks # type: ignore
 
 
 def produce_virtual_IQ_reference(times_s, carrier_freq_Hz, phase=0):
@@ -51,6 +52,27 @@ class signal():
 		self.dec.d = calc.signal.decimate(self.d, q=downsampling_factor, ftype='fir')
 		self.dec.Fs = self.Fs / downsampling_factor
 		return self.dec
+	
+	def detect_event(self, rate_threshold, t_process_width, type="rise"):
+		# type = "rise", "drop"
+
+		self.rate = np.diff(self.d) / np.diff(self.t_s)
+		self.inverted_rate = - self.rate
+		if type == "rise":
+			idx_event, _ = find_peaks(self.rate, height=rate_threshold, prominence=rate_threshold, distance=3)
+		elif type == "drop":
+			idx_event, _ = find_peaks(self.inverted_rate, height=rate_threshold, prominence=rate_threshold, distance=3)
+		else:
+			raise Exception("wrong type name")
+		self.t_event = self.t_s[1:][idx_event]
+
+		process_width = int(self.Fs * t_process_width)
+		idxs_aroundevent = np.tile(idx_event.reshape(idx_event.size, 1), process_width) + np.arange(process_width) - process_width // 2
+		d_process = self.d[idxs_aroundevent]
+		self.event_p2p = d_process.max(axis=-1) - d_process.min(axis=-1)
+		self.event_center = (d_process.max(axis=-1) + d_process.min(axis=-1)) / 2
+		self.rel_event_p2p = self.event_p2p / self.event_center
+
 
 class raw(signal):
 	def __init__(self, timetrace_instance):
