@@ -1,6 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
-import seaborn as sns
+# import seaborn as sns # temporarily omit to avoid error in omega
 from itertools import chain
 
 

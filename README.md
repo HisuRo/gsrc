@@ -31,3 +31,5 @@ qmc.py : modules to read w7x data.
 read.py : modules to read data using LHD Retrieve.py
 
 read_w7x.py : modules to read w7x data.
+
+get_d3d.py : modules to retrieve d3d data and brief processing

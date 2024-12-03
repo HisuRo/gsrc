@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 from scipy.interpolate import interp1d
 import os
-from parse import parse
+# from parse import parse # temporarily omit to avoid error in omega
 from nasu.myEgdb import LoadEG
 import nasu.LHDRetrieve as LHDR
 from nasu import getShotInfo, proc, myEgdb
