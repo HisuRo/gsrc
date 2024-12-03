@@ -183,7 +183,6 @@ def MakeLLSMFitProfilesFromTS(sn, startTime, endTime, Nfit, poly):
     reg_list = [R_f, reff_f, rho_f, dat_Te_reg, err_Te_reg, dat_ne_reg, err_ne_reg, dat_Te_grad, err_Te_grad,
                 dat_ne_grad, err_ne_grad, dat_LTe, err_LTe, dat_Lne, err_Lne,
                 dat_RpLTe, err_RpLTe, dat_RpLne, err_RpLne, dat_etae, err_etae]
-
     return time, raw_list, reg_list
 
 
