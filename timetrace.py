@@ -32,27 +32,52 @@ class signal():
 	def spectrum(self, tstart, tend, NFFT=2**14, ovr=0.5, window="hann", detrend="constant"):
 		self.sp = calc.spectrum(t_s=self.t_s, d=self.d, Fs_Hz=self.Fs, tstart=tstart, tend=tend, NFFT=NFFT, ovr=ovr, window=window, detrend=detrend)
 		return self.sp
-	
+
+
+
+	def amplitude(self):
+		t_s = self.t_s
+		d = calc.amplitude(self.d)
+		Fs = self.Fs
+		self.amp = signal(t_s, d, Fs)
+
+	def iqphase(self):
+		t_s = self.t_s
+		d = calc.phase(self.d)
+		Fs = self.Fs
+		self.phase = signal(t_s, d, Fs)
+
+	def pulsepair(self, ovr=0.5, Fs=10e3):
+		NSamp = int(ovr * self.Fs / Fs)
+		o = calc.pulsepair(self.t_s, self.d, Nsample=NSamp, ovr=ovr)
+		t_s = o.t
+		d = o.fd
+		self.pp = signal(t_s, d, Fs)
+
+		return self.pp
+
 	def iirfilter(self, cutoffFreq, bandtype="lowpass", order=4, filtertype="butter"):
-		self.filt = calc.struct()
-		self.filt.t_s = self.t_s
-		self.filt.d = calc.iirfilter(self.d, self.Fs, cutoffFreq=cutoffFreq, bandtype=bandtype, order=order, filtertype=filtertype)
-		self.filt.Fs = self.Fs
+		t_s = self.t_s
+		d = calc.iirfilter(self.d, self.Fs, cutoffFreq=cutoffFreq, bandtype=bandtype, order=order, filtertype=filtertype)
+		Fs = self.Fs
+		self.filt = signal(t_s, d, Fs)
 		return self.filt
 	
 	def firfilter(self, cutoffFreq, bandtype="lowpass", order=1000, window="hamming"): 
-		self.filt = calc.struct()
-		self.filt.t_s, self.filt.d = calc.firfilter_zerodelay(self.t_s, self.d, self.Fs, cutoffFreq=cutoffFreq, bandtype=bandtype, order=order, window=window)
-		self.filt.Fs = self.Fs
+		t_s, d = calc.firfilter_zerodelay(self.t_s, self.d, self.Fs, cutoffFreq=cutoffFreq, bandtype=bandtype, order=order, window=window)
+		Fs = self.Fs
+		self.filt = signal(t_s, d, Fs)
 		return self.filt
 	
 	def decimate(self, downsampling_factor=10):
-		self.dec = calc.struct()
-		self.dec.t_s = self.t_s[::downsampling_factor]
-		self.dec.d = calc.signal.decimate(self.d, q=downsampling_factor, ftype='fir')
-		self.dec.Fs = self.Fs / downsampling_factor
+		t_s = self.t_s[::downsampling_factor]
+		d = calc.signal.decimate(self.d, q=downsampling_factor, ftype='fir')
+		Fs = self.Fs / downsampling_factor
+		self.dec = signal(t_s, d, Fs)
 		return self.dec
-	
+
+
+
 	def detect_event(self, rate_threshold, t_process_width, type="rise"):
 		# type = "rise", "drop"
 
@@ -76,31 +101,6 @@ class signal():
 		self.event.rel_p2p = self.event.p2p / self.event.center
 
 		return self.event
-
-
-class raw(signal):
-	def __init__(self, timetrace_instance):
-		super().__init__(timetrace_instance.t_s, timetrace_instance.d, timetrace_instance.Fs)
-
-class amplitude(signal):	
-	def __init__(self, timetrace_instance):
-		super().__init__(timetrace_instance.t_s, timetrace_instance.amp, timetrace_instance.Fs)
-
-class iqphase(signal):	
-	def __init__(self, timetrace_instance):
-		super().__init__(timetrace_instance.t_s, timetrace_instance.phase, timetrace_instance.Fs)
-
-class virtIQ(signal):
-	def __init__(self, timetrace_instance):
-		super().__init__(timetrace_instance.virt.t_s, timetrace_instance.virt.d, timetrace_instance.virt.Fs)
-
-class virtIQamp(signal):
-	def __init__(self, timetrace_instance):
-		super().__init__(timetrace_instance.virt.t_s, timetrace_instance.virt.amp, timetrace_instance.virt.Fs)
-
-class virtIQphase(signal):
-	def __init__(self, timetrace_instance):
-		super().__init__(timetrace_instance.virt.t_s, timetrace_instance.virt.phase, timetrace_instance.virt.Fs)
 
 # =================================================================================================================================
 
@@ -127,4 +127,3 @@ class twin_signals():
 	def cross_spectrum(self, tstart, tend, NFFT=2**14, ovr=0.5, window="hann", detrend="constant", unwrap_phase=False):
 		self.cs = calc.cross_spectrum(self.intp.t_s, self.intp.d1, self.intp.d2, self.intp.Fs, tstart, tend, NFFT=NFFT, ovr=ovr, window=window, detrend=detrend, unwrap_phase=unwrap_phase)
 		return self.cs
-	

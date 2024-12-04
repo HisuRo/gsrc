@@ -23,24 +23,22 @@ class timetrace():
 		self.t_s, self.d, self.dT, self.Fs, self.size, self.tprms, self.dprms = \
             read.LHD_et_v2(sn=self.sn, subsn=self.subsn, diagname=self.diagname, ch=self.ch, et=(self.tstart, self.tend))
 		
-		# calculate amplitude
-		self.amp = calc.amplitude(self.d)
-
-		self.raw = raw(self)
-		self.amplitude = amplitude(self)
+		self.raw = signal(self.t_s, self.d, self.Fs)
 
 	def produce_virtual_IQ_signal(self, carrier_freq_Hz, downsampling_factor=1, ref_phase=0):
 
 		self.virt = calc.struct()
+		self.virt.carrier_freq_Hz = carrier_freq_Hz
+		self.virt.downsampling_factor = carrier_freq_Hz
+		self.virt.ref_phase = carrier_freq_Hz
+				
 		self.virt.t_s = self.t_s[::downsampling_factor]
 		self.virt.Fs = self.Fs / downsampling_factor
 		self.virt.d = produce_virtual_IQ_signal(times_s=self.t_s, signal=self.d, carrier_freq_Hz=carrier_freq_Hz, downsampling_factor=downsampling_factor, ref_phase=ref_phase)
-		self.virt.amp = calc.amplitude(self.virt.d)
-		self.virt.phase = calc.phase(self.virt.d)
 
-		self.virtIQ = virtIQ(self)
-		self.virtIQamp = virtIQamp(self)
-		self.virtIQphase = virtIQphase(self)
+		self.virt.raw = signal(self.virt.t_s, self.virt.d, self.virt.Fs)
+		self.virt.amp = self.virt.raw.amplitude()
+		self.virt.phase = self.virt.raw.iqphase()
 
 class timetrace_iq():
 		
@@ -77,12 +75,8 @@ class timetrace_iq():
         else:
             raise Exception("Time data of I and Q signals are different.")
         self.d = self.i_obj.d + 1.j * self.q_obj.d
-		
-        self.amp = calc.amplitude(self.d)
-        self.phase = calc.phase(self.d)
 
-        self.raw = raw(self)
-        self.amplitude = amplitude(self)
-        self.iqphase = iqphase(self)
-
+        self.raw = signal(self.t_s, self.d, self.Fs)
+        self.amp = self.raw.amplitude()
+        self.phase = self.raw.iqphase()
 
