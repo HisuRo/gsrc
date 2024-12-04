@@ -56,6 +56,8 @@ class signal():
 	def detect_event(self, rate_threshold, t_process_width, type="rise"):
 		# type = "rise", "drop"
 
+		self.event = calc.struct()
+
 		self.rate = np.diff(self.d) / np.diff(self.t_s)
 		self.inverted_rate = - self.rate
 		if type == "rise":
@@ -64,14 +66,16 @@ class signal():
 			idx_event, _ = find_peaks(self.inverted_rate, height=rate_threshold, prominence=rate_threshold, distance=3)
 		else:
 			raise Exception("wrong type name")
-		self.t_event = self.t_s[1:][idx_event]
+		self.event.t_s = self.t_s[1:][idx_event]
 
 		process_width = int(self.Fs * t_process_width)
 		idxs_aroundevent = np.tile(idx_event.reshape(idx_event.size, 1), process_width) + np.arange(process_width) - process_width // 2
 		d_process = self.d[idxs_aroundevent]
-		self.event_p2p = d_process.max(axis=-1) - d_process.min(axis=-1)
-		self.event_center = (d_process.max(axis=-1) + d_process.min(axis=-1)) / 2
-		self.rel_event_p2p = self.event_p2p / self.event_center
+		self.event.p2p = d_process.max(axis=-1) - d_process.min(axis=-1)
+		self.event.center = (d_process.max(axis=-1) + d_process.min(axis=-1)) / 2
+		self.event.rel_p2p = self.event.p2p / self.event.center
+
+		return self.event
 
 
 class raw(signal):
@@ -102,12 +106,25 @@ class virtIQphase(signal):
 
 class twin_signals():
 
-	def __init__(self, t_s, d1, d2, Fs):
-		self.t_s = t_s
+	def __init__(self, t1_s, t2_s, d1, d2, Fs1, Fs2):
+
+		if Fs1 < Fs2:
+			raise Exception("Fs1 must be = or > Fs2")
+		self.t1_s = t1_s
+		self.t2_s = t2_s
 		self.d1 = d1
 		self.d2 = d2
-		self.Fs = Fs
+		self.Fs1 = Fs1
+		self.Fs2 = Fs2
+
+		# linear interpolation
+		self.intp = calc.struct()
+		self.intp.t_s = self.t2_s
+		self.intp.d1 = calc.interpolate.interp1d(self.t1_s, self.d1, kind="linear", bounds_error=False, fill_value="extrapolate")(self.t2_s)
+		self.intp.d2 = self.d2
+		self.intp.Fs = self.Fs2
 
 	def cross_spectrum(self, tstart, tend, NFFT=2**14, ovr=0.5, window="hann", detrend="constant", unwrap_phase=False):
-		self.cs = calc.cross_spectrum(self.t_s, self.d1, self.d2, self.Fs, tstart, tend, NFFT=NFFT, ovr=ovr, window=window, detrend=detrend, unwrap_phase=unwrap_phase)
+		self.cs = calc.cross_spectrum(self.intp.t_s, self.intp.d1, self.intp.d2, self.intp.Fs, tstart, tend, NFFT=NFFT, ovr=ovr, window=window, detrend=detrend, unwrap_phase=unwrap_phase)
 		return self.cs
+	

@@ -2481,7 +2481,7 @@ def iirfilter(xx, samplingFreq, cutoffFreq, bandtype="lowpass", order=4, filtert
     order /= 2 # because filter will be applied twice by scipy.signal.filtfilt()
 
     fnyq = samplingFreq / 2
-    Wn = cutoffFreq / fnyq
+    Wn = np.array(cutoffFreq) / fnyq
     if filtertype == "butter":
         b, a = signal.butter(order, Wn, btype=bandtype)
     elif filtertype == "bessel": 
