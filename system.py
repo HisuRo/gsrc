@@ -8,7 +8,7 @@ import pickle
 import matplotlib.pyplot as plt  # type: ignore
 
 def get_commit_id(repository):
-	subprocess.run(["cd", repository])
+	subprocess.run(["cd", repository], shell=True)
     # Gitコマンドを実行して現在のコミットIDを取得
 	result = subprocess.run(['git', 'rev-parse', 'HEAD'], capture_output=True, text=True)
 	if result.returncode == 0:
@@ -26,10 +26,11 @@ def check_working_directory(config_filename="config.json"):
 
 	# check working directory
 	config = load_config(config_filename)
-	wd = config["wd"]
+	wd = os.path.normpath(config["wd"])
 	cwd = os.getcwd()
 	if cwd != wd:
-		print(cwd)
+		print(f"cwd: {cwd}")
+		print(f"wd : {wd}")
 		raise Exception("change working directory to analysis_scripts!!")
 	
 	return config, wd
