@@ -1,13 +1,13 @@
 import numpy as np
-from scipy.interpolate import interp1d
-from scipy.interpolate import griddata
-import seaborn as sns
+from scipy.interpolate import interp1d  # type: ignore
+from scipy.interpolate import griddata  # type: ignore
+import seaborn as sns  # type: ignore
 import os
 import gc
 
-import matplotlib.pyplot as plt
-from mpl_toolkits import mplot3d
-from matplotlib import cm
+import matplotlib.pyplot as plt  # type: ignore
+from mpl_toolkits import mplot3d  # type: ignore
+from matplotlib import cm  # type: ignore
 
 from nasu.myEgdb import LoadEG
 from nasu import read, calc, getShotInfo, proc, myEgdb, plot, const
