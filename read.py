@@ -891,7 +891,7 @@ def LHD_et_v2(sn, subsn, diagname, ch, et):
 
     tsize = len(tdat)
     dT = parse('{:f}{:S}', tprms['ClockCycle'][0])[0]
-    Fs = int(prms['SamplingClock'][0])
+    Fs = int(1./dT)
 
     print('\n')
 
