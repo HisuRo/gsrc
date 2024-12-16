@@ -2585,30 +2585,30 @@ class ece:
         _idx2 = np.where(self.diag_number[0] == 2.)[0]
         _idx3 = np.where(self.diag_number[0] == 3.)[0]
 
-        self.diag1 = calc.struct()
-        self.diag2 = calc.struct()
-        self.diag3 = calc.struct()
+        self.radh = calc.struct()
+        self.radl = calc.struct()
+        self.radm = calc.struct()
 
-        self.diag1.R = self.R[_idx1]
-        self.diag1.Te = self.Te[:, _idx1]
-        self.diag1.fece = self.fece[0][_idx1]
-        self.diag1.calib = self.calib[:, _idx1]
-        self.diag1.ADC_ch = self.ADC_ch[0][_idx1]
-        self.diag1.rho_vacuum = self.rho_vacuum[0][_idx1]
+        self.radh.R = self.R[_idx1]
+        self.radh.Te = self.Te[:, _idx1]
+        self.radh.fece = self.fece[0][_idx1]
+        self.radh.calib = self.calib[:, _idx1]
+        self.radh.ADC_ch = self.ADC_ch[0][_idx1]
+        self.radh.rho_vacuum = self.rho_vacuum[0][_idx1]
 
-        self.diag2.R = self.R[_idx2]
-        self.diag2.Te = self.Te[:, _idx2]
-        self.diag2.fece = self.fece[0][_idx2]
-        self.diag2.calib = self.calib[:, _idx2]
-        self.diag2.ADC_ch = self.ADC_ch[0][_idx2]
-        self.diag2.rho_vacuum = self.rho_vacuum[0][_idx2]
+        self.radl.R = self.R[_idx2]
+        self.radl.Te = self.Te[:, _idx2]
+        self.radl.fece = self.fece[0][_idx2]
+        self.radl.calib = self.calib[:, _idx2]
+        self.radl.ADC_ch = self.ADC_ch[0][_idx2]
+        self.radl.rho_vacuum = self.rho_vacuum[0][_idx2]
 
-        self.diag3.R = self.R[_idx3]
-        self.diag3.Te = self.Te[:, _idx3]
-        self.diag3.fece = self.fece[0][_idx3]
-        self.diag3.calib = self.calib[:, _idx3]
-        self.diag3.ADC_ch = self.ADC_ch[0][_idx3]
-        self.diag3.rho_vacuum = self.rho_vacuum[0][_idx3]
+        self.radm.R = self.R[_idx3]
+        self.radm.Te = self.Te[:, _idx3]
+        self.radm.fece = self.fece[0][_idx3]
+        self.radm.calib = self.calib[:, _idx3]
+        self.radm.ADC_ch = self.ADC_ch[0][_idx3]
+        self.radm.rho_vacuum = self.rho_vacuum[0][_idx3]
 
         Ridxs_sort = np.argsort(self.R)
         self.R = self.R[Ridxs_sort]
@@ -2618,19 +2618,20 @@ class ece:
         self.ADC_ch = self.ADC_ch[0][Ridxs_sort]
         self.rho_vacuum = self.rho_vacuum[0][Ridxs_sort]
 
-        self.dirbase = "ece"
-        proc.ifNotMake(self.dirbase)
-        self.fnm_base = f"{sn}_{sub}_{tstart}_{tend}_{fluc_thresh}"
-        self.figtitle = f"#{sn}-{sub} {tstart}-{tend}s"
+        """
+        # self.dirbase = "ece"
+        # proc.ifNotMake(self.dirbase)
+        # self.fnm_base = f"{sn}_{sub}_{tstart}_{tend}_{fluc_thresh}"
+        # self.figtitle = f"#{sn}-{sub} {tstart}-{tend}s"
+        """
+
+        return self
 
     def t_window(self, tstart=4, tend=5):
 
         self.twin = struct()
         self.twin.ts = tstart
         self.twin.te = tend
-        self.twin.diag1 = struct()
-        self.twin.diag2 = struct()
-        self.twin.diag3 = struct()
         datlist = [self.t, self.Te, self.calib]
         _, datlist_win = proc.getTimeIdxsAndDats(time=self.t, startTime=self.twin.ts,
                                                  endTime=self.twin.te, datList=datlist)
@@ -2644,6 +2645,8 @@ class ece:
             calc.average(self.twin.Te, err=None, axis=0)
         self.twin.avg.calib, self.twin.std.calib, self.twin.ste.calib = \
             calc.average(self.twin.calib, err=None, axis=0)
+        
+        return self.twin
 
     def calibration(self, tstart=4, tend=5, use_tsfit=True):
 
@@ -2688,71 +2691,77 @@ class ece:
             self.Rat.reffa99 = self.reffa99[Ridx]
             self.Rat.reffa99_err = self.reffa99_err[Ridx]
 
-    def plot_ch(self, ADC_ch=1, pause=0):
+        return self.Rat
 
-        plot.set("notebook", "ticks")
+    """
+    # def plot_ch(self, ADC_ch=1, pause=0):
 
-        figdir = os.path.join(self.dirbase, "plot_ch")
-        proc.ifNotMake(figdir)
-        fnm = self.fnm_base + f"{ADC_ch}.png"
-        path = os.path.join(figdir, fnm)
+    #     plot.set("notebook", "ticks")
 
-        fig, ax = plt.subplots(1)
-        if ADC_ch == 1:
-            for i in range(len(self.diag1.R)):
-                ax.plot(self.t, self.diag1.Te[:, i],
-                        label=f"{self.diag1.R[i]}m")
-        elif ADC_ch == 2:
-            for i in range(len(self.diag2.R)):
-                ax.plot(self.t, self.diag2.Te[:, i],
-                        label=f"{self.diag2.R[i]}m")
-        elif ADC_ch == 3:
-            for i in range(len(self.diag3.R)):
-                ax.plot(self.t, self.diag3.Te[:, i],
-                        label=f"{self.diag3.R[i]}m")
-        else:
-            exit()
+    #     figdir = os.path.join(self.dirbase, "plot_ch")
+    #     proc.ifNotMake(figdir)
+    #     fnm = self.fnm_base + f"{ADC_ch}.png"
+    #     path = os.path.join(figdir, fnm)
 
-        ax.set_xlabel("Time [s]")
-        ax.set_ylabel("Te ECE [keV]")
-        fig.legend()
+    #     fig, ax = plt.subplots(1)
+    #     if ADC_ch == 1:
+    #         for i in range(len(self.radh.R)):
+    #             ax.plot(self.t, self.radh.Te[:, i],
+    #                     label=f"{self.radh.R[i]}m")
+    #     elif ADC_ch == 2:
+    #         for i in range(len(self.radl.R)):
+    #             ax.plot(self.t, self.radl.Te[:, i],
+    #                     label=f"{self.radl.R[i]}m")
+    #     elif ADC_ch == 3:
+    #         for i in range(len(self.radm.R)):
+    #             ax.plot(self.t, self.radm.Te[:, i],
+    #                     label=f"{self.radm.R[i]}m")
+    #     else:
+    #         exit()
 
-        plot.caption(fig, self.figtitle)
-        plot.capsave(fig, self.figtitle, fnm, path)
-        plot.check(pause)
+    #     ax.set_xlabel("Time [s]")
+    #     ax.set_ylabel("Te ECE [keV]")
+    #     fig.legend()
 
-    def plot(self, R_in=3.8, R_out=4.4, dR=0.1, iscalib=True, pause=0):
+    #     plot.caption(fig, self.figtitle)
+    #     plot.capsave(fig, self.figtitle, fnm, path)
+    #     plot.check(pause)
+    """
+    
+    """
+    # def plot(self, R_in=3.8, R_out=4.4, dR=0.1, iscalib=True, pause=0):
 
-        plot.set("notebook", "ticks")
+    #     plot.set("notebook", "ticks")
 
-        figdir = os.path.join(self.dirbase, "plot")
-        proc.ifNotMake(figdir)
-        fnm = self.fnm_base + f"{R_in}_{R_out}_{dR}.png"
-        path = os.path.join(figdir, fnm)
+    #     figdir = os.path.join(self.dirbase, "plot")
+    #     proc.ifNotMake(figdir)
+    #     fnm = self.fnm_base + f"{R_in}_{R_out}_{dR}.png"
+    #     path = os.path.join(figdir, fnm)
 
-        fig, ax = plt.subplots(1)
-        R_arr = np.round(np.arange(R_in, R_out + dR, dR), 4)
-        if iscalib:
-            for R in R_arr:
-                self.Radius_at(R, iscalib=iscalib)
-                ax.errorbar(self.t, self.Rat.Te_tscal, self.Rat.Te_tscal_err,
-                            ecolor="lightgrey", label=f"{self.Rat.R}m")
-        else:
-            for R in np.arange(R_in, R_out + dR, dR):
-                self.Radius_at(R, iscalib=iscalib)
-                ax.plot(self.t, self.Rat.Te,
-                        label=f"{self.Rat.R}m")
+    #     fig, ax = plt.subplots(1)
+    #     R_arr = np.round(np.arange(R_in, R_out + dR, dR), 4)
+    #     if iscalib:
+    #         for R in R_arr:
+    #             self.Radius_at(R, iscalib=iscalib)
+    #             ax.errorbar(self.t, self.Rat.Te_tscal, self.Rat.Te_tscal_err,
+    #                         ecolor="lightgrey", label=f"{self.Rat.R}m")
+    #     else:
+    #         for R in np.arange(R_in, R_out + dR, dR):
+    #             self.Radius_at(R, iscalib=iscalib)
+    #             ax.plot(self.t, self.Rat.Te,
+    #                     label=f"{self.Rat.R}m")
 
-        ax.set_xlabel("Time [s]")
-        if iscalib:
-            ax.set_ylabel("Te ECE [keV] tscalib")
-        else:
-            ax.set_ylabel("Te ECE [keV]")
-        ax.legend()
+    #     ax.set_xlabel("Time [s]")
+    #     if iscalib:
+    #         ax.set_ylabel("Te ECE [keV] tscalib")
+    #     else:
+    #         ax.set_ylabel("Te ECE [keV]")
+    #     ax.legend()
 
-        plot.caption(fig, self.figtitle)
-        plot.capsave(fig, self.figtitle, fnm, path)
-        plot.check(pause)
+    #     plot.caption(fig, self.figtitle)
+    #     plot.capsave(fig, self.figtitle, fnm, path)
+    #     plot.check(pause)
+    """
 
     def R_window(self, Rat=4.0, dR=0.106, include_outerside=False):
 
