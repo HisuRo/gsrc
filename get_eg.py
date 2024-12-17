@@ -2549,7 +2549,7 @@ class LID_cur:
         self.twin.avg.B1, self.twin.std.B1, self.twin.ste.B1 = calc.average(self.twin.B1)
         self.twin.avg.B2, self.twin.std.B2, self.twin.ste.B2 = calc.average(self.twin.B2)
 
-class ece:
+class ece():
 
     def __init__(self, sn=185857, sub=1, tstart=3, tend=6, fluc_thresh=0.1):
 
@@ -2568,18 +2568,18 @@ class ece:
             self.Te, self.fece, self.calib, self.diag_number, self.ADC_ch, self.rho_vacuum \
                 = [None, None, None, None, None, None]
 
-        fluc = 2 * np.std(self.Te[self.t.size // 2 - 10: self.t.size // 2 + 10], axis=0)
-        avg_tmp = 2 * np.average(self.Te[self.t.size // 2 - 10: self.t.size // 2 + 10], axis=0)
-        # eceDelRIdxs = [0, 1, 3, 18, 19, 25, 31, 33, 39, 40, 41, 42, 44, 45, 46, 47, 48, 52, 53, 55, 56, 57, 59]
-        eceDelRIdxs = np.where((fluc >= fluc_thresh) | (fluc / avg_tmp > fluc_thresh) | (avg_tmp < 0))[0]
+        # fluc = 2 * np.std(self.Te[self.t.size // 2 - 10: self.t.size // 2 + 10], axis=0)
+        # avg_tmp = 2 * np.average(self.Te[self.t.size // 2 - 10: self.t.size // 2 + 10], axis=0)
+        # # eceDelRIdxs = [0, 1, 3, 18, 19, 25, 31, 33, 39, 40, 41, 42, 44, 45, 46, 47, 48, 52, 53, 55, 56, 57, 59]
+        # eceDelRIdxs = np.where((fluc >= fluc_thresh) | (fluc / avg_tmp > fluc_thresh) | (avg_tmp < 0))[0]
 
-        self.R = np.delete(self.R, eceDelRIdxs)
-        self.Te = np.delete(self.Te, eceDelRIdxs)
-        self.fece = np.delete(self.fece, eceDelRIdxs)
-        self.calib = np.delete(self.calib, eceDelRIdxs)
-        self.diag_number = np.delete(self.diag_number, eceDelRIdxs)
-        self.ADC_ch = np.delete(self.ADC_ch, eceDelRIdxs)
-        self.rho_vacuum = np.delete(self.rho_vacuum, eceDelRIdxs)
+        # self.R = np.delete(self.R, eceDelRIdxs)
+        # self.Te = np.delete(self.Te, eceDelRIdxs)
+        # self.fece = np.delete(self.fece, eceDelRIdxs)
+        # self.calib = np.delete(self.calib, eceDelRIdxs)
+        # self.diag_number = np.delete(self.diag_number, eceDelRIdxs)
+        # self.ADC_ch = np.delete(self.ADC_ch, eceDelRIdxs)
+        # self.rho_vacuum = np.delete(self.rho_vacuum, eceDelRIdxs)
 
         _idx1 = np.where(self.diag_number[0] == 1.)[0]
         _idx2 = np.where(self.diag_number[0] == 2.)[0]
@@ -2625,7 +2625,6 @@ class ece:
         # self.figtitle = f"#{sn}-{sub} {tstart}-{tend}s"
         """
 
-        return self
 
     def t_window(self, tstart=4, tend=5):
 
