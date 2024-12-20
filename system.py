@@ -53,10 +53,10 @@ def load_input(input_filepath, outdir_base):
 	
 	return inputs, outdir
 
-def get_logs(wd):
+def get_logs(wd, script_path):
 	now = datetime.now()
 	logs = {
-		'script': {sys.argv[0]}, 
+		'script': {os.path.relpath(script_path, wd)}, 
 		'analysis_scripts_gitid': {get_commit_id(wd)}, 
 		'nasu_gitid': {get_commit_id("nasu")}, 
 		'datetime': {now}

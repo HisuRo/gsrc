@@ -313,6 +313,9 @@ class fir_nel:
         self.nebar, self.peak, self.nl3309, self.nl3399, self.nl3489, self.nl3579, self.nl3669, self.nl3759, \
         self.nl3849, self.nl3939, self.nl4029, self.nl4119, self.nl4209, self.nl4299, self.nl4389 = list_dat
 
+        self.outdir = "C:/python_data/eg/fir"
+        proc.ifNotMake(self.outdir)
+
     def plot_sightline(self, tat=4.5, pause=0, diag = 'tsmesh', type = "dat"):
 
         phi_at = 0.
@@ -333,7 +336,7 @@ class fir_nel:
 
         grid_Rs, grid_Zs = np.meshgrid(Rs, Zs)
 
-        figdir = f"fir_sightline"
+        figdir = os.path.join(self.outdir, "sightline")
         proc.ifNotMake(figdir)
         fname = f"{self.sn}_{self.sub}_{tat}"
         title = f"#{self.sn}-{self.sub} {tat} s"
