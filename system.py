@@ -7,6 +7,15 @@ from datetime import datetime
 import pickle
 import matplotlib.pyplot as plt  # type: ignore
 
+def initial_setting(script_path, config_filename="config.json"):
+
+	config, wd = check_working_directory(config_filename=config_filename)
+	input_filepath, tmpdir, outdir_base = define_input_tmp_output_directories(script_path, config)
+	inputs, outdir = load_input(input_filepath, outdir_base)
+	now, logs = get_logs(wd, script_path)
+
+	return inputs, tmpdir, outdir, logs, now
+
 def get_commit_id(repository):
 	subprocess.run(["cd", repository], shell=True)
     # Gitコマンドを実行して現在のコミットIDを取得
@@ -73,15 +82,15 @@ def output_pickle_file(outputs, inputs, logs, outdir):
 
 	return output_filepath
 
-def output_fig(fig, outdir, inputs, output_filepath, now):
-	output_figureloc = os.path.join(outdir, f"{inputs['output_filename']}.png")
+def output_fig(fig, outdir, inputs, output_filepath, now, suffix=""):
+	output_figure_path = os.path.join(outdir, f"{inputs['output_filename']}{suffix}.png")
 	metadata = {
 		"Title": f"{inputs['output_filename']}.png", 
 		"Author": "Tatsuhiro Nasu", 
 		"Description": output_filepath, 
 		"CreationTime": str(now)
 	}
-	fig.savefig(output_figureloc, format="png", metadata=metadata)
+	fig.savefig(output_figure_path, format="png", metadata=metadata)
 	plt.close(fig)
 
 def load_pickle_data(inputs, key_name="input_datpath"):
