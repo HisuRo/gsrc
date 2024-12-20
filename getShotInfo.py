@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: shift_jis
 
-# import psycopg2 # temporarily omit to avoid error in omega
+import psycopg2 # type: ignore
 
 def cycles():
     connection = psycopg2.connect(

@@ -3,23 +3,21 @@ from nasu.timetrace import *
 import numpy as np # type: ignore
 import os
 
-pathCalib = os.path.join("C:\\pythonProject\\nasu\\calib_table.csv")
-
 # ================================================================================================================================
 
 class timetrace():
 
-	def __init__(self,sn,sub,tstart,tend,diagname,name,dim=0,other_idxs=[0]):
+	def __init__(self,sn,subsn,tstart,tend,diagname,name,dim=0,other_idxs=[0]):
 		
 		# Save object values
 		self.sn = sn
-		self.sub = sub
+		self.subsn = subsn
 		self.tstart = tstart
 		self.tend = tend
 		self.diagname = diagname
 
 		# Retrieve data
-		self.eg = myEgdb.LoadEG(diagname=diagname, sn=sn, sub=sub)
+		self.eg = myEgdb.LoadEG(diagname=diagname, sn=sn, sub=subsn)
 		self.t_s = self.eg.dims(dim=dim)
 		self.d = self.eg.trace_of(name=name, dim=dim, other_idxs=other_idxs)
 		self.Fs = calc.samplingrate_from_timedat(self.t_s)

@@ -35,10 +35,10 @@ def check_working_directory(config_filename="config.json"):
 	
 	return config, wd
 
-def define_input_tmp_output_directories(wd, config):
+def define_input_tmp_output_directories(script_path, config):
 
 	# define input, tmp, and output directories
-	input_filepath = os.path.join(wd, config["inputs_dir"], f"{os.path.splitext(sys.argv[0])[0]}.json")
+	input_filepath = os.path.join(os.path.dirname(script_path), config["inputs_dir"], f"{os.path.splitext(os.path.basename(script_path))[0]}.json")
 	tmpdir = config["tmp_dir"]
 	proc.ifNotMake(tmpdir)
 	outdir_base = config["base_output_dir"]
