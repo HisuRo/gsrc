@@ -99,7 +99,7 @@ def get_logs_in_nasumodule(wd, script_path, class_name, func_name):
 		'class': {class_name}, 
 		'script': {os.path.relpath(script_path, wd)}, 
 		'nasu_gitid': {get_commit_id("nasu")}, 
-		'datetime': {now}
+		'datetime': {now.strftime(r'%Y-%m-%d %H:%M:%S')}
 	}
 	return now, logs
 

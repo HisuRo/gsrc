@@ -389,7 +389,7 @@ class fir_nel:
         output_filepath = system.output_pickle_file(outputs, inputs, logs, outdir)
         system.output_fig(fig, outdir, inputs, output_filepath, now)
 
-        plot.check(pause)
+        # plot.check(pause)
 
         print("DONE !!")
 
