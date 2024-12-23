@@ -4,13 +4,15 @@ from scipy.interpolate import griddata  # type: ignore
 import seaborn as sns  # type: ignore
 import os
 import gc
+import copy
 
 import matplotlib.pyplot as plt  # type: ignore
 from mpl_toolkits import mplot3d  # type: ignore
 from matplotlib import cm  # type: ignore
 
 from nasu.myEgdb import LoadEG
-from nasu import read, calc, getShotInfo, proc, myEgdb, plot, const
+from nasu import read, calc, getShotInfo, proc, myEgdb, plot, const, system
+import inspect
 
 
 class struct:
@@ -303,6 +305,12 @@ class fir_nel:
         self.sub = sub
         self.tstart = tstart
         self.tend = tend
+        self.inputs_init = {
+            "sn" : sn, 
+            "subsn" : sub, 
+            "tstart" : tstart, 
+            "tend" : tend
+        }
 
         self.t, list_dat, self.list_dimnms, self.list_valnms, self.list_dimunits, self.list_valunits \
             = read.eg1d(diagnm="fir_nel", sn=self.sn, sub=self.sub)
@@ -313,10 +321,13 @@ class fir_nel:
         self.nebar, self.peak, self.nl3309, self.nl3399, self.nl3489, self.nl3579, self.nl3669, self.nl3759, \
         self.nl3849, self.nl3939, self.nl4029, self.nl4119, self.nl4209, self.nl4299, self.nl4389 = list_dat
 
-        self.outdir = "C:/python_data/eg/fir"
+        self.outdir = "C:/python_data/eg/fir_nel"
         proc.ifNotMake(self.outdir)
 
-    def plot_sightline(self, tat=4.5, pause=0, diag = 'tsmesh', type = "dat"):
+    def plot_sightline(self, tat=4.5, diag = 'tsmesh', type = "dat", pause=0):
+
+        inputs = copy.deepcopy(self.inputs_init)
+        inputs["tat"] = tat
 
         phi_at = 0.
 
@@ -336,11 +347,17 @@ class fir_nel:
 
         grid_Rs, grid_Zs = np.meshgrid(Rs, Zs)
 
+        # output setting
         figdir = os.path.join(self.outdir, "sightline")
         proc.ifNotMake(figdir)
         fname = f"{self.sn}_{self.sub}_{tat}"
         title = f"#{self.sn}-{self.sub} {tat} s"
-        path = os.path.join(figdir, f"{fname}.png")
+        inputs["output_filename"] = fname
+
+        script_path = os.path.abspath(__file__)
+        class_name = self.__class__.__name__
+        func_name = inspect.currentframe().f_code.co_name
+        tmpdir, outdir, logs, now = system.initial_setting_in_nasumodule(script_path, class_name, func_name, outdir_name=figdir)
 
         fig, ax = plt.subplots(1, num=fname, figsize=(4, 8))
         cs = plt.contour(grid_Rs, grid_Zs, reffs, levels=[0.1 * i - 1. for i in range(21)],
@@ -357,8 +374,24 @@ class fir_nel:
         ax.set_title("reff [m]")
 
         plot.caption(fig, title)
-        plot.capsave(fig, title, fname, path)
+        # plot.capsave(fig, title, fname, path)
+
+        # output # EDIT HERE !!
+        outputs = {
+            'fig': fig, 
+            'Rs': Rs, 
+            'Zs': Zs, 
+            'reffs': reffs, 
+            'R_fir': R_fir
+        }
+
+        # systematic output and close
+        output_filepath = system.output_pickle_file(outputs, inputs, logs, outdir)
+        system.output_fig(fig, outdir, inputs, output_filepath, now)
+
         plot.check(pause)
+
+        print("DONE !!")
 
     def ref_to(self, time_ref):
 

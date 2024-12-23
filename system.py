@@ -9,12 +9,29 @@ import matplotlib.pyplot as plt  # type: ignore
 
 def initial_setting(script_path, config_filename="config.json"):
 
-	config, wd = check_working_directory(config_filename=config_filename)
-	input_filepath, tmpdir, outdir_base = define_input_tmp_output_directories(script_path, config)
-	inputs, outdir = load_input(input_filepath, outdir_base)
+	config, wd, tmpdir, outdir_base = initial_setting_via_config(config_filename)
+
 	now, logs = get_logs(wd, script_path)
+	input_filepath = define_input_directory(script_path, config)
+	inputs, outdir = load_input(input_filepath, outdir_base)
 
 	return inputs, tmpdir, outdir, logs, now
+
+def initial_setting_in_nasumodule(script_path, class_name, func_name, outdir_name, config_filename="config.json"):
+
+	_, wd, tmpdir, outdir_base = initial_setting_via_config(config_filename=config_filename)
+
+	now, logs = get_logs_in_nasumodule(wd, script_path, class_name, func_name)
+	outdir = os.path.join(outdir_base, outdir_name)
+
+	return tmpdir, outdir, logs, now
+
+def initial_setting_via_config(config_filename="config.json"):
+
+	config, wd = check_working_directory(config_filename=config_filename)
+	tmpdir, outdir_base = define_tmp_output_directories(config)
+
+	return config, wd, tmpdir, outdir_base
 
 def get_commit_id(repository):
 	subprocess.run(["cd", repository], shell=True)
@@ -44,15 +61,18 @@ def check_working_directory(config_filename="config.json"):
 	
 	return config, wd
 
-def define_input_tmp_output_directories(script_path, config):
-
-	# define input, tmp, and output directories
+def define_input_directory(script_path, config):
 	input_filepath = os.path.join(os.path.dirname(script_path), config["inputs_dir"], f"{os.path.splitext(os.path.basename(script_path))[0]}.json")
+	return input_filepath
+
+def define_tmp_output_directories(config):
+
+	# define tmp and output directories
 	tmpdir = config["tmp_dir"]
 	proc.ifNotMake(tmpdir)
 	outdir_base = config["base_output_dir"]
 
-	return input_filepath, tmpdir, outdir_base
+	return tmpdir, outdir_base
 
 def load_input(input_filepath, outdir_base):
 	with open(input_filepath, "r") as file:
@@ -67,6 +87,17 @@ def get_logs(wd, script_path):
 	logs = {
 		'script': {os.path.relpath(script_path, wd)}, 
 		'analysis_scripts_gitid': {get_commit_id(wd)}, 
+		'nasu_gitid': {get_commit_id("nasu")}, 
+		'datetime': {now}
+	}
+	return now, logs
+
+def get_logs_in_nasumodule(wd, script_path, class_name, func_name):
+	now = datetime.now()
+	logs = {
+		'function': {func_name}, 
+		'class': {class_name}, 
+		'script': {os.path.relpath(script_path, wd)}, 
 		'nasu_gitid': {get_commit_id("nasu")}, 
 		'datetime': {now}
 	}
