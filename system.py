@@ -127,3 +127,12 @@ def output_fig(fig, outdir, inputs, output_filepath, now, suffix=""):
 def load_pickle_data(inputs, key_name="input_datpath"):
 	with open(inputs[key_name], "rb") as f:
 		return pickle.load(f)
+	
+def load_multiple_pickle_data(inputs, key_name="input_datpaths"):
+	Ndat = len(inputs[key_name])
+	data_list = [0]*Ndat
+	for i in range(Ndat):
+		input_datpath = inputs[key_name][i]
+		with open(input_datpath, "rb") as f:
+			data_list[i] = pickle.load(f)
+	return data_list
