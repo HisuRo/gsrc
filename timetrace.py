@@ -37,6 +37,9 @@ class signal():
 		self.bs = calc.auto_bispectrum(t_s=self.t_s, d=self.d, Fs_Hz=self.Fs, tstart=tstart, tend=tend, NFFT=NFFT, ovr=ovr, window=window, flim=flim)
 		return self.bs
 
+	def bispectrum_multiwindows(self, tstart_list, tend_list, NFFT=2**14, ovr=0.5, window="hann", flim=None):
+		self.bs = calc.auto_bispectrum_multiwindows(t_s=self.t_s, d=self.d, Fs_Hz=self.Fs, tstart_list=tstart_list, tend_list=tend_list, NFFT=NFFT, ovr=ovr, window=window, flim=flim)
+		return self.bs
 
 	def amplitude(self):
 		t_s = self.t_s

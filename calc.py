@@ -2471,7 +2471,46 @@ def auto_bispectrum(t_s, d, Fs_Hz, tstart, tend, NFFT, ovr=0.5, window="hann", f
 
     return bs
 
+def auto_bispectrum_multiwindows(t_s, d, Fs_Hz, tstart_list, tend_list, NFFT, ovr=0.5, window="hann", flim=None):
 
+    bs = struct()
+    bs.tstart_list = tstart_list
+    bs.tend_list = tend_list
+
+    bs.NFFT = NFFT
+    bs.ovr = ovr
+    bs.window = window
+    bs.NOV = int(bs.NFFT * bs.ovr)
+
+    bs.flim = flim
+
+    for i, (tstart, tend) in enumerate(zip(bs.tstart_list, bs.tend_list)):
+
+        _, datlist = proc.getTimeIdxsAndDats(t_s, tstart, tend, [t_s, d])
+        _, _draw = datlist
+
+        _idxs = sliding_window_view(np.arange(_draw.size), bs.NFFT)[::bs.NFFT - bs.NOV]
+        
+        if i == 0:
+            bs.dseg = _draw[_idxs]
+        else:
+            bs.dseg = np.concatenate((bs.dseg, _draw[_idxs]), axis=-2)
+    
+    bs.NEns = bs.dseg.shape[-2]
+    bs.dseg = bs.dseg - bs.dseg.mean(axis=-1, keepdims=True)
+
+    bs.win, _, _, _ = getWindowAndCoefs(bs.NFFT, bs.window, bs.NEns)
+    bs.f, bs.fc = fourier_components_2s(bs.dseg, 1./Fs_Hz, bs.NFFT, bs.win)
+
+    bs.f = bs.f.astype(np.float32)
+    bs.fc = bs.fc.astype(np.complex64)
+    bs.f1, bs.f2, bs.bicohsq, bs.bicohsq_err, bs.biphase, bs.biphase_err \
+        = bispectrum(bs.f, bs.f, bs.fc, bs.fc, bs.fc,
+                    bs.NFFT, bs.NFFT, bs.NFFT, bs.NEns,
+                    Fs_Hz, Fs_Hz, Fs_Hz, flimx=bs.flim, flimy=bs.flim)
+    bs.bicohsq_rer = bs.bicohsq_err / bs.bicohsq
+
+    return bs
 
 ### Filters ###
 
