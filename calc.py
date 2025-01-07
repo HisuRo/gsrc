@@ -2036,7 +2036,7 @@ def biphase(BSpec, BSpecReStd, BSpecImStd, NEns):
 
     return biPhs, biPhsErr
 
-def transform_fourier_components_for_bispectrum(XX0, YY0, ZZ0, Fsx, Fsy, Fsz, NFFTx, NFFTy, NFFTz, flimx, flimy):
+def transform_fourier_components_for_bispectrum(freqx, freqy, XX0, YY0, ZZ0, Fsx, Fsy, Fsz, NFFTx, NFFTy, NFFTz, flimx, flimy):
 
     idxMxz, _ = make_idxs_for_bispectrum(NFFTx, NFFTy, NFFTz)
 
@@ -2082,6 +2082,8 @@ def transform_fourier_components_for_bispectrum(XX0, YY0, ZZ0, Fsx, Fsy, Fsz, NF
         freq2 = freq2[:, fidx_x]
         freq2 = freq2[fidx_y, :]
         XX = XX[:, :, fidx_x]
+        XX = XX[:, fidx_y, :]
+        YY = YY[:, :, fidx_x]
         YY = YY[:, fidx_y, :]
         ZZ = ZZ[:, :, fidx_x]
         ZZ = ZZ[:, fidx_y, :]
@@ -2097,12 +2099,12 @@ def transform_fourier_components_for_bispectrum(XX0, YY0, ZZ0, Fsx, Fsy, Fsz, NF
     else:
         idxNan = np.where(np.abs(freq2 + freq1) > Fsz / 2)
 
-    return XX, YY, ZZ, idxNan
+    return freqx, freqy, XX, YY, ZZ, idxNan
 
 def bispectrum(freqx, freqy, XX0, YY0, ZZ0, NFFTx, NFFTy, NFFTz, NEns,
                     Fsx, Fsy, Fsz, flimx=None, flimy=None):
 
-    XX, YY, ZZ, idxNan = transform_fourier_components_for_bispectrum(XX0=XX0, YY0=YY0, ZZ0=ZZ0, Fsx=Fsx, Fsy=Fsy, Fsz=Fsz, 
+    freqx, freqy, XX, YY, ZZ, idxNan = transform_fourier_components_for_bispectrum(freqx=freqx, freqy=freqy, XX0=XX0, YY0=YY0, ZZ0=ZZ0, Fsx=Fsx, Fsy=Fsy, Fsz=Fsz, 
                                                         NFFTx=NFFTx, NFFTy=NFFTy, NFFTz=NFFTz, flimx=flimx, flimy=flimy)
     
     BSpec, BSpecStd, BSpecReStd, BSpecImStd = average_bispectrum(XX, YY, ZZ)
@@ -2169,7 +2171,7 @@ def bispectrum_at_f3(f3_at, freqx, freqy, freqz, XX0, YY0, ZZ0, NFFTx, NFFTy, NF
     YY = YY[:, idxs_f3_at[0]]
     ZZ = ZZ[:, idxs_f3_at[0], idxs_f3_at[1]]
 
-    BSpec, BSpecStd, BSpecReStd, BSpecImStd = bispectrum(XX, YY, ZZ)
+    BSpec, BSpecStd, BSpecReStd, BSpecImStd = average_bispectrum(XX, YY, ZZ)
     biCohSq, biCohSqErr = bicoherence(BSpec, BSpecStd, XX, YY, ZZ, NEns)
     biPhs, biPhsErr = biphase(BSpec, BSpecReStd, BSpecImStd, NEns)
 
@@ -2233,7 +2235,7 @@ def bispectrum_in_f_range(fmin, fmax, freqx, freqy, freqz, XX0, YY0, ZZ0, NFFTx,
     YY = YY[:, idxs_f3_at[0]]
     ZZ = ZZ[:, idxs_f3_at[0], idxs_f3_at[1]]
 
-    BSpec, BSpecStd, BSpecReStd, BSpecImStd = bispectrum(XX, YY, ZZ)
+    BSpec, BSpecStd, BSpecReStd, BSpecImStd = average_bispectrum(XX, YY, ZZ)
     biCohSq, biCohSqErr = bicoherence(BSpec, BSpecStd, XX, YY, ZZ, NEns)
     biPhs, biPhsErr = biphase(BSpec, BSpecReStd, BSpecImStd, NEns)
 
@@ -2278,20 +2280,20 @@ def cross_bispectrum(t1_s, t2_s, t3_s, d1, d2, d3, Fs1_Hz, Fs2_Hz, Fs3_Hz, tstar
     bs.NEns = _idxs1.shape[-2]
     bs.d1seg = bs.d1raw[_idxs1]
     bs.d1seg = bs.d1seg - bs.d1seg.mean(axis=-1, keepdims=True)
-    bs.win1, _, _, _ = getWindowAndCoefs(bs.NFFT1, bs.window, bs.NEns1)
+    bs.win1, _, _, _ = getWindowAndCoefs(bs.NFFT1, bs.window, bs.NEns)
     bs.f1, bs.fc1 = fourier_components_2s(bs.d1seg, 1./Fs1_Hz, bs.NFFT1, bs.win1)
 
     _idxs2 = sliding_window_view(np.arange(bs.d2raw.size), bs.NFFT2)[::bs.NFFT2 - bs.NOV2]
     bs.d2seg = bs.d2raw[_idxs2]
     bs.d2seg = bs.d2seg - bs.d2seg.mean(axis=-1, keepdims=True)
-    bs.win2, _, _, _ = getWindowAndCoefs(bs.NFFT2, bs.window, bs.NEns2)
+    bs.win2, _, _, _ = getWindowAndCoefs(bs.NFFT2, bs.window, bs.NEns)
     bs.f2, bs.fc2 = fourier_components_2s(bs.d2seg, 1./Fs2_Hz, bs.NFFT2, bs.win2)
 
     _idxs3 = sliding_window_view(np.arange(bs.d3raw.size), bs.NFFT3)[::bs.NFFT3 - bs.NOV3]
     bs.NEns = _idxs3.shape[-2]
     bs.d3seg = bs.d3raw[_idxs3]
     bs.d3seg = bs.d3seg - bs.d3seg.mean(axis=-1, keepdims=True)
-    bs.win3, _, _, _ = getWindowAndCoefs(bs.NFFT3, bs.window, bs.NEns3)
+    bs.win3, _, _, _ = getWindowAndCoefs(bs.NFFT3, bs.window, bs.NEns)
     bs.f3, bs.fc3 = fourier_components_2s(bs.d3seg, 1./Fs3_Hz, bs.NFFT3, bs.win3)
 
     bs.f1 = bs.f1.astype(np.float32)
@@ -2436,33 +2438,38 @@ def cross_bispectrum_in_f_range(fmin, fmax, xx, yy, zz, dtx, dty, dtz,
 
     return o
 
-def auto_bispectrum(xx, dt, NFFT, OVR=0.5, window="hann", NEns=20):  # not completed
+def auto_bispectrum(t_s, d, Fs_Hz, tstart, tend, NFFT, ovr=0.5, window="hann", flim=None):
 
-    o = struct()
+    bs = struct()
+    bs.tstart = tstart
+    bs.tend = tend
 
-    o.xx = xx
-    o.dt = dt
-    o.NFFT = NFFT
-    o.OVR = OVR
-    o.window = window
-    o.NEns = NEns
+    bs.NFFT = NFFT
+    bs.ovr = ovr
+    bs.window = window
+    bs.NOV = int(bs.NFFT * bs.ovr)
 
-    o.NOV = int(NFFT * OVR)
+    bs.flim = flim
 
-    o.T = NFFT * dt  # Analysis time
+    _, datlist = proc.getTimeIdxsAndDats(t_s, bs.tstart, bs.tend, [t_s, d])
+    _, bs.draw = datlist
 
-    # Bi-Spectral Analysis
-    o.xens = np.lib.stride_tricks.sliding_window_view(xx, window_shape=NFFT)[::NFFT - o.NOV]
-    o.xens = o.xens - o.xens.mean(axis=-1, keepdims=True)
-    o.win, o.enbw, o.CG, o.CV = getWindowAndCoefs(NFFT, window, NEns)
-    o.freq, o.XX = fourier_components_2s(o.xens, dt, NFFT, o.win)
+    _idxs = sliding_window_view(np.arange(bs.draw.size), bs.NFFT)[::bs.NFFT - bs.NOV]
+    bs.NEns = _idxs.shape[-2]
+    bs.dseg = bs.draw[_idxs]
+    bs.dseg = bs.dseg - bs.dseg.mean(axis=-1, keepdims=True)
+    bs.win, _, _, _ = getWindowAndCoefs(bs.NFFT, bs.window, bs.NEns)
+    bs.f, bs.fc = fourier_components_2s(bs.dseg, 1./Fs_Hz, bs.NFFT, bs.win)
 
-    o.biCohSq, o.biCohSqErr, o.biPhs, o.biPhsErr = bispectrum(o.freq, o.freq, o.XX, o.XX, o.XX,
-                                                                    NFFT, NFFT, NFFT, NEns,
-                                                                    iscomplex=np.iscomplex(xx).any())
-    o.biCohSqRer = o.biCohSqErr / o.biCohSq
+    bs.f = bs.f.astype(np.float32)
+    bs.fc = bs.fc.astype(np.complex64)
+    bs.f, _, bs.bicohsq, bs.bicohsq_err, bs.biphase, bs.biphase_err \
+        = bispectrum(bs.f, bs.f, bs.fc, bs.fc, bs.fc,
+                    bs.NFFT, bs.NFFT, bs.NFFT, bs.NEns,
+                    Fs_Hz, Fs_Hz, Fs_Hz, flimx=bs.flim, flimy=bs.flim)
+    bs.bicohsq_rer = bs.bicohsq_err / bs.bicohsq
 
-    return o
+    return bs
 
 
 

@@ -33,6 +33,9 @@ class signal():
 		self.sp = calc.spectrum(t_s=self.t_s, d=self.d, Fs_Hz=self.Fs, tstart=tstart, tend=tend, NFFT=NFFT, ovr=ovr, window=window, detrend=detrend)
 		return self.sp
 
+	def bispectrum(self, tstart, tend, NFFT=2**14, ovr=0.5, window="hann", flim=None):
+		self.bs = calc.auto_bispectrum(t_s=self.t_s, d=self.d, Fs_Hz=self.Fs, tstart=tstart, tend=tend, NFFT=NFFT, ovr=ovr, window=window, flim=flim)
+		return self.bs
 
 
 	def amplitude(self):
@@ -107,9 +110,10 @@ class signal():
 class twin_signals():
 
 	def __init__(self, t1_s, t2_s, d1, d2, Fs1, Fs2):
-
+		
 		if Fs1 < Fs2:
 			raise Exception("Fs1 must be = or > Fs2")
+
 		self.t1_s = t1_s
 		self.t2_s = t2_s
 		self.d1 = d1
@@ -127,3 +131,80 @@ class twin_signals():
 	def cross_spectrum(self, tstart, tend, NFFT=2**14, ovr=0.5, window="hann", detrend="constant", unwrap_phase=False):
 		self.cs = calc.cross_spectrum(self.intp.t_s, self.intp.d1, self.intp.d2, self.intp.Fs, tstart, tend, NFFT=NFFT, ovr=ovr, window=window, detrend=detrend, unwrap_phase=unwrap_phase)
 		return self.cs
+	
+	def bispectrum(self, tstart, tend, NFFT2=2**14, ovr=0., window="hann", mode="112", flim=None, interpolate=False, atol=1e-9):
+		# mode = "112" or "221"; number "lmn" means B(f, g) = <dl(f) * dm(g) * conj(dn(f+g))>
+
+		if self.Fs1 % self.Fs2 != 0:
+			interpolate = True
+		
+		if not interpolate:
+			NFFT1 = NFFT2 * self.Fs1 / self.Fs2
+			if not np.isclose(NFFT1, int(NFFT1+0.5), atol=atol):
+				raise Exception("NFFT1 doesn't become int. Inappropriate NFFT2 value.")
+
+		if mode == "112":
+			if interpolate:
+				tl = self.intp.t_s
+				tm = self.intp.t_s
+				tn = self.intp.t_s
+				dl = self.intp.d1
+				dm = self.intp.d1
+				dn = self.intp.d2
+				Fsl = self.intp.Fs
+				Fsm = self.intp.Fs
+				Fsn = self.intp.Fs
+				NFFTl = NFFT2
+				NFFTm = NFFT2
+				NFFTn = NFFT2
+
+			else:
+				
+				tl = self.t1_s
+				tm = self.t1_s
+				tn = self.t2_s
+				dl = self.d1
+				dm = self.d1
+				dn = self.d2
+				Fsl = self.Fs1
+				Fsm = self.Fs1
+				Fsn = self.Fs2
+				NFFTl = NFFT1
+				NFFTm = NFFT1
+				NFFTn = NFFT2
+		elif mode == "221":
+			if interpolate:
+				tl = self.intp.t_s
+				tm = self.intp.t_s
+				tn = self.intp.t_s
+				dl = self.intp.d2
+				dm = self.intp.d2
+				dn = self.intp.d1
+				Fsl = self.intp.Fs
+				Fsm = self.intp.Fs
+				Fsn = self.intp.Fs
+				NFFTl = NFFT2
+				NFFTm = NFFT2
+				NFFTn = NFFT2
+
+			else:
+				
+				tl = self.t2_s
+				tm = self.t2_s
+				tn = self.t1_s
+				dl = self.d2
+				dm = self.d2
+				dn = self.d1
+				Fsl = self.Fs2
+				Fsm = self.Fs2
+				Fsn = self.Fs1
+				NFFTl = NFFT2
+				NFFTm = NFFT2
+				NFFTn = NFFT1
+		else:
+			raise Exception("Inappropriate mode name")
+		
+		self.bs = calc.cross_bispectrum(tl, tm, tn, dl, dm, dn, Fsl, Fsm, Fsn, 
+										tstart, tend, NFFTl, NFFTm, NFFTn, ovr, window, flim, flim)
+		return self.bs
+		

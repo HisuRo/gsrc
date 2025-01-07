@@ -1,7 +1,9 @@
 import os
+import numpy as np
 from pkg_resources import get_distribution  # type: ignore
 from sys import version
 import csv
+
 
 ### input ###
 working_server = "Precision3450"
@@ -28,6 +30,6 @@ with open(version_table_path, mode='r', newline='', encoding='utf-8') as file:
 		module_name = temp[first_colnm]
 		logged_version = temp[working_server]
 		if current_version != logged_version:
-			raise Exception(f"{module_name} version was changed from {logged_version} to {current_version}!! ")
+			raise Exception(f"{module_name} version was changed from {logged_version} to {current_version}, or wrong environment!! ")
 		
 		i += 1
