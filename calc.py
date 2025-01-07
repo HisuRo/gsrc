@@ -2463,7 +2463,7 @@ def auto_bispectrum(t_s, d, Fs_Hz, tstart, tend, NFFT, ovr=0.5, window="hann", f
 
     bs.f = bs.f.astype(np.float32)
     bs.fc = bs.fc.astype(np.complex64)
-    bs.f, _, bs.bicohsq, bs.bicohsq_err, bs.biphase, bs.biphase_err \
+    bs.f1, bs.f2, bs.bicohsq, bs.bicohsq_err, bs.biphase, bs.biphase_err \
         = bispectrum(bs.f, bs.f, bs.fc, bs.fc, bs.fc,
                     bs.NFFT, bs.NFFT, bs.NFFT, bs.NEns,
                     Fs_Hz, Fs_Hz, Fs_Hz, flimx=bs.flim, flimy=bs.flim)
