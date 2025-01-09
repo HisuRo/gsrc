@@ -40,7 +40,11 @@ class signal():
 	def bispectrum_multiwindows(self, tstart_list, tend_list, NFFT=2**14, ovr=0.5, window="hann", flim=None):
 		self.bs = calc.auto_bispectrum_multiwindows(t_s=self.t_s, d=self.d, Fs_Hz=self.Fs, tstart_list=tstart_list, tend_list=tend_list, NFFT=NFFT, ovr=ovr, window=window, flim=flim)
 		return self.bs
-
+	
+	def bispectral_stat(self, fix_var="f1"):
+		self.bsst = calc.bispectral_stat(self.bs.f1, self.bs.f2, self.bs.f3, self.bs.bicohsq, self.bs.bicohsq_err, self.bs.biphase, self.bs.biphase_err, fix_var=fix_var)
+		return self.bsst
+	
 	def amplitude(self):
 		t_s = self.t_s
 		d = calc.amplitude(self.d)

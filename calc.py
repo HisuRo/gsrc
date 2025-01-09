@@ -2097,16 +2097,18 @@ def transform_fourier_components_for_bispectrum(freqx, freqy, freqz, XX0, YY0, Z
         ZZ = ZZ[:, :, fidx_x]
         ZZ = ZZ[:, fidx_y, :]
 
+    freq3 = freq1 + freq2
+
     # assign nan value
     if (XX0 == YY0).all():
-        idxNan = np.where((np.abs(freq2 + freq1) > flimz) | (freq2 > freq1))
+        idxNan = np.where((np.abs(freq3) > flimz) | (freq2 > freq1))
         if not iscomplex:
-            idxNan = np.where((np.abs(freq2 + freq1) > flimz) | (freq2 > freq1) | (freq2 < - freq1))
+            idxNan = np.where((np.abs(freq3) > flimz) | (freq2 > freq1) | (freq2 < - freq1))
             if (XX0 == ZZ0).all():
-                idxNan = np.where((np.abs(freq2 + freq1) > flimz) | (freq2 > freq1)
+                idxNan = np.where((np.abs(freq3) > flimz) | (freq2 > freq1)
                                   | (freq2 < - freq1) | (freq2 < - 0.5 * freq1))
     else:
-        idxNan = np.where(np.abs(freq2 + freq1) > Fsz / 2)
+        idxNan = np.where(np.abs(freq3) > flimz)
 
     return freqx, freqy, freqz, XX, YY, ZZ, idxNan
 
@@ -2529,6 +2531,47 @@ def auto_bispectrum_multiwindows(t_s, d, Fs_Hz, tstart_list, tend_list, NFFT, ov
     bs.bicohsq_rer = bs.bicohsq_err / bs.bicohsq
 
     return bs
+
+def bispectral_stat(f1, f2, f3, bicohsq, bicohsq_err, biphase, biphase_err, fix_var="f1"):
+    # fix_var: "f1", "f2", "f3", None
+    bsst = struct()
+
+    if fix_var == "f1":
+        bsst.f = f1
+        bsst.bicohsq_avg, bsst.bicohsq_std, bsst.bicohsq_ste = average(bicohsq, bicohsq_err, axis=-2, skipnan=True)
+        bsst.biphase_avg, bsst.biphase_std, bsst.biphase_ste = average(biphase, biphase_err, axis=-2, skipnan=True)
+    elif fix_var == "f2":
+        bsst.f = f2
+        bsst.bicohsq_avg, bsst.bicohsq_std, bsst.bicohsq_ste = average(bicohsq, bicohsq_err, axis=-1, skipnan=True)
+        bsst.biphase_avg, bsst.biphase_std, bsst.biphase_ste = average(biphase, biphase_err, axis=-1, skipnan=True)
+    elif fix_var == "f3":
+        bsst.f = f3
+        bicohsq_rot = np.rot90(bicohsq)
+        bicohsq_err_rot = np.rot90(bicohsq_err)
+        biphase_rot = np.rot90(biphase)
+        biphase_err_rot = np.rot90(biphase_err)
+        bsst.bicohsq_avg = np.zeros(len(f3))
+        bsst.bicohsq_std = np.zeros(len(f3))
+        bsst.bicohsq_ste = np.zeros(len(f3))
+        bsst.biphase_avg = np.zeros(len(f3))
+        bsst.biphase_std = np.zeros(len(f3))
+        bsst.biphase_ste = np.zeros(len(f3))
+        for i in range(len(f3)):
+            idx0 = np.argmin(np.abs(f3))
+            bsst.bicohsq_avg[i], bsst.bicohsq_std[i], bsst.bicohsq_ste[i] = average(np.diag(bicohsq_rot, k=i-idx0), 
+                                                                                    np.diag(bicohsq_err_rot, k=i-idx0), 
+                                                                                    axis=None, skipnan=True)
+            bsst.biphase_avg[i], bsst.biphase_std[i], bsst.biphase_ste[i] = average(np.diag(biphase_rot, k=i-idx0), 
+                                                                                    np.diag(biphase_err_rot, k=i-idx0), 
+                                                                                    axis=None, skipnan=True)
+    elif fix_var is None:
+        bsst.bicohsq_avg, bsst.bicohsq_std, bsst.bicohsq_ste = average(bicohsq, bicohsq_err, axis=None, skipnan=True)
+        bsst.biphase_avg, bsst.biphase_std, bsst.biphase_ste = average(biphase, biphase_err, axis=None, skipnan=True)
+    else:
+        raise Exception("Wrong var")
+
+    return bsst
+
 
 ### Filters ###
 
