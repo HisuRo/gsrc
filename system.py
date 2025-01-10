@@ -113,7 +113,7 @@ def output_pickle_file(outputs, inputs, logs, outdir):
 
 	return output_filepath
 
-def output_fig(fig, outdir, inputs, output_filepath, now, suffix=""):
+def output_fig(fig, outdir, inputs, output_filepath, now, suffix="_0"):
 	output_figure_path = os.path.join(outdir, f"{inputs['output_filename']}{suffix}.png")
 	metadata = {
 		"Title": f"{inputs['output_filename']}{suffix}.png", 
