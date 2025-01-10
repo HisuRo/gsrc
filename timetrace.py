@@ -45,6 +45,10 @@ class signal():
 		self.bsst = calc.bispectral_stat(self.bs.f1, self.bs.f2, self.bs.f3, self.bs.bicohsq, self.bs.bicohsq_err, self.bs.biphase, self.bs.biphase_err, fix_var=fix_var)
 		return self.bsst
 	
+	def bispectum_at_f(self, f_at, fix_var="f1"):
+		self.bsat = calc.bispectrum_at_f(f_at, self.bs.f1, self.bs.f2, self.bs.bicohsq, self.bs.bicohsq_err, self.bs.biphase, self.bs.biphase_err, fix_var=fix_var)
+		return self.bsat
+
 	def amplitude(self):
 		t_s = self.t_s
 		d = calc.amplitude(self.d)

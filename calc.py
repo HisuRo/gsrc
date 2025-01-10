@@ -500,6 +500,23 @@ def sumErr(errList):
     err = np.sqrt(np.sum(np.array(errList)**2, axis=0))
     return err
 
+def sum(dat, err=None, axis=None, skipnan=False):
+
+    if err is None:
+        sumerr = None
+        if skipnan:
+            sum = np.nansum(dat, axis=axis)
+        else:
+            sum = np.sum(dat, axis=axis)
+    else:
+        if skipnan:
+            sum = np.nansum(dat, axis=axis)
+            sumerr = np.sqrt(np.nansum(err**2, axis=axis))
+        else:
+            sum = np.sum(dat, axis=axis)
+            sumerr = np.sqrt(np.sum(err**2, axis=axis))
+    return sum, sumerr
+
 def multiRer(datList, errList):
     rerArray = np.array(errList) / np.array(datList)
     rer = np.sqrt(np.sum(rerArray**2, axis=0))
@@ -566,10 +583,13 @@ def power(x, e, x_err=None):
 
 def average(dat, err=None, axis=None, skipnan=False):
 
-    if axis is None:
-        datsize = dat.size
+    if skipnan:
+        datsize = np.count_nonzero(~np.isnan(dat), axis=axis)
     else:
-        datsize = dat.shape[axis]
+        if axis is None:
+            datsize = dat.size
+        else:
+            datsize = dat.shape[axis]
 
     if err is None:
         if skipnan:
@@ -586,23 +606,25 @@ def average(dat, err=None, axis=None, skipnan=False):
             w = 1. / err_sq
             avg = np.nansum(dat * w, axis=axis) / np.nansum(w, axis=axis)
             std = np.sqrt(np.nanvar(dat, axis=axis) + np.nanmean(err_sq, axis=axis))
-            if axis is None:
-                ste = np.sqrt(np.nansum((dat - avg) ** 2 * w, axis=axis) \
-                              / ((datsize - 1) * np.nansum(w, axis=axis)) + 1. / np.nansum(w, axis=axis))
-            else:
-                ste = np.sqrt(np.nansum((dat - expand_by1dim(avg, datsize, axis=axis)) ** 2 * w, axis=axis) \
-                              / ((datsize - 1) * np.nansum(w, axis=axis)) + 1. / np.nansum(w, axis=axis))
+            ste = std / np.sqrt(datsize)
+            # if axis is None:
+            #     ste = np.sqrt(np.nansum((dat - avg) ** 2 * w, axis=axis) \
+            #                   / ((datsize - 1) * np.nansum(w, axis=axis)) + 1. / np.nansum(w, axis=axis))
+            # else:
+            #     ste = np.sqrt(np.nansum((dat - expand_by1dim(avg, datsize, axis=axis)) ** 2 * w, axis=axis) \
+            #                   / ((datsize - 1) * np.nansum(w, axis=axis)) + 1. / np.nansum(w, axis=axis))
         else:
             err_sq = err ** 2
             w = 1. / err_sq
             avg = np.average(dat, axis=axis, weights=1./err_sq)
             std = np.sqrt(np.var(dat, axis=axis) + np.average(err_sq, axis=axis))
-            if axis is None:
-                ste = np.sqrt(np.sum((dat - avg) ** 2 * w, axis=axis) \
-                              / ((datsize - 1) * np.sum(w, axis=axis)) + 1. / np.sum(w, axis=axis))
-            else:
-                ste = np.sqrt(np.sum((dat - expand_by1dim(avg, datsize, axis=axis))**2 * w, axis=axis) \
-                / ((datsize - 1) * np.sum(w, axis=axis)) + 1./np.sum(w, axis=axis))
+            ste = std / np.sqrt(datsize)
+            # if axis is None:
+            #     ste = np.sqrt(np.sum((dat - avg) ** 2 * w, axis=axis) \
+            #                   / ((datsize - 1) * np.sum(w, axis=axis)) + 1. / np.sum(w, axis=axis))
+            # else:
+            #     ste = np.sqrt(np.sum((dat - expand_by1dim(avg, datsize, axis=axis))**2 * w, axis=axis) \
+            #     / ((datsize - 1) * np.sum(w, axis=axis)) + 1./np.sum(w, axis=axis))
 
     return avg, std, ste
 
@@ -2110,12 +2132,13 @@ def transform_fourier_components_for_bispectrum(freqx, freqy, freqz, XX0, YY0, Z
     else:
         idxNan = np.where(np.abs(freq3) > flimz)
 
-    return freqx, freqy, freqz, XX, YY, ZZ, idxNan
+    return freqx, freqy, freqz, XX, YY, ZZ, idxNan, freq1, freq2, freq3
 
 def bispectrum(freqx, freqy, freqz, XX0, YY0, ZZ0, NEns,
                 Fsx, Fsy, Fsz, flimx=None, flimy=None, flimz=None):
 
-    freqx, freqy, freqz, XX, YY, ZZ, idxNan = transform_fourier_components_for_bispectrum(freqx=freqx, freqy=freqy, freqz=freqz, 
+    freqx, freqy, freqz, XX, YY, ZZ, idxNan, _, _, _ \
+    = transform_fourier_components_for_bispectrum(freqx=freqx, freqy=freqy, freqz=freqz, 
                                                                                    XX0=XX0, YY0=YY0, ZZ0=ZZ0, 
                                                                                    Fsx=Fsx, Fsy=Fsy, Fsz=Fsz, 
                                                                                    flimx=flimx, flimy=flimy, flimz=flimz)
@@ -2131,128 +2154,46 @@ def bispectrum(freqx, freqy, freqz, XX0, YY0, ZZ0, NEns,
 
     return freqx, freqy, freqz, biCohSq, biCohSqErr, biPhs, biPhsErr
 
-def bispectrum_at_f3(f3_at, freqx, freqy, freqz, XX0, YY0, ZZ0, NFFTx, NFFTy, NFFTz, NEns,
-                            Fsx, Fsy, flimx=None, flimy=None):
-
-    idxMxz, _ = make_idxs_for_bispectrum(NFFTx, NFFTy, NFFTz)
-    freq3 = freqz[idxMxz]
-
-    XX = XX0
-    YY = YY0
-    ZZ = ZZ0[:, idxMxz]
-
-
-    # limitation
-    if flimx is not None:
-        fidx_x = np.where(np.abs(freqx) < flimx)[0]
-        freqx = freqx[fidx_x]
-        freq3 = freq3[:, fidx_x]
-        XX = XX[:, fidx_x]
-        ZZ = ZZ[:, :, fidx_x]
-    if flimy is not None:
-        fidx_y = np.where(np.abs(freqy) < flimy)[0]
-        freqy = freqy[fidx_y]
-        freq3 = freq3[fidx_y, :]
-        YY = YY[:, fidx_y]
-        ZZ = ZZ[:, fidx_y, :]
-
-    # symmetry
-    iscomplex = np.iscomplex(XX).any()
-
-    if (XX0 == YY0).all():
-        fidx_x = np.where(freqx >= - 0.5 * 0.5 * Fsx)[0]
-        fidx_y = np.where(freqy <= 0.5 * 0.5 * Fsy)[0]
-        if not iscomplex:
-            fidx_x = np.where(freqx >= 0)[0]
-            fidx_y = np.where(freqy <= 0.5 * 0.5 * Fsy)[0]
-            if (XX0 == ZZ0).all():
-                fidx_y = np.where((freqy <= 0.5 * 0.5 * Fsy)&(freqy >= 0.5 * 0.5 * Fsy))[0]
-
-        freqx = freqx[fidx_x]
-        freqy = freqy[fidx_y]
-        freq3 = freq3[:, fidx_x]
-        freq3 = freq3[fidx_y, :]
-        XX = XX[:, fidx_x]
-        YY = YY[:, fidx_y]
-        ZZ = ZZ[:, :, fidx_x]
-        ZZ = ZZ[:, fidx_y, :]
+def bispectrum_at_f3(f3_at, freqx, freqy, freqz, XX0, YY0, ZZ0, NEns,
+                    Fsx, Fsy, Fsz, flimx=None, flimy=None):
+    
+    freqx, freqy, freqz, XX, YY, ZZ, _, _, _, freq3 \
+    = transform_fourier_components_for_bispectrum(freqx=freqx, freqy=freqy, freqz=freqz,
+                                                  XX0=XX0, YY0=YY0, ZZ0=ZZ0,Fsx=Fsx, Fsy=Fsy, Fsz=Fsz,
+                                                  flimx=flimx, flimy=flimy, flimz=None)
 
     f3_at = freqz[np.argmin(np.abs(freqz - f3_at))]
     idxs_f3_at = np.where(freq3 == f3_at)
 
-    XX = XX[:, idxs_f3_at[1]]
-    YY = YY[:, idxs_f3_at[0]]
+    XX = XX[:, idxs_f3_at[0], idxs_f3_at[1]]
+    YY = YY[:, idxs_f3_at[0], idxs_f3_at[1]]
     ZZ = ZZ[:, idxs_f3_at[0], idxs_f3_at[1]]
 
     BSpec, BSpecStd, BSpecReStd, BSpecImStd = average_bispectrum(XX, YY, ZZ)
     biCohSq, biCohSqErr = bicoherence(BSpec, BSpecStd, XX, YY, ZZ, NEns)
     biPhs, biPhsErr = biphase(BSpec, BSpecReStd, BSpecImStd, NEns)
 
-    return f3_at, biCohSq, biCohSqErr, biPhs, biPhsErr
+    return f3_at, freqx, freqy, biCohSq, biCohSqErr, biPhs, biPhsErr
 
-def bispectrum_in_f_range(fmin, fmax, freqx, freqy, freqz, XX0, YY0, ZZ0, NFFTx, NFFTy, NFFTz, NEns,
-                                Fsx, Fsy, flimx=None, flimy=None):
-    # flimx, flimy: int, float as fmax or tuple, list as (fmin, fmax), [fmin, fmax]
+def bispectrum_in_f3_range(fmin, fmax, freqx, freqy, freqz, XX0, YY0, ZZ0, NEns,
+                                Fsx, Fsy, Fsz, flimx=None, flimy=None):
 
-    idxMxz, _ = make_idxs_for_bispectrum(NFFTx, NFFTy, NFFTz)
-    freq3 = freqz[idxMxz]
-
-    XX = XX0
-    YY = YY0
-    ZZ = ZZ0[:, idxMxz]
-
-    # limitation
-    if flimx is not None:
-        if isinstance(flimx, tuple) or isinstance(flimx, list):
-            fidx_x = np.where((np.abs(freqx) < flimx[1]) & (np.abs(freqx) > flimx[0]))[0]
-        else:
-            fidx_x = np.where(np.abs(freqx) < flimx)[0]
-        freqx = freqx[fidx_x]
-        freq3 = freq3[:, fidx_x]
-        XX = XX[:, fidx_x]
-        ZZ = ZZ[:, :, fidx_x]
-    if flimy is not None:
-        if isinstance(flimy, tuple) or isinstance(flimy, list):
-            fidx_y = np.where((np.abs(freqy) < flimy[1]) & (np.abs(freqy) > flimy[0]))[0]
-        else:
-            fidx_y = np.where(np.abs(freqy) < flimy)[0]
-        freqy = freqy[fidx_y]
-        freq3 = freq3[fidx_y, :]
-        YY = YY[:, fidx_y]
-        ZZ = ZZ[:, fidx_y, :]
-
-    # symmetry
-    iscomplex = np.iscomplex(XX).any()
-
-    if (XX0 == YY0).all():
-        fidx_x = np.where(freqx >= - 0.5 * 0.5 * Fsx)[0]
-        fidx_y = np.where(freqy <= 0.5 * 0.5 * Fsy)[0]
-        if not iscomplex:
-            fidx_x = np.where(freqx >= 0)[0]
-            fidx_y = np.where(freqy <= 0.5 * 0.5 * Fsy)[0]
-            if (XX0 == ZZ0).all():
-                fidx_y = np.where((freqy <= 0.5 * 0.5 * Fsy)&(freqy >= 0.5 * 0.5 * Fsy))[0]
-
-        freqx = freqx[fidx_x]
-        freqy = freqy[fidx_y]
-        freq3 = freq3[:, fidx_x]
-        freq3 = freq3[fidx_y, :]
-        XX = XX[:, fidx_x]
-        YY = YY[:, fidx_y]
-        ZZ = ZZ[:, :, fidx_x]
-        ZZ = ZZ[:, fidx_y, :]
+    freqx, freqy, freqz, XX, YY, ZZ, _, _, _, freq3 \
+    = transform_fourier_components_for_bispectrum(freqx=freqx, freqy=freqy, freqz=freqz,
+                                                  XX0=XX0, YY0=YY0, ZZ0=ZZ0,Fsx=Fsx, Fsy=Fsy, Fsz=Fsz,
+                                                  flimx=flimx, flimy=flimy, flimz=None)
 
     idxs_f3_at = np.where((np.abs(freq3) > fmin) & (np.abs(freq3) < fmax))
 
-    XX = XX[:, idxs_f3_at[1]]
-    YY = YY[:, idxs_f3_at[0]]
+    XX = XX[:, idxs_f3_at[0], idxs_f3_at[1]]
+    YY = YY[:, idxs_f3_at[0], idxs_f3_at[1]]
     ZZ = ZZ[:, idxs_f3_at[0], idxs_f3_at[1]]
 
     BSpec, BSpecStd, BSpecReStd, BSpecImStd = average_bispectrum(XX, YY, ZZ)
     biCohSq, biCohSqErr = bicoherence(BSpec, BSpecStd, XX, YY, ZZ, NEns)
     biPhs, biPhsErr = biphase(BSpec, BSpecReStd, BSpecImStd, NEns)
 
-    return biCohSq, biCohSqErr, biPhs, biPhsErr
+    return freqx, freqy, biCohSq, biCohSqErr, biPhs, biPhsErr
 
 def cross_bispectrum(t1_s, t2_s, t3_s, d1, d2, d3, Fs1_Hz, Fs2_Hz, Fs3_Hz, tstart, tend, 
                     NFFT1=2**10, NFFT2=2**10, NFFT3=2**10, ovr=0.5, window='hann', 
@@ -2389,9 +2330,9 @@ def cross_bispectrum_at_f3(f3_at, xx, yy, zz, dtx, dty, dtz,
 
     return o
 
-def cross_bispectrum_in_f_range(fmin, fmax, xx, yy, zz, dtx, dty, dtz,
-                                         NFFTx, NFFTy, NFFTz, flimx=None, flimy=None,
-                                         OVR=0.5, window="hann", coef_OV=1.0):
+def cross_bispectrum_in_f3_range(fmin, fmax, xx, yy, zz, dtx, dty, dtz,
+                                 NFFTx, NFFTy, NFFTz, flimx=None, flimy=None,
+                                 OVR=0.5, window="hann", coef_OV=1.0):
 
     o = struct()
 
@@ -2443,11 +2384,12 @@ def cross_bispectrum_in_f_range(fmin, fmax, xx, yy, zz, dtx, dty, dtz,
     o.XX = o.XX.astype(np.complex64)
     o.YY = o.YY.astype(np.complex64)
     o.ZZ = o.ZZ.astype(np.complex64)
-    o.biCohSq, o.biCohSqErr, o.biPhs, o.biPhsErr \
-        = bispectrum_in_f_range(fmin, fmax, o.freqx, o.freqy, o.freqz, o.XX, o.YY, o.ZZ,
-                                      NFFTx, NFFTy, NFFTz, o.NEns,
-                                      1./dtx, 1./dty, flimx=flimx, flimy=flimy)
-    o.biCohSq_total = np.sum(o.biCohSq)
+    o.freqx, o.freqy, o.bicohsq, o.bicohsq_err, o.biphase, o.biphase_err \
+        = bispectrum_in_f3_range(fmin, fmax, o.freqx, o.freqy, o.freqz, 
+                                 o.XX, o.YY, o.ZZ, o.NEns,
+                                 1./dtx, 1./dty, 1./dtz, flimx=flimx, flimy=flimy)
+
+    o.biCohSq_total, o.biCohSq_err = sum(o.biCohSq, err=o.bicohsq_err)
     o.biCohSq_stastd = o.biCohSq.size / o.NEns * coef_OV
     o.biPhs_avg = np.average(o.biPhs)
     o.biPhs_avg_err = np.sqrt(np.average(o.biPhsErr**2))
@@ -2532,8 +2474,33 @@ def auto_bispectrum_multiwindows(t_s, d, Fs_Hz, tstart_list, tend_list, NFFT, ov
 
     return bs
 
+def bispectrum_at_f(f_at, f1, f2, bicohsq, bicohsq_err, biphase, biphase_err, fix_var="f1"):
+    # fix_var = "f1" or "f2"
+    bsat = struct()
+    bsat.f1 = f1
+    bsat.f2 = f2
+
+    if fix_var == "f1":
+        idx0 = np.argmin(np.abs(f1 - f_at))
+        bsat.f = f1[idx0]
+        bsat.bicohsq = bicohsq[:, idx0]
+        bsat.bicohsq_err = bicohsq_err[:, idx0]
+        bsat.biphase = biphase[:, idx0]
+        bsat.biphase_err = biphase_err[:, idx0]
+    elif fix_var == "f2":
+        idx0 = np.argmin(np.abs(f2 - f_at))
+        bsat.f = f2[idx0]
+        bsat.bicohsq = bicohsq[idx0]
+        bsat.bicohsq_err = bicohsq_err[idx0]
+        bsat.biphase = biphase[idx0]
+        bsat.biphase_err = biphase_err[idx0]
+    else:
+        raise Exception("Wrong var")
+
+    return bsat
+
 def bispectral_stat(f1, f2, f3, bicohsq, bicohsq_err, biphase, biphase_err, fix_var="f1"):
-    # fix_var: "f1", "f2", "f3", None
+    # fix_var = "f1", "f2", "f3", or None
     bsst = struct()
 
     if fix_var == "f1":
@@ -2546,10 +2513,6 @@ def bispectral_stat(f1, f2, f3, bicohsq, bicohsq_err, biphase, biphase_err, fix_
         bsst.biphase_avg, bsst.biphase_std, bsst.biphase_ste = average(biphase, biphase_err, axis=-1, skipnan=True)
     elif fix_var == "f3":
         bsst.f = f3
-        bicohsq_rot = np.rot90(bicohsq)
-        bicohsq_err_rot = np.rot90(bicohsq_err)
-        biphase_rot = np.rot90(biphase)
-        biphase_err_rot = np.rot90(biphase_err)
         bsst.bicohsq_avg = np.zeros(len(f3))
         bsst.bicohsq_std = np.zeros(len(f3))
         bsst.bicohsq_ste = np.zeros(len(f3))
@@ -2558,12 +2521,13 @@ def bispectral_stat(f1, f2, f3, bicohsq, bicohsq_err, biphase, biphase_err, fix_
         bsst.biphase_ste = np.zeros(len(f3))
         for i in range(len(f3)):
             idx0 = np.argmin(np.abs(f3))
-            bsst.bicohsq_avg[i], bsst.bicohsq_std[i], bsst.bicohsq_ste[i] = average(np.diag(bicohsq_rot, k=i-idx0), 
-                                                                                    np.diag(bicohsq_err_rot, k=i-idx0), 
+            bsst.bicohsq_avg[i], bsst.bicohsq_std[i], bsst.bicohsq_ste[i] = average(np.diag(bicohsq, k=i-idx0), 
+                                                                                    np.diag(bicohsq_err, k=i-idx0), 
                                                                                     axis=None, skipnan=True)
-            bsst.biphase_avg[i], bsst.biphase_std[i], bsst.biphase_ste[i] = average(np.diag(biphase_rot, k=i-idx0), 
-                                                                                    np.diag(biphase_err_rot, k=i-idx0), 
+            bsst.biphase_avg[i], bsst.biphase_std[i], bsst.biphase_ste[i] = average(np.diag(biphase, k=i-idx0), 
+                                                                                    np.diag(biphase_err, k=i-idx0), 
                                                                                     axis=None, skipnan=True)
+        raise Exception("Unimplemented")
     elif fix_var is None:
         bsst.bicohsq_avg, bsst.bicohsq_std, bsst.bicohsq_ste = average(bicohsq, bicohsq_err, axis=None, skipnan=True)
         bsst.biphase_avg, bsst.biphase_std, bsst.biphase_ste = average(biphase, biphase_err, axis=None, skipnan=True)
