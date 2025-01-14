@@ -23,8 +23,8 @@ class timetrace():
 		# calculate amplitude
 		self.amp = calc.amplitude(self.d)
 
-		self.raw = raw(self)
-		self.amplitude = amplitude(self)
+		self.raw = signal(self.t_s, self.d, self.Fs)
+		self.amplitude = signal(self.t_s, self.amp,  self.Fs)
 
 	def produce_virtual_IQ_signal(self, carrier_freq_Hz, downsampling_factor=1, ref_phase=0):
 
@@ -36,9 +36,9 @@ class timetrace():
 		self.virt.amp = calc.amplitude(self.virt.d)
 		self.virt.phase = calc.phase(self.virt.d)
 
-		self.virtIQ = virtIQ(self)
-		self.virtIQamp = virtIQamp(self)
-		self.virtIQphase = virtIQphase(self)
+		self.virtIQ = signal(self.virt.t_s, self.virt.d, self.virt.Fs)
+		self.virtIQamp = signal(self.virt.t_s, self.virt.amp, self.virt.Fs)
+		self.virtIQphase = signal(self.virt.t_s, self.virt.phase, self.virt.Fs)
 
 class timetrace_multidomains(timetrace):
 
@@ -65,8 +65,8 @@ class timetrace_multidomains(timetrace):
 		# calculate amplitude
 		self.amp = calc.amplitude(self.d)
 
-		self.raw = raw(self)
-		self.amplitude = amplitude(self)
+		self.raw = signal(self.t_s, self.d, self.Fs)
+		self.amplitude = signal(self.t_s, self.amp, self.Fs)
 
 class timetrace_multidomains_iq():
 
@@ -84,6 +84,6 @@ class timetrace_multidomains_iq():
 		self.amp = calc.amplitude(self.d)
 		self.phase = calc.phase(self.d)
 
-		self.raw = raw(self)
-		self.amplitude = amplitude(self)
-		self.iqphase = iqphase(self)
+		self.raw = signal(self.t_s, self.d, self.Fs)
+		self.amplitude = signal(self.t_s, self.amp, self.Fs)
+		self.iqphase = signal(self.t_s, self.phase, self.Fs)
