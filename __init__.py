@@ -3,10 +3,7 @@ import numpy as np
 from pkg_resources import get_distribution  # type: ignore
 from sys import version
 import csv
-
-
-### input ###
-working_server = "Precision3450"
+import json
 
 ### main ###
 current_python_version = version.split()[0]
@@ -18,7 +15,12 @@ current_matplotlib_version = get_distribution("matplotlib").version
 current_versions = [current_python_version, current_numpy_version, current_scipy_version, current_pandas_version, current_matplotlib_version]
 
 nasu_dir = os.path.dirname(os.path.abspath(__file__))
+config = os.path.join(nasu_dir, "config.json")
 version_table_path = os.path.join(nasu_dir, "version_table.csv")
+with open(config, 'r') as f:
+	configs = json.load(f)
+working_server = configs["working_server"]
+
 with open(version_table_path, mode='r', newline='', encoding='utf-8') as file:
 	reader = csv.DictReader(file)
 	first_colnm = "name"
