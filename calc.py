@@ -2058,7 +2058,7 @@ def biphase(BSpec, BSpecReStd, BSpecImStd, NEns):
 
     return biPhs, biPhsErr
 
-def transform_fourier_components_for_bispectrum(freqx, freqy, freqz, XX0, YY0, ZZ0, Fsx, Fsy, Fsz, flimx, flimy, flimz):
+def transform_fourier_components_for_bispectrum(freqx, freqy, freqz, XX0, YY0, ZZ0, Fsx, Fsy, Fsz, flimx, flimy, flimz, iscomplex=True):
 
     if flimx is None:
         flimx = Fsx / 2
@@ -2094,17 +2094,12 @@ def transform_fourier_components_for_bispectrum(freqx, freqy, freqz, XX0, YY0, Z
     YY = np.repeat(a=YY0[:, :, np.newaxis], repeats=lenx, axis=2)
     ZZ = ZZ0[:, idxMxz]
 
-    # symmetry
-    iscomplex = np.iscomplex(XX).any()
-
     if (XX0 == YY0).all():
         fidx_x = np.where(freqx >= - 0.5 * flimx)[0]
         fidx_y = np.where(freqy <= 0.5 * flimy)[0]
-        if not iscomplex:
+        if (not iscomplex) and (XX0 == ZZ0).all():
             fidx_x = np.where(freqx >= 0)[0]
-            fidx_y = np.where(freqy <= 0.5 * flimy)[0]
-            if (XX0 == ZZ0).all():
-                fidx_y = np.where((freqy <= 0.5 * flimy)&(freqy >= 0.5 * flimy))[0]
+            fidx_y = np.where((freqy <= 0.5 * flimy)&(freqy >= 0.5 * - flimx))[0]
 
         freqx = freqx[fidx_x]
         freqy = freqy[fidx_y]
@@ -2124,24 +2119,23 @@ def transform_fourier_components_for_bispectrum(freqx, freqy, freqz, XX0, YY0, Z
     # assign nan value
     if (XX0 == YY0).all():
         idxNan = np.where((np.abs(freq3) > flimz) | (freq2 > freq1))
-        if not iscomplex:
-            idxNan = np.where((np.abs(freq3) > flimz) | (freq2 > freq1) | (freq2 < - freq1))
-            if (XX0 == ZZ0).all():
-                idxNan = np.where((np.abs(freq3) > flimz) | (freq2 > freq1)
-                                  | (freq2 < - freq1) | (freq2 < - 0.5 * freq1))
+        if (not iscomplex) and (XX0 == ZZ0).all():
+            idxNan = np.where((np.abs(freq3) > flimz) | (freq2 > freq1)
+                                | (freq2 < - 0.5 * freq1))
     else:
         idxNan = np.where(np.abs(freq3) > flimz)
 
     return freqx, freqy, freqz, XX, YY, ZZ, idxNan, freq1, freq2, freq3
 
 def bispectrum(freqx, freqy, freqz, XX0, YY0, ZZ0, NEns,
-                Fsx, Fsy, Fsz, flimx=None, flimy=None, flimz=None):
+                Fsx, Fsy, Fsz, flimx=None, flimy=None, flimz=None, iscomplex=True):
 
     freqx, freqy, freqz, XX, YY, ZZ, idxNan, _, _, _ \
     = transform_fourier_components_for_bispectrum(freqx=freqx, freqy=freqy, freqz=freqz, 
                                                                                    XX0=XX0, YY0=YY0, ZZ0=ZZ0, 
                                                                                    Fsx=Fsx, Fsy=Fsy, Fsz=Fsz, 
-                                                                                   flimx=flimx, flimy=flimy, flimz=flimz)
+                                                                                   flimx=flimx, flimy=flimy, flimz=flimz, 
+                                                                                   iscomplex=iscomplex)
     
     BSpec, BSpecStd, BSpecReStd, BSpecImStd = average_bispectrum(XX, YY, ZZ)
     biCohSq, biCohSqErr = bicoherence(BSpec, BSpecStd, XX, YY, ZZ, NEns)
@@ -2216,6 +2210,8 @@ def cross_bispectrum(t1_s, t2_s, t3_s, d1, d2, d3, Fs1_Hz, Fs2_Hz, Fs3_Hz, tstar
     bs.flim2 = flim2
     bs.flim3 = flim3
 
+    iscomplex = np.array([np.iscomplex(d1).any(), np.iscomplex(d2).any(), np.iscomplex(d3).any()]).any() # if any data are complex
+
     _, datlist = proc.getTimeIdxsAndDats(t1_s, bs.tstart, bs.tend, [t1_s, d1])
     _, bs.d1raw = datlist
     _, datlist = proc.getTimeIdxsAndDats(t2_s, bs.tstart, bs.tend, [t2_s, d2])
@@ -2261,7 +2257,7 @@ def cross_bispectrum(t1_s, t2_s, t3_s, d1, d2, d3, Fs1_Hz, Fs2_Hz, Fs3_Hz, tstar
                      bs.fc1, bs.fc2, bs.fc3,
                      bs.NEns,
                      Fs1_Hz, Fs2_Hz, Fs3_Hz, 
-                     flimx=bs.flim1, flimy=bs.flim2, flimz=bs.flim3)
+                     flimx=bs.flim1, flimy=bs.flim2, flimz=bs.flim3, iscomplex=iscomplex)
     bs.bicohsq_rer = bs.bicohsq_err / bs.bicohsq
 
     return bs
@@ -2409,6 +2405,8 @@ def auto_bispectrum(t_s, d, Fs_Hz, tstart, tend, NFFT, ovr=0.5, window="hann", f
 
     bs.flim = flim
 
+    iscomplex = np.iscomplex(d).any()
+
     _, datlist = proc.getTimeIdxsAndDats(t_s, bs.tstart, bs.tend, [t_s, d])
     _, bs.draw = datlist
 
@@ -2426,7 +2424,8 @@ def auto_bispectrum(t_s, d, Fs_Hz, tstart, tend, NFFT, ovr=0.5, window="hann", f
                      bs.fc, bs.fc, bs.fc, 
                      bs.NEns,
                      Fs_Hz, Fs_Hz, Fs_Hz, 
-                     flimx=bs.flim, flimy=bs.flim, flimz=bs.flim)
+                     flimx=bs.flim, flimy=bs.flim, flimz=bs.flim, 
+                     iscomplex=iscomplex)
     bs.bicohsq_rer = bs.bicohsq_err / bs.bicohsq
 
     return bs
@@ -2443,6 +2442,8 @@ def auto_bispectrum_multiwindows(t_s, d, Fs_Hz, tstart_list, tend_list, NFFT, ov
     bs.NOV = int(bs.NFFT * bs.ovr)
 
     bs.flim = flim
+
+    iscomplex = np.iscomplex(d).any()
 
     for i, (tstart, tend) in enumerate(zip(bs.tstart_list, bs.tend_list)):
 
@@ -2469,7 +2470,8 @@ def auto_bispectrum_multiwindows(t_s, d, Fs_Hz, tstart_list, tend_list, NFFT, ov
                      bs.fc, bs.fc, bs.fc,
                      bs.NEns,
                      Fs_Hz, Fs_Hz, Fs_Hz, 
-                     flimx=bs.flim, flimy=bs.flim, flimz=bs.flim)
+                     flimx=bs.flim, flimy=bs.flim, flimz=bs.flim, 
+                     iscomplex=iscomplex)
     bs.bicohsq_rer = bs.bicohsq_err / bs.bicohsq
 
     return bs
