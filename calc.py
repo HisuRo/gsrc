@@ -2097,9 +2097,12 @@ def transform_fourier_components_for_bispectrum(freqx, freqy, freqz, XX0, YY0, Z
     if (XX0 == YY0).all():
         fidx_x = np.where(freqx >= - 0.5 * flimx)[0]
         fidx_y = np.where(freqy <= 0.5 * flimy)[0]
-        if (not iscomplex) and (XX0 == ZZ0).all():
+        if not iscomplex:
             fidx_x = np.where(freqx >= 0)[0]
-            fidx_y = np.where((freqy <= 0.5 * flimy)&(freqy >= 0.5 * - flimx))[0]
+            fidx_y = np.where(freqy <= 0.5 * flimy)[0]
+            if (XX0 == ZZ0).all():
+                fidx_x = np.where(freqx >= 0)[0]
+                fidx_y = np.where((freqy <= 0.5 * flimy)&(freqy >= 0.))[0]
 
         freqx = freqx[fidx_x]
         freqy = freqy[fidx_y]
@@ -2119,9 +2122,11 @@ def transform_fourier_components_for_bispectrum(freqx, freqy, freqz, XX0, YY0, Z
     # assign nan value
     if (XX0 == YY0).all():
         idxNan = np.where((np.abs(freq3) > flimz) | (freq2 > freq1))
-        if (not iscomplex) and (XX0 == ZZ0).all():
+        if not iscomplex:
             idxNan = np.where((np.abs(freq3) > flimz) | (freq2 > freq1)
-                                | (freq2 < - 0.5 * freq1))
+                                    | (freq2 < - freq1))
+            if (XX0 == ZZ0).all():
+                idxNan = np.where((np.abs(freq3) > flimz) | (freq2 > freq1))
     else:
         idxNan = np.where(np.abs(freq3) > flimz)
 
