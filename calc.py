@@ -1972,19 +1972,19 @@ def lagtime_from_crossphase(freq, crossphase, crossphase_err, Nfit):
 
 ## Bi Spectrum
 
-def make_idxs_for_bispectrum(NFFTx, NFFTy, NFFTz):
+def make_idxs_for_bispectrum(lenx, leny, lenz):
 
-    idxf0x = NFFTx // 2
-    idxf0y = NFFTy // 2
-    idxf0z = NFFTz // 2
+    idxf0x = lenx // 2
+    idxf0y = leny // 2
+    idxf0z = lenz // 2
 
-    idxMx1 = np.tile(np.arange(NFFTx), (NFFTy, 1))
-    idxMx2 = np.tile(np.arange(NFFTy), (NFFTx, 1)).T
+    idxMx1 = np.tile(np.arange(lenx), (leny, 1))
+    idxMx2 = np.tile(np.arange(leny), (lenx, 1)).T
     coefMx1 = idxMx1 - idxf0x
     coefMx2 = idxMx2 - idxf0y
     coefMx3 = coefMx1 + coefMx2
     idxMx3 = coefMx3 + idxf0z
-    idxNan = np.where(((idxMx3 < 0) | (idxMx3 >= NFFTz)))
+    idxNan = np.where(((idxMx3 < 0) | (idxMx3 >= lenz)))
     idxMx3[idxNan] = 0
 
     del idxMx1
@@ -2095,14 +2095,14 @@ def transform_fourier_components_for_bispectrum(freqx, freqy, freqz, XX0, YY0, Z
     ZZ = ZZ0[:, idxMxz]
 
     if (XX0 == YY0).all():
-        fidx_x = np.where(freqx >= - 0.5 * flimx)[0]
-        fidx_y = np.where(freqy <= 0.5 * flimy)[0]
+        fidx_x = np.where(freqx >= - 0.5 * flimz)[0]
+        fidx_y = np.where(freqy <= 0.5 * flimz)[0]
         if not iscomplex:
             fidx_x = np.where(freqx >= 0)[0]
-            fidx_y = np.where(freqy <= 0.5 * flimy)[0]
+            fidx_y = np.where(freqy <= 0.5 * flimz)[0]
             if (XX0 == ZZ0).all():
                 fidx_x = np.where(freqx >= 0)[0]
-                fidx_y = np.where((freqy <= 0.5 * flimy)&(freqy >= 0.))[0]
+                fidx_y = np.where((freqy <= 0.5 * flimz)&(freqy >= 0.))[0]
 
         freqx = freqx[fidx_x]
         freqy = freqy[fidx_y]
@@ -2137,10 +2137,10 @@ def bispectrum(freqx, freqy, freqz, XX0, YY0, ZZ0, NEns,
 
     freqx, freqy, freqz, XX, YY, ZZ, idxNan, _, _, _ \
     = transform_fourier_components_for_bispectrum(freqx=freqx, freqy=freqy, freqz=freqz, 
-                                                                                   XX0=XX0, YY0=YY0, ZZ0=ZZ0, 
-                                                                                   Fsx=Fsx, Fsy=Fsy, Fsz=Fsz, 
-                                                                                   flimx=flimx, flimy=flimy, flimz=flimz, 
-                                                                                   iscomplex=iscomplex)
+                                                  XX0=XX0, YY0=YY0, ZZ0=ZZ0, 
+                                                  Fsx=Fsx, Fsy=Fsy, Fsz=Fsz, 
+                                                  flimx=flimx, flimy=flimy, flimz=flimz, 
+                                                  iscomplex=iscomplex)
     
     BSpec, BSpecStd, BSpecReStd, BSpecImStd = average_bispectrum(XX, YY, ZZ)
     biCohSq, biCohSqErr = bicoherence(BSpec, BSpecStd, XX, YY, ZZ, NEns)
@@ -2254,6 +2254,87 @@ def cross_bispectrum(t1_s, t2_s, t3_s, d1, d2, d3, Fs1_Hz, Fs2_Hz, Fs3_Hz, tstar
 
     bs.f1 = bs.f1.astype(np.float32)
     bs.f2 = bs.f2.astype(np.float32)
+    bs.fc1 = bs.fc1.astype(np.complex64)
+    bs.fc2 = bs.fc2.astype(np.complex64)
+    bs.fc3 = bs.fc3.astype(np.complex64)
+    bs.f1, bs.f2, bs.f3, bs.bicohsq, bs.bicohsq_err, bs.biphase, bs.biphase_err \
+        = bispectrum(bs.f1, bs.f2, bs.f3, 
+                     bs.fc1, bs.fc2, bs.fc3,
+                     bs.NEns,
+                     Fs1_Hz, Fs2_Hz, Fs3_Hz, 
+                     flimx=bs.flim1, flimy=bs.flim2, flimz=bs.flim3, iscomplex=iscomplex)
+    bs.bicohsq_rer = bs.bicohsq_err / bs.bicohsq
+
+    return bs
+
+def cross_bispectrum_multiwindows(t1_s, t2_s, t3_s, d1, d2, d3, Fs1_Hz, Fs2_Hz, Fs3_Hz, tstart_list, tend_list, 
+                                  NFFT1, NFFT2, NFFT3, ovr=0.5, window='hann', flim1=None, flim2=None, flim3=None):
+
+    bs = struct()
+    bs.tstart_list = tstart_list
+    bs.tend_list = tend_list
+    
+    bs.NFFT1 = NFFT1
+    bs.NFFT2 = NFFT2
+    bs.NFFT3 = NFFT3
+    bs.ovr = ovr
+    bs.window = window
+    bs.NOV1 = int(bs.NFFT1 * bs.ovr)
+    bs.NOV2 = int(bs.NFFT2 * bs.ovr)
+    bs.NOV3 = int(bs.NFFT3 * bs.ovr)
+
+    _dF1 = Fs1_Hz / bs.NFFT1
+    _dF2 = Fs2_Hz / bs.NFFT2
+    _dF3 = Fs3_Hz / bs.NFFT3
+    if np.isclose(_dF1, _dF2) and np.isclose(_dF2, _dF3) and np.isclose(_dF3, _dF1):
+        bs.dF = _dF1
+    else:
+        raise Exception('Time segment widths are different. \n')
+
+    bs.flim1 = flim1
+    bs.flim2 = flim2
+    bs.flim3 = flim3
+
+    iscomplex = np.array([np.iscomplex(d1).any(), np.iscomplex(d2).any(), np.iscomplex(d3).any()]).any() # if any data are complex
+
+    for i, (tstart, tend) in enumerate(zip(bs.tstart_list, bs.tend_list)):
+
+        _, datlist = proc.getTimeIdxsAndDats(t1_s, tstart, tend, [t1_s, d1])
+        _, _d1raw = datlist
+        _, datlist = proc.getTimeIdxsAndDats(t2_s, tstart, tend, [t2_s, d2])
+        _, _d2raw = datlist
+        _, datlist = proc.getTimeIdxsAndDats(t3_s, tstart, tend, [t3_s, d3])
+        _, _d3raw = datlist
+
+        _idxs1 = sliding_window_view(np.arange(_d1raw.size), bs.NFFT1)[::bs.NFFT1 - bs.NOV1]
+        _idxs2 = sliding_window_view(np.arange(_d2raw.size), bs.NFFT2)[::bs.NFFT2 - bs.NOV2]
+        _idxs3 = sliding_window_view(np.arange(_d3raw.size), bs.NFFT3)[::bs.NFFT3 - bs.NOV3]
+        
+        if i == 0:
+            bs.d1seg = _d1raw[_idxs1]
+            bs.d2seg = _d2raw[_idxs2]
+            bs.d3seg = _d3raw[_idxs3]
+        else:
+            bs.d1seg = np.concatenate((bs.d1seg, _d1raw[_idxs1]), axis=-2)
+            bs.d2seg = np.concatenate((bs.d2seg, _d2raw[_idxs2]), axis=-2)
+            bs.d3seg = np.concatenate((bs.d3seg, _d3raw[_idxs3]), axis=-2)
+
+    bs.NEns = _idxs1.shape[-2]
+    bs.d1seg = bs.d1seg - bs.d1seg.mean(axis=-1, keepdims=True)
+    bs.win1, _, _, _ = getWindowAndCoefs(bs.NFFT1, bs.window, bs.NEns)
+    bs.f1, bs.fc1 = fourier_components_2s(bs.d1seg, 1./Fs1_Hz, bs.NFFT1, bs.win1)
+
+    bs.d2seg = bs.d2seg - bs.d2seg.mean(axis=-1, keepdims=True)
+    bs.win2, _, _, _ = getWindowAndCoefs(bs.NFFT2, bs.window, bs.NEns)
+    bs.f2, bs.fc2 = fourier_components_2s(bs.d2seg, 1./Fs2_Hz, bs.NFFT2, bs.win2)
+
+    bs.d3seg = bs.d3seg - bs.d3seg.mean(axis=-1, keepdims=True)
+    bs.win3, _, _, _ = getWindowAndCoefs(bs.NFFT3, bs.window, bs.NEns)
+    bs.f3, bs.fc3 = fourier_components_2s(bs.d3seg, 1./Fs3_Hz, bs.NFFT3, bs.win3)
+
+    bs.f1 = bs.f1.astype(np.float32)
+    bs.f2 = bs.f2.astype(np.float32)
+    bs.f3 = bs.f3.astype(np.float32)
     bs.fc1 = bs.fc1.astype(np.complex64)
     bs.fc2 = bs.fc2.astype(np.complex64)
     bs.fc3 = bs.fc3.astype(np.complex64)

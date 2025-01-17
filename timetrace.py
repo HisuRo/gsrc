@@ -142,17 +142,20 @@ class twin_signals():
 	def cross_spectrum(self, tstart, tend, NFFT=2**14, ovr=0.5, window="hann", detrend="constant", unwrap_phase=False):
 		self.cs = calc.cross_spectrum(self.intp.t_s, self.intp.d1, self.intp.d2, self.intp.Fs, tstart, tend, NFFT=NFFT, ovr=ovr, window=window, detrend=detrend, unwrap_phase=unwrap_phase)
 		return self.cs
-	
-	def bispectrum(self, tstart, tend, NFFT2=2**14, ovr=0., window="hann", mode="112", flim=None, interpolate=False, atol=1e-9):
+
+	def set_variables_for_bispectrum(self, NFFT2, mode="112", flim1=None, flim2=None, interpolate=False, atol=1e-9):
 		# mode = "112" or "221"; number "lmn" means B(f, g) = <dl(f) * dm(g) * conj(dn(f+g))>
 
-		if self.Fs1 % self.Fs2 != 0:
+		if int(self.Fs1 + 0.5) % int(self.Fs2 + 0.5) != 0:
 			interpolate = True
+			print("Interpolation was changed to True.")
 		
 		if not interpolate:
 			NFFT1 = NFFT2 * self.Fs1 / self.Fs2
 			if not np.isclose(NFFT1, int(NFFT1+0.5), atol=atol):
 				raise Exception("NFFT1 doesn't become int. Inappropriate NFFT2 value.")
+			else:
+				NFFT1 = int(NFFT1 + 0.5)
 
 		if mode == "112":
 			if interpolate:
@@ -168,6 +171,9 @@ class twin_signals():
 				NFFTl = NFFT2
 				NFFTm = NFFT2
 				NFFTn = NFFT2
+				fliml = flim2
+				flimm = flim2
+				flimn = flim2
 
 			else:
 				
@@ -183,6 +189,10 @@ class twin_signals():
 				NFFTl = NFFT1
 				NFFTm = NFFT1
 				NFFTn = NFFT2
+				fliml = flim1
+				flimm = flim1
+				flimn = flim2
+
 		elif mode == "221":
 			if interpolate:
 				tl = self.intp.t_s
@@ -197,6 +207,9 @@ class twin_signals():
 				NFFTl = NFFT2
 				NFFTm = NFFT2
 				NFFTn = NFFT2
+				fliml = flim2
+				flimm = flim2
+				flimn = flim2
 
 			else:
 				
@@ -212,10 +225,29 @@ class twin_signals():
 				NFFTl = NFFT2
 				NFFTm = NFFT2
 				NFFTn = NFFT1
+				fliml = flim2
+				flimm = flim2
+				flimn = flim1
 		else:
 			raise Exception("Inappropriate mode name")
 		
+		return tl, tm, tn, dl, dm, dn, Fsl, Fsm, Fsn, NFFTl, NFFTm, NFFTn, fliml, flimm, flimn
+	
+	def bispectrum(self, tstart, tend, NFFT2=2**14, ovr=0., window="hann", mode="112", flim1=None, flim2=None, interpolate=False, atol=1e-9):
+		# mode = "112" or "221"; number "lmn" means B(f, g) = <dl(f) * dm(g) * conj(dn(f+g))>
+
+		tl, tm, tn, dl, dm, dn, Fsl, Fsm, Fsn, NFFTl, NFFTm, NFFTn, fliml, flimm, flimn = self.set_variables_for_bispectrum(NFFT2, mode, flim1, flim2, interpolate, atol)
+		
 		self.bs = calc.cross_bispectrum(tl, tm, tn, dl, dm, dn, Fsl, Fsm, Fsn, 
-										tstart, tend, NFFTl, NFFTm, NFFTn, ovr, window, flim, flim)
+										tstart, tend, NFFTl, NFFTm, NFFTn, ovr, window, fliml, flimm, flimn)
+		return self.bs
+		
+	def bispectrum_multiwindows(self, tstart_list, tend_list, NFFT2=2**14, ovr=0., window="hann", mode="112", flim1=None, flim2=None, interpolate=False, atol=1e-9):
+		# mode = "112" or "221"; number "lmn" means B(f, g) = <dl(f) * dm(g) * conj(dn(f+g))>
+
+		tl, tm, tn, dl, dm, dn, Fsl, Fsm, Fsn, NFFTl, NFFTm, NFFTn, fliml, flimm, flimn = self.set_variables_for_bispectrum(NFFT2, mode, flim1, flim2, interpolate, atol)
+		
+		self.bs = calc.cross_bispectrum_multiwindows(tl, tm, tn, dl, dm, dn, Fsl, Fsm, Fsn, 
+													tstart_list, tend_list, NFFTl, NFFTm, NFFTn, ovr, window, fliml, flimm, flimn)
 		return self.bs
 		
