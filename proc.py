@@ -167,26 +167,25 @@ def argsort(array2d):
     idxs_left = repeat_and_add_lastdim(np.arange(len(array2d)).T, len(array2d[0]))
     return (idxs_left, idxs_right)
 
-
 def repeat_and_add_lastdim(Array, Nrepeat):
     # Add a new axis to the end of the array and repeat each element N times in the direction of that axis.
     tmp = tuple(np.concatenate([np.array(Array.shape), 1], axis=None).astype(int))
     return np.repeat(np.reshape(Array, tmp), Nrepeat, axis=-1)
-
 
 def ifNotMake(dirPath):
     if not os.path.exists(dirPath):
         os.mkdir(dirPath)
     return dirPath
 
-
 def getTimeIdxAndDats(time, time_at, datList):
     idx = np.nanargmin(np.abs(time - time_at))
     datList_at = [0]*len(datList)
     for ii, dat in enumerate(datList):
-        datList_at[ii] = dat[idx]
+        if dat is None:
+            datList_at[ii] = None
+        else:
+            datList_at[ii] = dat[idx]
     return idx, datList_at
-
 
 def getTimeIdxsAndDats(time, startTime, endTime, datList, decimate=1):
     idxs = np.argwhere((time >= startTime) & (time <= endTime)).T[0][::decimate]
@@ -198,57 +197,52 @@ def getTimeIdxsAndDats(time, startTime, endTime, datList, decimate=1):
         datList[ii] = dat[idxs]
     return idxs, datList
 
+def get_dats_at_idxs(dat_list, idxs, axis=0):
+    for i, dat in enumerate(dat_list):
+        if dat is None:
+            dat_list[i] = None
+        else:
+            if axis == 0:
+                dat_list[i] = dat[idxs]
+            elif axis == 1:
+                dat_list[i] = dat[:, idxs]
+            elif axis == 2:
+                dat_list[i] = dat[:, :, idxs]
+            elif axis == 3:
+                dat_list[i] = dat[:, :, :, idxs]
+            else:
+                raise ValueError("axis must be 0, 1, 2, or 3.")
+    return dat_list
 
-def getXIdxsAndYs(xx, x_start, x_end, Ys_list, include_outerside=True):
-    idxs = np.argwhere((xx >= x_start) & (xx <= x_end)).T[0]
+def check_coord_and_dat_shapes(coord, dat_list, axis=0):
+    for dat in dat_list:
+        if dat is not None:
+            if coord.size != dat.shape[axis]:
+                raise Exception('Improper data shape')
+    return
+
+def get_idx_and_dats(coord, coord_at, dat_list, axis=0):
+    check_coord_and_dat_shapes(coord, dat_list, axis)
+    idx = np.argmin(np.abs(coord - coord_at))
+    coord = coord[idx]
+    dat_list = get_dats_at_idxs(dat_list, idx, axis)
+    return idx, coord, dat_list
+
+def get_idxs_and_dats(coord, coord_lim, dat_list, axis=0, include_outerside=True):
+    check_coord_and_dat_shapes(coord, dat_list, axis)
+    idxs = np.argwhere((coord >= coord_lim[0]) & (coord <= coord_lim[1])).T[0]
     if include_outerside:
         if idxs[0] > 0:
             idxs = np.insert(idxs, 0, idxs[0] - 1)
-        if idxs[-1] < len(xx) - 1:
+        if idxs[-1] < len(coord) - 1:
             idxs = np.append(idxs, idxs[-1] + 1)
-    for ii, dat in enumerate(Ys_list):
-        Ys_list[ii] = dat[idxs]
-    return idxs, Ys_list
-
-
-def getXIdxsAndYs_2dalongLastAxis(xx, x_start, x_end, Ys_list, include_outerside=False):
-    idxs = np.argwhere((xx >= x_start) & (xx <= x_end)).T[0]
-    if include_outerside:
-        if idxs[0] > 0:
-            idxs = np.insert(idxs, 0, idxs[0] - 1)
-        if idxs[-1] < len(xx) - 1:
-            idxs = np.append(idxs, idxs[-1] + 1)
-    for ii, dat in enumerate(Ys_list):
-        Ys_list[ii] = dat[:, idxs]
-    return idxs, Ys_list
-
-
-def getXIdxsAndYs_3dalongLastAxis(xx, x_start, x_end, Ys_list, include_outerside=False):
-    idxs = np.argwhere((xx >= x_start) & (xx <= x_end)).T[0]
-    if include_outerside:
-        if idxs[0] > 0:
-            idxs = np.insert(idxs, 0, idxs[0] - 1)
-        if idxs[-1] < len(xx) - 1:
-            idxs = np.append(idxs, idxs[-1] + 1)
-    for ii, dat in enumerate(Ys_list):
-        Ys_list[ii] = dat[:, :, idxs]
-    return idxs, Ys_list
-
-
-def makeXidxs(xx, x_start, x_end, include_outerside=False):
-    idxs = np.argwhere((xx >= x_start) & (xx <= x_end)).T[0]
-    if include_outerside:
-        if idxs[0] > 0:
-            idxs = np.insert(idxs, 0, idxs[0] - 1)
-        if idxs[-1] < len(xx) - 1:
-            idxs = np.append(idxs, idxs[-1] + 1)
-    return idxs
-
+    coord = coord[idxs]
+    dat_list = get_dats_at_idxs(dat_list, idxs, axis)
+    return idxs, coord, dat_list
 
 def findIndex(point, array1d):
     idx = np.nanargmin(np.abs(point - array1d))
     return idx
-
 
 def decimate_timeSeries(ti_raw, sr_raw, dt_dec):
     size_raw = ti_raw.size
@@ -261,7 +255,6 @@ def decimate_timeSeries(ti_raw, sr_raw, dt_dec):
     ti_dec = ti_raw[idxs_dec]
     sr_dec = sr_raw[idxs_dec]
     return ti_dec, sr_dec
-
 
 def takeat_rho(dat, err, time, rho, rho_at):
 
@@ -279,7 +272,6 @@ def takeat_rho(dat, err, time, rho, rho_at):
 
     return dat_at, err_at
 
-
 def takeat_rho_R(R, rho, rho_at):
 
     idxs_at = np.nanargmin(np.abs(rho - rho_at), axis=-1)
@@ -289,7 +281,6 @@ def takeat_rho_R(R, rho, rho_at):
     R_at[idxs_del] = np.nan
 
     return R_at
-
 
 def takeat_tlist(dat, err, reff, rho, time, tlist):
     idxs_tlist = [np.nanargmin(np.abs(time - t)) for t in tlist]

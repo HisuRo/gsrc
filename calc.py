@@ -4,7 +4,7 @@ from scipy import signal, fft, interpolate, optimize  # type: ignore
 from scipy.signal import welch  # type: ignore
 import gc
 import matplotlib.pyplot as plt  # type: ignore
-from nasu import proc, plot, getShotInfo, myEgdb, read, const
+from nasu import proc, plot, const
 import os
 import sys
 
@@ -116,153 +116,153 @@ def IQsignal(Idat, Qdat, idx_dev, chDiag):
     return signal
 
 
-def MakeLLSMFitProfilesFromTS(sn, startTime, endTime, Nfit, poly):
+# def MakeLLSMFitProfilesFromTS(sn, startTime, endTime, Nfit, poly):
 
-    info = getShotInfo.info(sn)
-    Bt, Rax = info[0:2]
+#     info = getShotInfo.info(sn)
+#     Bt, Rax = info[0:2]
 
-    egts = myEgdb.LoadEG('tsmap_calib', sn)
-    egnel = myEgdb.LoadEG('tsmap_nel', sn)
-    egtsreff = myEgdb.LoadEG('tsmap_reff', sn)
-    print('\n')
+#     egts = myEgdb.LoadEG('tsmap_calib', sn)
+#     egnel = myEgdb.LoadEG('tsmap_nel', sn)
+#     egtsreff = myEgdb.LoadEG('tsmap_reff', sn)
+#     print('\n')
 
-    if egts == None:
-        print('egts == None')
-        sys.exit()
+#     if egts == None:
+#         print('egts == None')
+#         sys.exit()
 
-    timeref, Rref, reffref, \
-    B, Br, Bz, Bphi = read.field_from_tsmap_reff(egtsreff, sn)
-    time, R, reff, rho, \
-    dat_Te, err_Te, dat_ne, err_ne, \
-    dat_Te_fit, err_Te_fit, dat_ne_fit, err_ne_fit = read.tsmap_calib(egts)
-    a99 = egnel.trace_of('a99', 0, [0])
+#     timeref, Rref, reffref, \
+#     B, Br, Bz, Bphi = read.field_from_tsmap_reff(egtsreff, sn)
+#     time, R, reff, rho, \
+#     dat_Te, err_Te, dat_ne, err_ne, \
+#     dat_Te_fit, err_Te_fit, dat_ne_fit, err_ne_fit = read.tsmap_calib(egts)
+#     a99 = egnel.trace_of('a99', 0, [0])
 
-    datList = [time, reff, rho, a99, dat_Te, err_Te, dat_ne, err_ne, B, Br, Bz, Bphi]
-    idxs_tRange, datList = proc.getTimeIdxsAndDats(time, startTime, endTime, datList)
-    time, reff, rho, a99, dat_Te, err_Te, dat_ne, err_ne, B, Br, Bz, Bphi = datList
+#     datList = [time, reff, rho, a99, dat_Te, err_Te, dat_ne, err_ne, B, Br, Bz, Bphi]
+#     idxs_tRange, datList = proc.getTimeIdxsAndDats(time, startTime, endTime, datList)
+#     time, reff, rho, a99, dat_Te, err_Te, dat_ne, err_ne, B, Br, Bz, Bphi = datList
 
-    dat2dList = [reff, rho, dat_Te, err_Te, dat_ne, err_ne, Bz, Bphi, B]
-    isNotNan, dat2dList = proc.notNanInDat2d(dat2dList, 0)
-    reff, rho, dat_Te, err_Te, dat_ne, err_ne, Bz, Bphi, B = dat2dList
-    R = R[isNotNan]
+#     dat2dList = [reff, rho, dat_Te, err_Te, dat_ne, err_ne, Bz, Bphi, B]
+#     isNotNan, dat2dList = proc.notNanInDat2d(dat2dList, 0)
+#     reff, rho, dat_Te, err_Te, dat_ne, err_ne, Bz, Bphi, B = dat2dList
+#     R = R[isNotNan]
 
-    R_f, reff_f, rho_f, dat_Te_grad, err_Te_grad, \
-    dat_Te_reg, err_Te_reg = gradient_reg_v2(R, reff, a99, dat_Te, err_Te, Nfit, poly)
-    R_f, reff_f, rho_f, dat_ne_grad, err_ne_grad, \
-    dat_ne_reg, err_ne_reg = gradient_reg_v2(R, reff, a99, dat_ne, err_ne, Nfit, poly)
+#     R_f, reff_f, rho_f, dat_Te_grad, err_Te_grad, \
+#     dat_Te_reg, err_Te_reg = gradient_reg_v2(R, reff, a99, dat_Te, err_Te, Nfit, poly)
+#     R_f, reff_f, rho_f, dat_ne_grad, err_ne_grad, \
+#     dat_ne_reg, err_ne_reg = gradient_reg_v2(R, reff, a99, dat_ne, err_ne, Nfit, poly)
 
-    dat_Lne, err_Lne, dat_RpLne, err_RpLne = Lscale(dat_ne_reg, err_ne_reg,
-                                                         dat_ne_grad, err_ne_grad, Rax)
-    dat_LTe, err_LTe, dat_RpLTe, err_RpLTe = Lscale(dat_Te_reg, err_Te_reg,
-                                                         dat_Te_grad, err_Te_grad, Rax)
-    dat_etae, err_etae = eta(dat_LTe, err_LTe, dat_Lne, err_Lne)
+#     dat_Lne, err_Lne, dat_RpLne, err_RpLne = Lscale(dat_ne_reg, err_ne_reg,
+#                                                          dat_ne_grad, err_ne_grad, Rax)
+#     dat_LTe, err_LTe, dat_RpLTe, err_RpLTe = Lscale(dat_Te_reg, err_Te_reg,
+#                                                          dat_Te_grad, err_Te_grad, Rax)
+#     dat_etae, err_etae = eta(dat_LTe, err_LTe, dat_Lne, err_Lne)
 
-    omega_ce = const.ee * B / const.me
-    tmp = 1e19 * const.ee ** 2 / (const.eps0 * const.me)
-    omega_pe, omega_pe_err = sqrt_AndErr(dat_ne * tmp, err_ne * tmp)
-    omega_L = 0.5 * (-omega_ce + np.sqrt(omega_ce ** 2 + 4 * omega_pe ** 2))
-    omega_L_err = np.abs(0.5 * 0.5 * 1 / np.sqrt(omega_ce ** 2 + 4 * omega_pe ** 2) * 4 * 2 * omega_pe * omega_pe_err)
-    omega_R = omega_L + omega_ce
-    omega_R_err = omega_L_err
+#     omega_ce = const.ee * B / const.me
+#     tmp = 1e19 * const.ee ** 2 / (const.eps0 * const.me)
+#     omega_pe, omega_pe_err = sqrt_AndErr(dat_ne * tmp, err_ne * tmp)
+#     omega_L = 0.5 * (-omega_ce + np.sqrt(omega_ce ** 2 + 4 * omega_pe ** 2))
+#     omega_L_err = np.abs(0.5 * 0.5 * 1 / np.sqrt(omega_ce ** 2 + 4 * omega_pe ** 2) * 4 * 2 * omega_pe * omega_pe_err)
+#     omega_R = omega_L + omega_ce
+#     omega_R_err = omega_L_err
 
-    datList = [omega_ce, omega_pe, omega_pe_err, omega_L, omega_L_err, omega_R, omega_R_err]
-    dat2List = [0] * len(datList)
-    for ii, dat in enumerate(datList):
-        dat2List[ii] = dat / (2 * np.pi)
-    fce, fpe, fpe_err, fL, fL_err, fR, fR_err = dat2List
+#     datList = [omega_ce, omega_pe, omega_pe_err, omega_L, omega_L_err, omega_R, omega_R_err]
+#     dat2List = [0] * len(datList)
+#     for ii, dat in enumerate(datList):
+#         dat2List[ii] = dat / (2 * np.pi)
+#     fce, fpe, fpe_err, fL, fL_err, fR, fR_err = dat2List
 
-    datList = [fce, fpe, fpe_err, fL, fL_err, fR, fR_err]
-    dat2List = [0] * len(datList)
-    for ii, dat in enumerate(datList):
-        dat2List[ii] = dat * 1e-9
-    fce_G, fpe_G, fpe_G_err, fL_G, fL_G_err, fR_G, fR_G_err = dat2List
+#     datList = [fce, fpe, fpe_err, fL, fL_err, fR, fR_err]
+#     dat2List = [0] * len(datList)
+#     for ii, dat in enumerate(datList):
+#         dat2List[ii] = dat * 1e-9
+#     fce_G, fpe_G, fpe_G_err, fL_G, fL_G_err, fR_G, fR_G_err = dat2List
 
-    raw_list = [R, reff, rho, a99, dat_Te, err_Te, dat_ne, err_ne, B, Br, Bz, Bphi,
-                fce_G, fpe_G, fpe_G_err, fL_G, fL_G_err, fR_G, fR_G_err]
-    reg_list = [R_f, reff_f, rho_f, dat_Te_reg, err_Te_reg, dat_ne_reg, err_ne_reg, dat_Te_grad, err_Te_grad,
-                dat_ne_grad, err_ne_grad, dat_LTe, err_LTe, dat_Lne, err_Lne,
-                dat_RpLTe, err_RpLTe, dat_RpLne, err_RpLne, dat_etae, err_etae]
-    return time, raw_list, reg_list
+#     raw_list = [R, reff, rho, a99, dat_Te, err_Te, dat_ne, err_ne, B, Br, Bz, Bphi,
+#                 fce_G, fpe_G, fpe_G_err, fL_G, fL_G_err, fR_G, fR_G_err]
+#     reg_list = [R_f, reff_f, rho_f, dat_Te_reg, err_Te_reg, dat_ne_reg, err_ne_reg, dat_Te_grad, err_Te_grad,
+#                 dat_ne_grad, err_ne_grad, dat_LTe, err_LTe, dat_Lne, err_Lne,
+#                 dat_RpLTe, err_RpLTe, dat_RpLne, err_RpLne, dat_etae, err_etae]
+#     return time, raw_list, reg_list
 
 
-def MakeLLSMFitProfilesFromCXS7(sn, startTime, endTime, Nfit, poly):
+# def MakeLLSMFitProfilesFromCXS7(sn, startTime, endTime, Nfit, poly):
 
-    info = getShotInfo.info(sn)
-    Rax = info[1]
+#     info = getShotInfo.info(sn)
+#     Rax = info[1]
 
-    egcx7 = myEgdb.LoadEG('cxsmap7', sn)
-    print('\n')
+#     egcx7 = myEgdb.LoadEG('cxsmap7', sn)
+#     print('\n')
 
-    if egcx7 == None:
-        print('egcx7 == None')
-        sys.exit()
+#     if egcx7 == None:
+#         print('egcx7 == None')
+#         sys.exit()
 
-    time, R_pol, R_tor, \
-    reff_pol, reff_tor, rho_pol, rho_tor, a99, \
-    dat_Tipol, err_Tipol, dat_Titor, err_Titor, \
-    dat_Vcpol, err_Vcpol, dat_Vctor, err_Vctor = read.cxsmap7_v1(egcx7)
+#     time, R_pol, R_tor, \
+#     reff_pol, reff_tor, rho_pol, rho_tor, a99, \
+#     dat_Tipol, err_Tipol, dat_Titor, err_Titor, \
+#     dat_Vcpol, err_Vcpol, dat_Vctor, err_Vctor = read.cxsmap7_v1(egcx7)
 
-    datList = [time, reff_pol, reff_tor, rho_pol, rho_tor, a99,
-               dat_Tipol, err_Tipol, dat_Titor, err_Titor, dat_Vcpol, err_Vcpol, dat_Vctor, err_Vctor]
-    idxs_tRange, datList = proc.getTimeIdxsAndDats(time, startTime, endTime, datList)
+#     datList = [time, reff_pol, reff_tor, rho_pol, rho_tor, a99,
+#                dat_Tipol, err_Tipol, dat_Titor, err_Titor, dat_Vcpol, err_Vcpol, dat_Vctor, err_Vctor]
+#     idxs_tRange, datList = proc.getTimeIdxsAndDats(time, startTime, endTime, datList)
 
-    time, reff_pol, reff_tor, rho_pol, rho_tor, a99, \
-    dat_Tipol, err_Tipol, dat_Titor, err_Titor, dat_Vcpol, err_Vcpol, dat_Vctor, err_Vctor = datList
+#     time, reff_pol, reff_tor, rho_pol, rho_tor, a99, \
+#     dat_Tipol, err_Tipol, dat_Titor, err_Titor, dat_Vcpol, err_Vcpol, dat_Vctor, err_Vctor = datList
 
-    dat2dList = [reff_pol, rho_pol, dat_Tipol, err_Tipol, dat_Vcpol, err_Vcpol]
-    isNotNan, dat2dList = proc.notNanInDat2d(dat2dList, 1)
-    reff_pol, rho_pol, dat_Tipol, err_Tipol, dat_Vcpol, err_Vcpol = dat2dList
+#     dat2dList = [reff_pol, rho_pol, dat_Tipol, err_Tipol, dat_Vcpol, err_Vcpol]
+#     isNotNan, dat2dList = proc.notNanInDat2d(dat2dList, 1)
+#     reff_pol, rho_pol, dat_Tipol, err_Tipol, dat_Vcpol, err_Vcpol = dat2dList
 
-    time = time[isNotNan]
-    a99 = a99[isNotNan]
+#     time = time[isNotNan]
+#     a99 = a99[isNotNan]
 
-    dat2dList = [reff_pol, rho_pol, dat_Tipol, err_Tipol, dat_Vcpol, err_Vcpol]
-    isNotNan, dat2dList = proc.notNanInDat2d(dat2dList, 0)
-    reff_pol, rho_pol, dat_Tipol, err_Tipol, dat_Vcpol, err_Vcpol = dat2dList
+#     dat2dList = [reff_pol, rho_pol, dat_Tipol, err_Tipol, dat_Vcpol, err_Vcpol]
+#     isNotNan, dat2dList = proc.notNanInDat2d(dat2dList, 0)
+#     reff_pol, rho_pol, dat_Tipol, err_Tipol, dat_Vcpol, err_Vcpol = dat2dList
 
-    R_pol = R_pol[isNotNan]
+#     R_pol = R_pol[isNotNan]
 
-    dat2dList = [reff_tor, rho_tor, dat_Titor, err_Titor, dat_Vctor, err_Vctor]
-    isNotNan, dat2dList = proc.notNanInDat2d(dat2dList, 1)
-    reff_tor, rho_tor, dat_Titor, err_Titor, dat_Vctor, err_Vctor = dat2dList
+#     dat2dList = [reff_tor, rho_tor, dat_Titor, err_Titor, dat_Vctor, err_Vctor]
+#     isNotNan, dat2dList = proc.notNanInDat2d(dat2dList, 1)
+#     reff_tor, rho_tor, dat_Titor, err_Titor, dat_Vctor, err_Vctor = dat2dList
 
-    dat2dList = [reff_tor, rho_tor, dat_Titor, err_Titor, dat_Vctor, err_Vctor]
-    isNotNan, dat2dList = proc.notNanInDat2d(dat2dList, 0)
-    reff_tor, rho_tor, dat_Titor, err_Titor, dat_Vctor, err_Vctor = dat2dList
+#     dat2dList = [reff_tor, rho_tor, dat_Titor, err_Titor, dat_Vctor, err_Vctor]
+#     isNotNan, dat2dList = proc.notNanInDat2d(dat2dList, 0)
+#     reff_tor, rho_tor, dat_Titor, err_Titor, dat_Vctor, err_Vctor = dat2dList
 
-    R_tor = R_tor[isNotNan]
+#     R_tor = R_tor[isNotNan]
 
-    R_pol_f, reff_pol_f, rho_pol_f, dat_Tipol_grad, err_Tipol_grad, \
-    dat_Tipol_reg, err_Tipol_reg = gradient_reg_v2(R_pol, reff_pol, a99, dat_Tipol, err_Tipol, Nfit, poly)
-    R_tor_f, reff_tor_f, rho_tor_f, dat_Titor_grad, err_Titor_grad, \
-    dat_Titor_reg, err_Titor_reg = gradient_reg_v2(R_tor, reff_tor, a99, dat_Titor, err_Titor, Nfit, poly)
-    R_pol_f, reff_pol_f, rho_pol_f, dat_Vcpol_grad, err_Vcpol_grad, \
-    dat_Vcpol_reg, err_Vcpol_reg = gradient_reg_v2(R_pol, reff_pol, a99, dat_Vcpol, err_Vcpol, Nfit, poly)
-    R_tor_f, reff_tor_f, rho_tor_f, dat_Vctor_grad, err_Vctor_grad, \
-    dat_Vctor_reg, err_Vctor_reg = gradient_reg_v2(R_tor, reff_tor, a99, dat_Vctor, err_Vctor, Nfit, poly)
+#     R_pol_f, reff_pol_f, rho_pol_f, dat_Tipol_grad, err_Tipol_grad, \
+#     dat_Tipol_reg, err_Tipol_reg = gradient_reg_v2(R_pol, reff_pol, a99, dat_Tipol, err_Tipol, Nfit, poly)
+#     R_tor_f, reff_tor_f, rho_tor_f, dat_Titor_grad, err_Titor_grad, \
+#     dat_Titor_reg, err_Titor_reg = gradient_reg_v2(R_tor, reff_tor, a99, dat_Titor, err_Titor, Nfit, poly)
+#     R_pol_f, reff_pol_f, rho_pol_f, dat_Vcpol_grad, err_Vcpol_grad, \
+#     dat_Vcpol_reg, err_Vcpol_reg = gradient_reg_v2(R_pol, reff_pol, a99, dat_Vcpol, err_Vcpol, Nfit, poly)
+#     R_tor_f, reff_tor_f, rho_tor_f, dat_Vctor_grad, err_Vctor_grad, \
+#     dat_Vctor_reg, err_Vctor_reg = gradient_reg_v2(R_tor, reff_tor, a99, dat_Vctor, err_Vctor, Nfit, poly)
 
-    dat_LTipol, err_LTipol, dat_RpLTipol, err_RpLTipol = \
-        Lscale(dat_Tipol_reg, err_Tipol_reg, dat_Tipol_grad, err_Tipol_grad, Rax)
-    dat_LTitor, err_LTitor, dat_RpLTitor, err_RpLTitor = \
-        Lscale(dat_Titor_reg, err_Titor_reg, dat_Titor_grad, err_Titor_grad, Rax)
-    dat_LVcpol, err_LVcpol, dat_RpLVcpol, err_RpLVcpol = \
-        Lscale(dat_Vcpol_reg, err_Vcpol_reg, dat_Vcpol_grad, err_Vcpol_grad, Rax)
-    dat_LVctor, err_LVctor, dat_RpLVctor, err_RpLVctor = \
-        Lscale(dat_Vctor_reg, err_Vctor_reg, dat_Vctor_grad, err_Vctor_grad, Rax)
+#     dat_LTipol, err_LTipol, dat_RpLTipol, err_RpLTipol = \
+#         Lscale(dat_Tipol_reg, err_Tipol_reg, dat_Tipol_grad, err_Tipol_grad, Rax)
+#     dat_LTitor, err_LTitor, dat_RpLTitor, err_RpLTitor = \
+#         Lscale(dat_Titor_reg, err_Titor_reg, dat_Titor_grad, err_Titor_grad, Rax)
+#     dat_LVcpol, err_LVcpol, dat_RpLVcpol, err_RpLVcpol = \
+#         Lscale(dat_Vcpol_reg, err_Vcpol_reg, dat_Vcpol_grad, err_Vcpol_grad, Rax)
+#     dat_LVctor, err_LVctor, dat_RpLVctor, err_RpLVctor = \
+#         Lscale(dat_Vctor_reg, err_Vctor_reg, dat_Vctor_grad, err_Vctor_grad, Rax)
 
-    raw_list = [R_pol, R_tor, reff_pol, reff_tor, rho_pol, rho_tor, a99,
-                dat_Tipol, err_Tipol, dat_Titor, err_Titor, dat_Vcpol, err_Vcpol, dat_Vctor, err_Vctor]
-    reg_list = [R_pol_f, reff_pol_f, rho_pol_f, R_tor_f, reff_tor_f, rho_tor_f,
-                dat_Tipol_reg, err_Tipol_reg, dat_Titor_reg, err_Titor_reg,
-                dat_Vcpol_reg, err_Vcpol_reg, dat_Vctor_reg, err_Vctor_reg,
-                dat_Tipol_grad, err_Tipol_grad, dat_Titor_grad, err_Titor_grad,
-                dat_Vcpol_grad, err_Vcpol_grad, dat_Vctor_grad, err_Vctor_grad,
-                dat_LTipol, err_LTipol, dat_LTitor, err_LTitor,
-                dat_LVcpol, err_LVcpol, dat_LVctor, err_LVctor,
-                dat_RpLTipol, err_RpLTipol, dat_RpLTitor, err_RpLTitor,
-                dat_RpLVcpol, err_RpLVcpol, dat_RpLVctor, err_RpLVctor ]
+#     raw_list = [R_pol, R_tor, reff_pol, reff_tor, rho_pol, rho_tor, a99,
+#                 dat_Tipol, err_Tipol, dat_Titor, err_Titor, dat_Vcpol, err_Vcpol, dat_Vctor, err_Vctor]
+#     reg_list = [R_pol_f, reff_pol_f, rho_pol_f, R_tor_f, reff_tor_f, rho_tor_f,
+#                 dat_Tipol_reg, err_Tipol_reg, dat_Titor_reg, err_Titor_reg,
+#                 dat_Vcpol_reg, err_Vcpol_reg, dat_Vctor_reg, err_Vctor_reg,
+#                 dat_Tipol_grad, err_Tipol_grad, dat_Titor_grad, err_Titor_grad,
+#                 dat_Vcpol_grad, err_Vcpol_grad, dat_Vctor_grad, err_Vctor_grad,
+#                 dat_LTipol, err_LTipol, dat_LTitor, err_LTitor,
+#                 dat_LVcpol, err_LVcpol, dat_LVctor, err_LVctor,
+#                 dat_RpLTipol, err_RpLTipol, dat_RpLTitor, err_RpLTitor,
+#                 dat_RpLVcpol, err_RpLVcpol, dat_RpLVctor, err_RpLVctor ]
 
-    return time, raw_list, reg_list
+#     return time, raw_list, reg_list
 
 
 """
@@ -810,19 +810,19 @@ def calibIQComp2(datI, datQ, VAR, VOS_I, VOS_Q, phDif):
 
     return datICalib, datQCalib
 
-def calib_dbs9O(chDiag, pathCalib, Idat, Qdat):
-    dictIF = {'27.7G': 40, '29.1G': 80, '30.5G': 120, '32.0G': 160,
-              '33.4G': 200, '34.8G': 240, '36.9G': 300, '38.3G': 340}
-    frLO = dictIF[chDiag]
-    lvLO = float(input('LO Power [dBm] >>> '))
-    vgaLO = float(input('LO VGA [V] >>> '))
-    vgaRF = float(input('RF VGA [V] >>> '))
-    calibPrms_df = read.calibPrms_df(pathCalib)
-    VAR, VOS_I, VOS_Q, phDif = calibPrms_df.loc[(frLO, lvLO, vgaLO, vgaRF)]
+# def calib_dbs9O(chDiag, pathCalib, Idat, Qdat):
+#     dictIF = {'27.7G': 40, '29.1G': 80, '30.5G': 120, '32.0G': 160,
+#               '33.4G': 200, '34.8G': 240, '36.9G': 300, '38.3G': 340}
+#     frLO = dictIF[chDiag]
+#     lvLO = float(input('LO Power [dBm] >>> '))
+#     vgaLO = float(input('LO VGA [V] >>> '))
+#     vgaRF = float(input('RF VGA [V] >>> '))
+#     calibPrms_df = read.calibPrms_df(pathCalib)
+#     VAR, VOS_I, VOS_Q, phDif = calibPrms_df.loc[(frLO, lvLO, vgaLO, vgaRF)]
 
-    Idat, Qdat = calibIQComp2(Idat, Qdat, VAR, VOS_I, VOS_Q, phDif)
+#     Idat, Qdat = calibIQComp2(Idat, Qdat, VAR, VOS_I, VOS_Q, phDif)
 
-    return Idat, Qdat
+#     return Idat, Qdat
 
 
 
@@ -3354,30 +3354,32 @@ def gauss_LS_v2(x, y, y_err):
 
     return popt, perr, y_hut, y_hut_err
 
-def gradient(R, reff, rho, dat, err, Nfit):
+"""
+# def gradient(R, reff, rho, dat, err, Nfit):
 
-    Nt, NR = reff.shape
-    NRf = NR - Nfit + 1
+#     Nt, NR = reff.shape
+#     NRf = NR - Nfit + 1
 
-    idxs_calc = np.full((NRf, Nfit), np.arange(Nfit)).T  # (Nfit, NRf)
-    idxs_calc = idxs_calc + np.arange(NRf)  # (Nfit, NRf)
-    idxs_calc = idxs_T  # (NRf, Nfit)
-    Rcal = R[idxs_calc]
-    reffcal = reff[:, idxs_calc]
-    rhocal = rho[:, idxs_calc]
-    datcal = dat[:, idxs_calc]
-    errcal = err[:, idxs_calc]
+#     idxs_calc = np.full((NRf, Nfit), np.arange(Nfit)).T  # (Nfit, NRf)
+#     idxs_calc = idxs_calc + np.arange(NRf)  # (Nfit, NRf)
+#     idxs_calc = idxs_T  # (NRf, Nfit)
+#     Rcal = R[idxs_calc]
+#     reffcal = reff[:, idxs_calc]
+#     rhocal = rho[:, idxs_calc]
+#     datcal = dat[:, idxs_calc]
+#     errcal = err[:, idxs_calc]
 
-    popt, perr = LSM1_2d(reffcal, datcal, errcal)
+#     popt, perr = LSM1_2d(reffcal, datcal, errcal)
 
-    dat_grad = popt[0]
-    err_grad = perr[0]
+#     dat_grad = popt[0]
+#     err_grad = perr[0]
 
-    R_f = np.average(Rcal, axis=-1)  # (NRf,)
-    reff_f = np.average(reffcal, axis=-1)  # (Nt, NRf)
-    rho_f = np.average(rhocal, axis=-1)  # (Nt, NRf)
+#     R_f = np.average(Rcal, axis=-1)  # (NRf,)
+#     reff_f = np.average(reffcal, axis=-1)  # (Nt, NRf)
+#     rho_f = np.average(rhocal, axis=-1)  # (Nt, NRf)
 
-    return R_f, reff_f, rho_f, dat_grad, err_grad
+#     return R_f, reff_f, rho_f, dat_grad, err_grad
+"""
 
 def make_idxs_for_MovingLSM(data_len, window_len):
 
@@ -3446,32 +3448,34 @@ def gradient_by_roll_avg(xx, yy, Nwin, y_err=np.array([False])):
 
     return x_avg, y_avg, y_std, y_err, grad_y, grad_y_err
 
-def gradient_reg_reff(reff, dat, err, Nfit):
+"""
+# def gradient_reg_reff(reff, dat, err, Nfit):
 
-    Nt, NR = reff.shape
-    idxs_calc = make_idxs_for_MovingLSM(NR, Nfit)
-    # Rcal = R[idxs_calc]
-    reffcal = reff[:, idxs_calc]
-    # rhocal = rho[:, idxs_calc]
-    datcal = dat[:, idxs_calc]
-    errcal = err[:, idxs_calc]
+#     Nt, NR = reff.shape
+#     idxs_calc = make_idxs_for_MovingLSM(NR, Nfit)
+#     # Rcal = R[idxs_calc]
+#     reffcal = reff[:, idxs_calc]
+#     # rhocal = rho[:, idxs_calc]
+#     datcal = dat[:, idxs_calc]
+#     errcal = err[:, idxs_calc]
 
-    popt, perr = LSM1_2d(reffcal, datcal, errcal)
+#     popt, perr = LSM1_2d(reffcal, datcal, errcal)
 
-    reff_f = np.average(reffcal, axis=-1)  # (Nt, NRf)
-    dat_reg = popt[0] * reff_f + popt[1]
-    popt_cal = np.repeat(popt.reshape((2, Nt, NRf, 1)), Nfit, axis=-1)
-    dat_reg_cal = popt_cal[0] * reffcal + popt_cal[1]
-    err_reg = np.sqrt(np.sum((datcal - dat_reg_cal) ** 2, axis=-1) / (Nfit - 2))
-    # err_reg = np.sqrt((perr[0] * reff_f)**2 + perr[1]**2)
-    S = np.sqrt(np.sum((reffcal - np.repeat(np.reshape(reff_f, (Nt, NRf, 1)), Nfit, axis=-1)) ** 2, axis=-1) / Nfit)
-    perr[0] = err_reg / S / np.sqrt(Nfit)
-    perr[1] = err_reg / Nfit / S * np.sqrt(np.sum(reffcal ** 2, axis=-1))
+#     reff_f = np.average(reffcal, axis=-1)  # (Nt, NRf)
+#     dat_reg = popt[0] * reff_f + popt[1]
+#     popt_cal = np.repeat(popt.reshape((2, Nt, NRf, 1)), Nfit, axis=-1)
+#     dat_reg_cal = popt_cal[0] * reffcal + popt_cal[1]
+#     err_reg = np.sqrt(np.sum((datcal - dat_reg_cal) ** 2, axis=-1) / (Nfit - 2))
+#     # err_reg = np.sqrt((perr[0] * reff_f)**2 + perr[1]**2)
+#     S = np.sqrt(np.sum((reffcal - np.repeat(np.reshape(reff_f, (Nt, NRf, 1)), Nfit, axis=-1)) ** 2, axis=-1) / Nfit)
+#     perr[0] = err_reg / S / np.sqrt(Nfit)
+#     perr[1] = err_reg / Nfit / S * np.sqrt(np.sum(reffcal ** 2, axis=-1))
 
-    dat_grad = popt[0]
-    err_grad = perr[0]
+#     dat_grad = popt[0]
+#     err_grad = perr[0]
 
-    return reff_f, dat_grad, err_grad, dat_reg, err_reg
+#     return reff_f, dat_grad, err_grad, dat_reg, err_reg
+"""
 
 def repeat_and_add_lastdim(Array, Nrepeat):
     tmp = tuple(np.concatenate([np.array(Array.shape), 1], axis=None).astype(int))
