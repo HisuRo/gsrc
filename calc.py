@@ -2319,7 +2319,7 @@ def cross_bispectrum_multiwindows(t1_s, t2_s, t3_s, d1, d2, d3, Fs1_Hz, Fs2_Hz, 
             bs.d2seg = np.concatenate((bs.d2seg, _d2raw[_idxs2]), axis=-2)
             bs.d3seg = np.concatenate((bs.d3seg, _d3raw[_idxs3]), axis=-2)
 
-    bs.NEns = _idxs1.shape[-2]
+    bs.NEns = bs.d1seg.shape[-2]
     bs.d1seg = bs.d1seg - bs.d1seg.mean(axis=-1, keepdims=True)
     bs.win1, _, _, _ = getWindowAndCoefs(bs.NFFT1, bs.window, bs.NEns)
     bs.f1, bs.fc1 = fourier_components_2s(bs.d1seg, 1./Fs1_Hz, bs.NFFT1, bs.win1)
