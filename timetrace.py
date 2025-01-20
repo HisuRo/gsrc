@@ -146,9 +146,9 @@ class twin_signals():
 	def set_variables_for_bispectrum(self, NFFT2, mode="112", flim1=None, flim2=None, interpolate=False, atol=1e-9):
 		# mode = "112" or "221"; number "lmn" means B(f, g) = <dl(f) * dm(g) * conj(dn(f+g))>
 
-		if int(self.Fs1 + 0.5) % int(self.Fs2 + 0.5) != 0:
-			interpolate = True
-			print("Interpolation was changed to True.")
+		# if int(self.Fs1 + 0.5) % int(self.Fs2 + 0.5) != 0:
+		# 	interpolate = True
+		# 	print("Interpolation was changed to True.")
 		
 		if not interpolate:
 			NFFT1 = NFFT2 * self.Fs1 / self.Fs2
