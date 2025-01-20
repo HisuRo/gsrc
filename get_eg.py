@@ -553,7 +553,7 @@ class lhdgauss_ray_mwrm:
 
 class tsmap:
 
-    def __init__(self, sn=184508, subsn=1, d_colnm="Te", e_colnm="dTe", tstart=3., tend=6., rho_cut=1.2):
+    def __init__(self, sn=184508, subsn=1, d_colnm="Te", e_colnm="dTe", tstart=3., tend=6., rho_cut=1.2, include_outerside=True):
 
         self.sn = sn
         self.subsn = subsn
@@ -580,7 +580,7 @@ class tsmap:
         self.e = np.reshape(self.e, EG.dimsize)
 
         self.tR = tR(self.t_s, self.R_m, self.r_m, self.rho, self.d, self.e)
-        self.tR.t_window(self.tstart, self.tend)
+        self.tR.t_window(self.tstart, self.tend, include_outerside=include_outerside)
 
         self.tR.twin.rm_noisy_ch()
         self.tR.twin.rm_noisy_time()
