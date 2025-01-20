@@ -103,20 +103,21 @@ def get_logs_in_nasumodule(wd, script_path, class_name, func_name):
 	}
 	return now, logs
 
-def output_pickle_file(outputs, inputs, logs, outdir):
+def output_pickle_file(outputs, inputs, logs, outdir, suffix=""):
 	outputs.update(inputs)
 	outputs.update(logs)
-	output_filepath = os.path.join(outdir, f"{inputs['output_filename']}.pkl")
+	output_filepath = os.path.join(outdir, f"{inputs['output_filename']}{suffix}.pkl")
 
 	with open(output_filepath, "wb") as f:
 		pickle.dump(outputs, f)
 
 	return output_filepath
 
-def output_fig(fig, outdir, inputs, output_filepath, now, suffix=""):
-	output_figure_path = os.path.join(outdir, f"{inputs['output_filename']}{suffix}_0.png")
+def output_fig(fig, outdir, output_filepath, now, suffix=""):
+	filename = f"{os.path.splitext(output_filepath)[0]}{suffix}_0.png"
+	output_figure_path = os.path.join(outdir, filename)
 	metadata = {
-		"Title": f"{inputs['output_filename']}{suffix}.png", 
+		"Title": filename, 
 		"Author": "Tatsuhiro Nasu", 
 		"Description": output_filepath, 
 		"CreationTime": str(now)
