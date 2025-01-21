@@ -563,6 +563,13 @@ class tsmap:
         self.tend = tend
         self.rho_cut = rho_cut
 
+        self.inputs_init = {
+            "sn" : sn, 
+            "subsn" : subsn, 
+            "tstart" : tstart, 
+            "tend" : tend
+        }
+
         EG = LoadEG(diagname="tsmap_calib", sn=sn, sub=subsn)
 
         self.t_s = EG.dims(0)
@@ -607,19 +614,64 @@ class tsmap:
         #     = calc.power(self.Te_fit, - 3. / 2., self.Te_fit_err)
         """
 
-    def plot_reffa99(self, Rmin=3.5, Rmax=4.7, rhomin=0, rhomax=1.2, drho=0.1):
+        self.outdir = "C:/python_data/eg/tsmap"
+        proc.ifNotMake(self.outdir)
+
+
+    def plot_reffa99(self, Rmin=3.5, Rmax=4.7, rhomin=0, rhomax=1.2, drho=0.1, pause=0):
+
+        inputs = copy.deepcopy(self.inputs_init)
+        inputs['Rmin'] = Rmin
+        inputs['Rmax'] = Rmax
+        inputs['rhomin'] = rhomin
+        inputs['rhomax'] = rhomax
+        inputs['drho'] = drho
+
         levels = np.arange(rhomin, rhomax+drho, drho)
-        tg, Rg = np.meshgrid(self.t, self.R)
-        fnm=f"#{self.sn}-{self.sub}_{self.tstart}-{self.tend}s_{Rmin}-{Rmax}m"
-        plt.subplots(num=fnm)
-        cp = plt.contour(tg, Rg, self.reffa99.T, levels=levels)
+        tg, Rg = np.meshgrid(self.t_s, self.R_m)
+
+        # output setting
+        figdir = os.path.join(self.outdir, "reffa99_vs_R")
+        proc.ifNotMake(figdir)
+        fname = f"{self.sn}_{self.subsn}"
+        title = f"#{self.sn}-{self.subsn} s"
+        inputs["output_filename"] = fname
+
+        script_path = os.path.abspath(__file__)
+        class_name = self.__class__.__name__
+        func_name = inspect.currentframe().f_code.co_name
+        tmpdir, outdir, logs, now = system.initial_setting_in_nasumodule(script_path, class_name, func_name, outdir_name=figdir)
+
+        fnm=f"#{self.sn}-{self.subsn}_{self.tstart}-{self.tend}s_{Rmin}-{Rmax}m"
+        fig, ax = plt.subplots(num=fnm)
+        cp = plt.contour(tg, Rg, self.rho.T, levels=levels)
         plt.clabel(cp, inline=True, fontsize=10)
-        plt.title('reff/a99')
-        plt.xlabel('Time [s]')
-        plt.ylabel('R [m]')
-        plt.xlim(self.tstart, self.tend)
-        plt.ylim(Rmin, Rmax)
-        plt.show()
+        ax.set_title('reff/a99')
+        ax.set_xlabel('Time [s]')
+        ax.set_ylabel('R [m]')
+        ax.set_xlim(self.tstart, self.tend)
+        ax.set_ylim(Rmin, Rmax)
+
+        plot.caption(fig, title)
+        # plot.capsave(fig, title, fname, path)
+
+        # output # EDIT HERE !!
+        outputs = {
+            'fig': fig, 
+            't': self.t_s, 
+            'R': self.R_m, 
+            'rho': self.rho
+        }
+
+        # systematic output and close
+        output_filepath = system.output_pickle_file(outputs, inputs, logs, outdir)
+        system.output_fig(fig, outdir, output_filepath, now)
+
+        plot.check(pause)
+
+        print("DONE !!")
+
+
 
     def plot_reff(self, Rmin=3.5, Rmax=4.7, reffmin=0, reffmax=0.8, dreff=0.1):
         levels = np.arange(reffmin, reffmax+dreff, dreff)

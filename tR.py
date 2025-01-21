@@ -51,6 +51,8 @@ class tR():
         # a. 2)
         _o = calc.polyN_LSM_der(xx=self.r_m, yy=self.d, polyN=polyN, yErr=self.e, parity=parity)
         self.pfit = tR(self.t_s, self.R_m, self.r_m, self.rho, _o.yHut, _o.yHutErr)
+        self.pfit.popt = _o.popt
+        self.pfit.perr = _o.perr
         self.pfit.grad = tR(self.t_s, self.R_m, self.r_m, self.rho, _o.yHutDer, _o.yHutDerErr)
 
         return self.pfit
