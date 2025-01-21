@@ -6,6 +6,7 @@ import sys
 from datetime import datetime
 import pickle
 import matplotlib.pyplot as plt  # type: ignore
+import numpy as np # type: ignore
 
 def initial_setting(script_path, config_filename="config.json"):
 
@@ -124,6 +125,17 @@ def output_fig(fig, outdir, output_filepath, now, suffix=""):
 	}
 	fig.savefig(output_figure_path, format="png", metadata=metadata)
 	plt.close(fig)
+
+def output_dat(output_array, colnm_list, outdir, output_filepath, now, suffix=""):
+	filename = f"{os.path.splitext(output_filepath)[0]}{suffix}_0.csv"
+	colnm_str = ",".join(colnm_list)
+	output_dat_path = os.path.join(outdir, filename)
+	header_str = f"Title: {filename}\n" \
+					f"Author: Tatsuhiro Nasu\n" \
+					f"Description: {output_filepath}\n" \
+					f"CreationTime: {str(now)}\n" \
+					f"{colnm_str}" 
+	np.savetxt(output_dat_path, output_array, delimiter=",", header=header_str)
 
 def load_pickle_data(inputs, key_name="input_datpath"):
 	with open(inputs[key_name], "rb") as f:
