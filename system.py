@@ -18,11 +18,11 @@ def initial_setting(script_path, config_filename="config.json"):
 
 	return inputs, tmpdir, outdir, logs, now
 
-def initial_setting_in_nasumodule(script_path, class_name, func_name, outdir_name, config_filename="config.json"):
+def initial_setting_in_gsrcmodule(script_path, class_name, func_name, outdir_name, config_filename="config.json"):
 
 	_, wd, tmpdir, outdir_base = initial_setting_via_config(config_filename=config_filename)
 
-	now, logs = get_logs_in_nasumodule(wd, script_path, class_name, func_name)
+	now, logs = get_logs_in_gsrcmodule(wd, script_path, class_name, func_name)
 	outdir = os.path.join(outdir_base, outdir_name)
 
 	return tmpdir, outdir, logs, now
@@ -88,18 +88,18 @@ def get_logs(wd, script_path):
 	logs = {
 		'script': {os.path.relpath(script_path, wd)}, 
 		'analysis_scripts_gitid': {get_commit_id(wd)}, 
-		'nasu_gitid': {get_commit_id("nasu")}, 
+		'gsrc_gitid': {get_commit_id("gsrc")}, 
 		'datetime': {now}
 	}
 	return now, logs
 
-def get_logs_in_nasumodule(wd, script_path, class_name, func_name):
+def get_logs_in_gsrcmodule(wd, script_path, class_name, func_name):
 	now = datetime.now()
 	logs = {
 		'function': {func_name}, 
 		'class': {class_name}, 
 		'script': {os.path.relpath(script_path, wd)}, 
-		'nasu_gitid': {get_commit_id("nasu")}, 
+		'gsrc_gitid': {get_commit_id("gsrc")}, 
 		'datetime': {now.strftime(r'%Y-%m-%d %H:%M:%S')}
 	}
 	return now, logs
