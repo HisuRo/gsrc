@@ -1,5 +1,4 @@
 import os
-import numpy as np
 from pkg_resources import get_distribution  # type: ignore
 from sys import version
 import csv

@@ -1,7 +1,7 @@
 import subprocess
 import json
 import os
-from nasu import proc
+from gsrc import proc
 import sys
 from datetime import datetime
 import pickle
