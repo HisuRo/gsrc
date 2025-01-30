@@ -2,4 +2,3 @@ temp
 *.pyc
 .ipynb_checkpoints
 __pycache__
-config.json
