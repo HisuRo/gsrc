@@ -87,7 +87,7 @@ def get_logs(wd, script_path):
 	now = datetime.now()
 	logs = {
 		'script': {os.path.relpath(script_path, wd)}, 
-		'analysis_scripts_gitid': {get_commit_id(wd)}, 
+		'anascrpts_gitid': {get_commit_id(wd)}, 
 		'gsrc_gitid': {get_commit_id("gsrc")}, 
 		'datetime': {now}
 	}
