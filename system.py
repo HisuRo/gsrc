@@ -35,9 +35,8 @@ def initial_setting_via_config(config_filename="config.json"):
 	return config, wd, tmpdir, outdir_base
 
 def get_commit_id(repository):
-	subprocess.run(["cd", repository], shell=True)
     # Gitコマンドを実行して現在のコミットIDを取得
-	result = subprocess.run(['git', 'rev-parse', 'HEAD'], capture_output=True, text=True)
+	result = subprocess.run(['git', 'rev-parse', 'HEAD'], cwd=repository, capture_output=True, text=True)
 	if result.returncode == 0:
 		# コミットIDを取得
 		commit_id = result.stdout.strip()
