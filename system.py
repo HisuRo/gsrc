@@ -71,6 +71,7 @@ def define_tmp_output_directories(config):
 	tmpdir = config["tmp_dir"]
 	proc.ifNotMake(tmpdir)
 	outdir_base = config["base_output_dir"]
+	proc.ifNotMake(outdir_base)
 
 	return tmpdir, outdir_base
 
