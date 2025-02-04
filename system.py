@@ -1,28 +1,31 @@
 import subprocess
 import json
 import os
-from gsrc import proc
-import sys
 from datetime import datetime
 import pickle
 import matplotlib.pyplot as plt  # type: ignore
 import numpy as np # type: ignore
 
+def ifNotMake(dirPath):
+    if not os.path.exists(dirPath):
+        os.mkdir(dirPath)
+    return dirPath
+
 def initial_setting(script_path, config_filename="config.json"):
 
-	config, wd, tmpdir, outdir_base = initial_setting_via_config(config_filename)
+	config, wd, tmpdir, outdir_base, submodule_names = initial_setting_via_config(config_filename)
 
-	now, logs = get_logs(wd, script_path)
+	now, logs = get_logs(wd, script_path, submodule_names)
 	input_filepath = define_input_directory(script_path, config)
 	inputs, outdir = load_input(input_filepath, outdir_base)
 
 	return inputs, tmpdir, outdir, logs, now
 
-def initial_setting_in_gsrcmodule(script_path, class_name, func_name, outdir_name, config_filename="config.json"):
+def initial_setting_in_submodules(script_path, class_name, func_name, outdir_name, config_filename="config.json"):
 
-	_, wd, tmpdir, outdir_base = initial_setting_via_config(config_filename=config_filename)
+	_, wd, tmpdir, outdir_base, submodule_names = initial_setting_via_config(config_filename=config_filename)
 
-	now, logs = get_logs_in_gsrcmodule(wd, script_path, class_name, func_name)
+	now, logs = get_logs_in_submodules(wd, script_path, class_name, func_name, submodule_names)
 	outdir = os.path.join(outdir_base, outdir_name)
 
 	return tmpdir, outdir, logs, now
@@ -31,8 +34,9 @@ def initial_setting_via_config(config_filename="config.json"):
 
 	config, wd = check_working_directory(config_filename=config_filename)
 	tmpdir, outdir_base = define_tmp_output_directories(config)
+	submodule_names = load_config(config_file=config_filename)["submodule_names"]
 
-	return config, wd, tmpdir, outdir_base
+	return config, wd, tmpdir, outdir_base, submodule_names
 
 def get_commit_id(repository):
     # Gitコマンドを実行して現在のコミットIDを取得
@@ -69,9 +73,9 @@ def define_tmp_output_directories(config):
 
 	# define tmp and output directories
 	tmpdir = config["tmp_dir"]
-	proc.ifNotMake(tmpdir)
+	ifNotMake(tmpdir)
 	outdir_base = config["base_output_dir"]
-	proc.ifNotMake(outdir_base)
+	ifNotMake(outdir_base)
 
 	return tmpdir, outdir_base
 
@@ -79,29 +83,31 @@ def load_input(input_filepath, outdir_base):
 	with open(input_filepath, "r") as file:
 		inputs = json.load(file)
 	outdir = os.path.join(outdir_base, inputs["outdirname"])
-	proc.ifNotMake(outdir)
+	ifNotMake(outdir)
 	
 	return inputs, outdir
 
-def get_logs(wd, script_path):
+def get_logs(wd, script_path, submodule_names):
 	now = datetime.now()
 	logs = {
+		'datetime': {now}, 
 		'script': {os.path.relpath(script_path, wd)}, 
-		'anascrpts_gitid': {get_commit_id(wd)}, 
-		'gsrc_gitid': {get_commit_id("gsrc")}, 
-		'datetime': {now}
+		'anascrpts_gitid': {get_commit_id(wd)}
 	}
+	submodule_logs = {f'{submodule_name}_gitid': get_commit_id(submodule_name) for submodule_name in submodule_names}
+	logs.update(submodule_logs)
 	return now, logs
 
-def get_logs_in_gsrcmodule(wd, script_path, class_name, func_name):
+def get_logs_in_submodules(wd, script_path, class_name, func_name, submodule_names):
 	now = datetime.now()
 	logs = {
+		'datetime': {now.strftime(r'%Y-%m-%d %H:%M:%S')}, 
 		'function': {func_name}, 
 		'class': {class_name}, 
-		'script': {os.path.relpath(script_path, wd)}, 
-		'gsrc_gitid': {get_commit_id("gsrc")}, 
-		'datetime': {now.strftime(r'%Y-%m-%d %H:%M:%S')}
+		'script': {os.path.relpath(script_path, wd)}
 	}
+	submodule_logs = {f'{submodule_name}_gitid': get_commit_id(submodule_name) for submodule_name in submodule_names}
+	logs.update(submodule_logs)
 	return now, logs
 
 def output_pickle_file(outputs, inputs, logs, outdir, suffix=""):
