@@ -6,9 +6,9 @@ import pickle
 import matplotlib.pyplot as plt  # type: ignore
 import numpy as np # type: ignore
 
-def ifNotMake(dirPath):
+def ifNotMake(dirPath, exist_ok=True):
     if not os.path.exists(dirPath):
-        os.mkdir(dirPath)
+        os.makedirs(dirPath, exist_ok=exist_ok)
     return dirPath
 
 def initial_setting(script_path, config_filename="config.json"):
